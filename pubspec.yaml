@@ -18,7 +18,7 @@ dependencies:
   riverpod_annotation: ^2.3.5
 
   # Calendrier UI
-  syncfusion_flutter_calendar: ^26.2.11
+  syncfusion_flutter_calendar: ^27.1.48
 
   # Requêtes HTTP
   dio: ^5.7.0
