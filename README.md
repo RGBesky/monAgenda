@@ -1,4 +1,6 @@
-# Calendrier Unifié — Infomaniak · Notion · Flutter
+# monAgenda — Calendrier Unifié · Infomaniak · Notion · Flutter
+
+> **Dépôt GitHub :** https://github.com/RGBesky/monAgenda
 
 Application calendrier personnelle combinant Infomaniak Calendar, Notion et des abonnements .ics publics dans une interface unifiée.
 
@@ -35,6 +37,14 @@ Application calendrier personnelle combinant Infomaniak Calendar, Notion et des 
 - Recherche avancée avec filtres combinables
 
 ## Installation
+
+### Cloner le projet
+```bash
+git clone https://github.com/RGBesky/monAgenda.git
+cd monAgenda
+```
+
+> **VSCode :** `Fichier → Ouvrir le dossier` → sélectionner `monAgenda/`
 
 ### Prérequis
 - Flutter 3.x
@@ -115,9 +125,9 @@ lib/
 ## Roadmap
 
 - **Phase 1** ✅ Fondations (Infomaniak, CalDAV, cache SQLite)
-- **Phase 2** Notion multi-BDD + tags
-- **Phase 3** Notifications, .ics, météo, widget
-- **Phase 4** Import/Export, sauvegarde, recherche
+- **Phase 2** ✅ Notion multi-BDD + tags
+- **Phase 3** ✅ Notifications, .ics, météo, widget
+- **Phase 4** ✅ Import/Export, sauvegarde, recherche
 - **V2** Hors ligne complet, CardDAV, multi-compte
 
 ## Notes importantes
