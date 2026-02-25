@@ -214,7 +214,6 @@ class SyncEngine {
 
         // Supprimer les anciens événements de cet abonnement
         // (sera remplacé par les nouveaux)
-        final db = _db;
 
         for (final event in events) {
           await _upsertEvent(event.copyWith(

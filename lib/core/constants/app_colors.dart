@@ -43,7 +43,10 @@ class AppColors {
   }
 
   static String toHex(Color color) {
-    return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+    final r = color.red.toRadixString(16).padLeft(2, '0');
+    final g = color.green.toRadixString(16).padLeft(2, '0');
+    final b = color.blue.toRadixString(16).padLeft(2, '0');
+    return '#$r$g$b'.toUpperCase();
   }
 
   static Color withOpacity(Color color, double opacity) {

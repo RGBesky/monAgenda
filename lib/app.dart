@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:syncfusion_flutter_core/theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/constants/app_constants.dart';
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
@@ -48,7 +48,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
         seedColor: const Color(0xFF1565C0),
         brightness: Brightness.light,
       ),
-      fontFamily: 'Inter',
+      textTheme: GoogleFonts.interTextTheme(),
       cardTheme: CardThemeData(
         elevation: 1,
         shape: RoundedRectangleBorder(
@@ -70,7 +70,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
         seedColor: const Color(0xFF1565C0),
         brightness: Brightness.dark,
       ),
-      fontFamily: 'Inter',
+      textTheme: GoogleFonts.interTextTheme(),
       cardTheme: CardThemeData(
         elevation: 1,
         shape: RoundedRectangleBorder(

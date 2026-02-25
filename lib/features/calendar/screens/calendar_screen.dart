@@ -51,18 +51,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     _loadingWeather = false;
   }
 
-  String _calViewForSettings(String settingsView) {
-    switch (settingsView) {
-      case AppConstants.viewMonth:
-        return 'Month';
-      case AppConstants.viewDay:
-        return 'Day';
-      case AppConstants.viewAgenda:
-        return 'Schedule';
-      default:
-        return 'Week';
-    }
-  }
 
   CalendarView _getCalendarView(String settingsView) {
     switch (settingsView) {
