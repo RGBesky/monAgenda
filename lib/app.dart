@@ -49,7 +49,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
         brightness: Brightness.light,
       ),
       fontFamily: 'Inter',
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 1,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -71,7 +71,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
         brightness: Brightness.dark,
       ),
       fontFamily: 'Inter',
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 1,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

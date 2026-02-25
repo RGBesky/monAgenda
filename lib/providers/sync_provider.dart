@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
+import '../core/models/event_model.dart';
 import '../core/models/sync_state_model.dart';
 import '../services/infomaniak_service.dart';
 import '../services/notion_service.dart';

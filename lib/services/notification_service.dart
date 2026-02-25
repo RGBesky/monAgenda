@@ -147,11 +147,11 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
-      color: const Color(0xFF1565C0),
+      color: Color(0xFF1565C0),
     );
 
     const linuxDetails = LinuxNotificationDetails(
-      category: LinuxNotificationCategory.reminder(),
+      category: LinuxNotificationCategory.reminder,
     );
 
     return NotificationDetails(
