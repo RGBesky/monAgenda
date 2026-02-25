@@ -49,10 +49,11 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
     return DatabaseHelper.instance.getEventsByDateRange(range.start, range.end);
   }
 
-  Future<void> createEvent(EventModel event) async {
+  Future<int> createEvent(EventModel event) async {
     final id = await DatabaseHelper.instance.insertEvent(event);
     ref.invalidateSelf();
     ref.invalidate(eventsInRangeProvider);
+    return id;
   }
 
   Future<void> updateEvent(EventModel event) async {

@@ -49,11 +49,21 @@ class IcsService {
 
   static List<String> _splitVEvents(String content) {
     final events = <String>[];
-    final lines = content.split(RegExp(r'\r?\n'));
+    // First unfold lines per RFC 5545 (continuation lines start with space/tab)
+    final unfoldedLines = <String>[];
+    for (final line in content.split(RegExp(r'\r?\n'))) {
+      if ((line.startsWith(' ') || line.startsWith('\t')) &&
+          unfoldedLines.isNotEmpty) {
+        unfoldedLines.last = unfoldedLines.last + line.substring(1);
+      } else {
+        unfoldedLines.add(line);
+      }
+    }
+
     final buffer = StringBuffer();
     bool inEvent = false;
 
-    for (final line in lines) {
+    for (final line in unfoldedLines) {
       if (line.trim() == 'BEGIN:VEVENT') {
         inEvent = true;
         buffer.clear();
@@ -63,12 +73,7 @@ class IcsService {
         events.add(buffer.toString());
         inEvent = false;
       } else if (inEvent) {
-        // Gestion des lignes pliées (RFC 5545)
-        if (line.startsWith(' ') || line.startsWith('\t')) {
-          buffer.write(line.trim());
-        } else {
-          buffer.writeln(line);
-        }
+        buffer.writeln(line);
       }
     }
 
@@ -106,9 +111,8 @@ class IcsService {
       if (dtend != null && dtend.isNotEmpty) {
         endDate = CalendarDateUtils.fromICalDate(dtend);
       } else {
-        endDate = isAllDay
-            ? startDate
-            : startDate.add(const Duration(hours: 1));
+        endDate =
+            isAllDay ? startDate : startDate.add(const Duration(hours: 1));
       }
 
       EventType type = EventType.appointment;
@@ -144,7 +148,8 @@ class IcsService {
   }
 
   /// Exporte une liste d'événements en format .ics.
-  static String exportToIcs(List<EventModel> events, {String calName = 'Unified Calendar'}) {
+  static String exportToIcs(List<EventModel> events,
+      {String calName = 'Unified Calendar'}) {
     final sb = StringBuffer();
     sb.writeln('BEGIN:VCALENDAR');
     sb.writeln('VERSION:2.0');
@@ -184,10 +189,8 @@ class IcsService {
         sb.writeln('RRULE:${event.rrule}');
       }
 
-      final categories = event.tags
-          .where((t) => t.isCategory)
-          .map((t) => t.name)
-          .join(',');
+      final categories =
+          event.tags.where((t) => t.isCategory).map((t) => t.name).join(',');
       if (categories.isNotEmpty) {
         sb.writeln('CATEGORIES:$categories');
       }

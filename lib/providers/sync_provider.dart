@@ -1,8 +1,8 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/constants/app_constants.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
-import '../core/models/sync_state_model.dart';
 import '../services/infomaniak_service.dart';
 import '../services/notion_service.dart';
 import '../services/ics_service.dart';
@@ -15,10 +15,12 @@ import 'settings_provider.dart';
 final infomaniakServiceProvider = Provider<InfomaniakService>((ref) {
   final service = InfomaniakService();
   final settings = ref.watch(settingsProvider).valueOrNull;
-  if (settings?.infomaniakToken != null) {
+  if (settings?.infomaniakUsername != null &&
+      settings?.infomaniakAppPassword != null) {
     service.setCredentials(
-      token: settings!.infomaniakToken!,
-      calendarId: settings.infomaniakCalendarId,
+      username: settings!.infomaniakUsername!,
+      appPassword: settings.infomaniakAppPassword!,
+      calendarUrl: settings.infomaniakCalendarUrl,
     );
   }
   return service;
@@ -51,12 +53,14 @@ class SyncState {
   final DateTime? lastSyncedAt;
   final String? errorMessage;
   final SyncResult? lastResult;
+  final Map<String, String> sourceErrors;
 
   const SyncState({
     this.isSyncing = false,
     this.lastSyncedAt,
     this.errorMessage,
     this.lastResult,
+    this.sourceErrors = const {},
   });
 
   SyncState copyWith({
@@ -64,12 +68,14 @@ class SyncState {
     DateTime? lastSyncedAt,
     String? errorMessage,
     SyncResult? lastResult,
+    Map<String, String>? sourceErrors,
   }) {
     return SyncState(
       isSyncing: isSyncing ?? this.isSyncing,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       errorMessage: errorMessage ?? this.errorMessage,
       lastResult: lastResult ?? this.lastResult,
+      sourceErrors: sourceErrors ?? this.sourceErrors,
     );
   }
 }
@@ -81,18 +87,23 @@ class SyncNotifier extends Notifier<SyncState> {
   Future<void> syncAll() async {
     if (state.isSyncing) return;
 
-    state = state.copyWith(isSyncing: true, errorMessage: null);
+    state = state.copyWith(
+      isSyncing: true,
+      errorMessage: null,
+      sourceErrors: {},
+    );
 
     try {
       final engine = ref.read(syncEngineProvider);
-      final result = await engine.syncAll();
+      final (result, errors) = await engine.syncAll();
 
       state = state.copyWith(
         isSyncing: false,
         lastSyncedAt: DateTime.now(),
         lastResult: result,
-        errorMessage: result == SyncResult.failure
-            ? 'Synchronisation échouée'
+        sourceErrors: errors,
+        errorMessage: errors.isNotEmpty
+            ? errors.entries.map((e) => '${e.key}: ${e.value}').join('\n')
             : null,
       );
 
@@ -126,5 +137,9 @@ class SyncNotifier extends Notifier<SyncState> {
 final syncNotifierProvider =
     NotifierProvider<SyncNotifier, SyncState>(SyncNotifier.new);
 
-/// Connexion réseau.
-final isOfflineProvider = StateProvider<bool>((ref) => false);
+/// Détection de la connexion réseau via connectivity_plus.
+final isOfflineProvider = StreamProvider<bool>((ref) {
+  return Connectivity()
+      .onConnectivityChanged
+      .map((results) => results.every((r) => r == ConnectivityResult.none));
+});

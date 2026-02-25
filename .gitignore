@@ -10,6 +10,7 @@
 .svn/
 .swp
 migrate_working_dir/
+*.csv
 
 # IntelliJ related
 *.iml
@@ -54,3 +55,5 @@ lib/core/config/secrets.dart
 
 # Coverage
 coverage/
+android/.gradle/
+android/local.properties

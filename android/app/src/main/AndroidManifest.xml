@@ -111,5 +111,9 @@
             android:name="com.dexterous.flutterlocalnotifications.default_notification_icon"
             android:resource="@mipmap/ic_launcher"/>
 
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2"/>
+
     </application>
 </manifest>

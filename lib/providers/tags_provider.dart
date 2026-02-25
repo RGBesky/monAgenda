@@ -37,6 +37,10 @@ class TagsNotifier extends AsyncNotifier<List<TagModel>> {
   }
 
   Future<void> resetToDefaults() async {
+    final db = await DatabaseHelper.instance.database;
+    // Supprimer les liaisons orphelines
+    await db.delete(AppConstants.tableEventTags);
+    // Supprimer tous les tags existants
     final tags = await DatabaseHelper.instance.getAllTags();
     for (final tag in tags) {
       if (tag.id != null) {

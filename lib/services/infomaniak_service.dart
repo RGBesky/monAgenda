@@ -1,54 +1,88 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../core/constants/app_constants.dart';
 import '../core/models/event_model.dart';
+import '../core/models/tag_model.dart';
 import '../core/utils/date_utils.dart';
 
-/// Service CalDAV/REST pour Infomaniak Calendar.
-/// Authentification via Bearer Token (OAuth2 Infomaniak).
+/// Service CalDAV pour Infomaniak Calendar.
+/// Authentification via Basic Auth (username + mot de passe d'application).
+/// URL de synchronisation : https://sync.infomaniak.com/calendars/{user}/{calendar-uuid}
 class InfomaniakService {
-  final Dio _dio;
   final Dio _calDavDio;
-  String? _bearerToken;
-  String? _userId;
-  String? _calendarId;
+  String? _username;
+  String? _appPassword;
+  String? _calendarUrl; // URL CalDAV complète
 
   InfomaniakService()
-      : _dio = Dio(BaseOptions(
-          baseUrl: AppConstants.infomaniakApiBase,
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 30),
-        )),
-        _calDavDio = Dio(BaseOptions(
-          baseUrl: AppConstants.infomaniakCalDavBase,
-          connectTimeout: const Duration(seconds: 10),
+      : _calDavDio = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 30),
         ));
 
-  void setCredentials({required String token, String? calendarId}) {
-    _bearerToken = token;
-    _calendarId = calendarId;
-    _dio.options.headers['Authorization'] = 'Bearer $token';
-    _calDavDio.options.headers['Authorization'] = 'Bearer $token';
+  void setCredentials({
+    required String username,
+    required String appPassword,
+    String? calendarUrl,
+  }) {
+    _username = username;
+    _appPassword = appPassword;
+    _calendarUrl = calendarUrl;
+
+    // Basic Auth
+    final basicAuth = base64Encode(utf8.encode('$username:$appPassword'));
+    _calDavDio.options.headers['Authorization'] = 'Basic $basicAuth';
   }
 
-  bool get isConfigured => _bearerToken != null && _bearerToken!.isNotEmpty;
+  bool get isConfigured =>
+      _username != null &&
+      _username!.isNotEmpty &&
+      _appPassword != null &&
+      _appPassword!.isNotEmpty;
 
-  /// Valide le token et récupère les infos utilisateur.
-  Future<Map<String, dynamic>> validateToken() async {
-    final response = await _dio.get('/1/profile');
-    final data = response.data as Map<String, dynamic>;
-    if (data['result'] == 'success') {
-      _userId = data['data']?['id']?.toString();
-      return data['data'] as Map<String, dynamic>;
+  /// Valide les identifiants en faisant un PROPFIND sur l'URL CalDAV.
+  Future<Map<String, dynamic>> validateCredentials() async {
+    if (_username == null || _appPassword == null) {
+      throw Exception('Identifiants non configurés');
     }
-    throw Exception('Token invalide : ${data['error']}');
+
+    // Tester l'accès avec un PROPFIND sur le calendrier ou la racine
+    final testUrl = _calendarUrl ??
+        '${AppConstants.infomaniakCalDavBase}/calendars/$_username/';
+
+    final response = await _calDavDio.request(
+      testUrl,
+      options: Options(
+        method: 'PROPFIND',
+        headers: {
+          'Content-Type': 'application/xml; charset=utf-8',
+          'Depth': '0',
+        },
+      ),
+      data: '''<?xml version="1.0" encoding="utf-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop>
+    <d:displayname/>
+    <d:resourcetype/>
+  </d:prop>
+</d:propfind>''',
+    );
+
+    if (response.statusCode == 207 || response.statusCode == 200) {
+      final name = _extractDisplayName(response.data as String);
+      return {'displayname': name, 'username': _username};
+    }
+
+    throw Exception('Authentification échouée (${response.statusCode})');
   }
 
-  /// Récupère la liste des calendriers disponibles.
+  /// Récupère la liste des calendriers disponibles pour l'utilisateur.
   Future<List<Map<String, dynamic>>> getCalendars() async {
-    if (_userId == null) await validateToken();
+    final baseUrl =
+        '${AppConstants.infomaniakCalDavBase}/calendars/$_username/';
+
     final response = await _calDavDio.request(
-      '/dav/$_userId/',
+      baseUrl,
       options: Options(
         method: 'PROPFIND',
         headers: {
@@ -72,14 +106,17 @@ class InfomaniakService {
   Future<List<Map<String, dynamic>>> fetchEvents({
     required DateTime start,
     required DateTime end,
-    String? calendarId,
+    String? calendarUrl,
   }) async {
-    if (_userId == null) await validateToken();
-    final cid = calendarId ?? _calendarId ?? 'default';
-    final path = '/dav/$_userId/$cid/';
+    final url = calendarUrl ?? _calendarUrl;
+    if (url == null || url.isEmpty) {
+      throw Exception('URL du calendrier non configurée');
+    }
+
+    final calUrl = url.endsWith('/') ? url : '$url/';
 
     final response = await _calDavDio.request(
-      path,
+      calUrl,
       options: Options(
         method: 'REPORT',
         headers: {
@@ -108,16 +145,20 @@ class InfomaniakService {
   }
 
   /// Crée ou met à jour un événement via PUT CalDAV.
-  Future<String> putEvent(EventModel event, {String? calendarId}) async {
-    if (_userId == null) await validateToken();
-    final cid = calendarId ?? _calendarId ?? 'default';
+  Future<String> putEvent(EventModel event, {String? calendarUrl}) async {
+    final url = calendarUrl ?? _calendarUrl;
+    if (url == null || url.isEmpty) {
+      throw Exception('URL du calendrier non configurée');
+    }
+
+    final calUrl = url.endsWith('/') ? url : '$url/';
     final uid = event.remoteId ?? _generateUid();
-    final path = '/dav/$_userId/$cid/$uid.ics';
+    final eventUrl = '$calUrl$uid.ics';
 
     final icsData = _eventToIcs(event.copyWith(remoteId: uid));
 
     final response = await _calDavDio.put(
-      path,
+      eventUrl,
       data: icsData,
       options: Options(
         headers: {
@@ -127,18 +168,20 @@ class InfomaniakService {
       ),
     );
 
-    // Retourner l'ETag du nouvel événement
     return response.headers.value('ETag') ?? '';
   }
 
   /// Supprime un événement via DELETE CalDAV.
-  Future<void> deleteEvent(String uid, {String? calendarId, String? etag}) async {
-    if (_userId == null) await validateToken();
-    final cid = calendarId ?? _calendarId ?? 'default';
-    final path = '/dav/$_userId/$cid/$uid.ics';
+  Future<void> deleteEvent(String uid,
+      {String? calendarUrl, String? etag}) async {
+    final url = calendarUrl ?? _calendarUrl;
+    if (url == null || url.isEmpty) return;
+
+    final calUrl = url.endsWith('/') ? url : '$url/';
+    final eventUrl = '$calUrl$uid.ics';
 
     await _calDavDio.delete(
-      path,
+      eventUrl,
       options: Options(
         headers: {
           if (etag != null) 'If-Match': etag,
@@ -148,12 +191,14 @@ class InfomaniakService {
   }
 
   /// Récupère le sync-token (ctag) du calendrier.
-  Future<String?> getSyncToken({String? calendarId}) async {
-    if (_userId == null) await validateToken();
-    final cid = calendarId ?? _calendarId ?? 'default';
+  Future<String?> getSyncToken({String? calendarUrl}) async {
+    final url = calendarUrl ?? _calendarUrl;
+    if (url == null || url.isEmpty) return null;
+
+    final calUrl = url.endsWith('/') ? url : '$url/';
 
     final response = await _calDavDio.request(
-      '/dav/$_userId/$cid/',
+      calUrl,
       options: Options(
         method: 'PROPFIND',
         headers: {
@@ -188,10 +233,13 @@ class InfomaniakService {
     sb.writeln('DTSTAMP:${CalendarDateUtils.toICalDateTime(DateTime.now())}');
 
     if (event.isAllDay) {
-      sb.writeln('DTSTART;VALUE=DATE:${CalendarDateUtils.toICalDate(event.startDate)}');
-      sb.writeln('DTEND;VALUE=DATE:${CalendarDateUtils.toICalDate(event.endDate)}');
+      sb.writeln(
+          'DTSTART;VALUE=DATE:${CalendarDateUtils.toICalDate(event.startDate)}');
+      sb.writeln(
+          'DTEND;VALUE=DATE:${CalendarDateUtils.toICalDate(event.endDate)}');
     } else {
-      sb.writeln('DTSTART:${CalendarDateUtils.toICalDateTime(event.startDate)}');
+      sb.writeln(
+          'DTSTART:${CalendarDateUtils.toICalDateTime(event.startDate)}');
       sb.writeln('DTEND:${CalendarDateUtils.toICalDateTime(event.endDate)}');
     }
 
@@ -256,6 +304,12 @@ class InfomaniakService {
     return '$timestamp-unified-calendar@infomaniak';
   }
 
+  String _extractDisplayName(String xmlResponse) {
+    final nameRegex = RegExp(r'<d:displayname>(.*?)</d:displayname>');
+    final match = nameRegex.firstMatch(xmlResponse);
+    return match?.group(1) ?? 'Calendrier';
+  }
+
   List<Map<String, dynamic>> _parseCalendarList(String xmlResponse) {
     final calendars = <Map<String, dynamic>>[];
     final hrefRegex = RegExp(r'<d:href>(.*?)</d:href>');
@@ -273,6 +327,7 @@ class InfomaniakService {
           'id': id,
           'href': href,
           'name': i < names.length ? names[i].group(1) ?? id : id,
+          'url': '${AppConstants.infomaniakCalDavBase}$href',
         });
       }
     }
@@ -318,19 +373,20 @@ class InfomaniakService {
     String ical, {
     required String calendarId,
     String? etag,
+    List<TagModel>? allTags,
   }) {
     try {
-      String _getValue(String key) {
+      String getValue(String key) {
         final regex = RegExp('$key[^:]*:(.+?)(?=\\r?\\n[A-Z])', dotAll: false);
         return regex.firstMatch(ical)?.group(1)?.trim() ?? '';
       }
 
-      final uid = _getValue('UID');
-      final summary = _getValue('SUMMARY');
+      final uid = getValue('UID');
+      final summary = getValue('SUMMARY');
       if (uid.isEmpty || summary.isEmpty) return null;
 
-      final dtstart = _getValue('DTSTART');
-      final dtend = _getValue('DTEND');
+      final dtstart = getValue('DTSTART');
+      final dtend = getValue('DTEND');
       final isAllDay =
           ical.contains('DTSTART;VALUE=DATE') && !dtstart.contains('T');
 
@@ -341,15 +397,46 @@ class InfomaniakService {
           ? CalendarDateUtils.fromICalDate(dtend)
           : startDate.add(const Duration(hours: 1));
 
-      final location = _getValue('LOCATION');
-      final description = _getValue('DESCRIPTION');
-      final rrule = _getValue('RRULE');
-      final categories = _getValue('CATEGORIES');
-      final priorityStr = _getValue('PRIORITY');
+      final location = getValue('LOCATION');
+      final description = getValue('DESCRIPTION');
+      final rrule = getValue('RRULE');
+      final categories = getValue('CATEGORIES');
+      final priorityStr = getValue('PRIORITY');
 
       final categoryNames = categories.isNotEmpty
           ? categories.split(',').map((c) => c.trim()).toList()
           : <String>[];
+
+      final matchedTags = <TagModel>[];
+      final tagIds = <int>[];
+
+      if (allTags != null) {
+        for (final catName in categoryNames) {
+          final tag = allTags
+              .where(
+                (t) =>
+                    t.isCategory &&
+                    (t.infomaniakMapping == catName || t.name == catName),
+              )
+              .firstOrNull;
+          if (tag?.id != null) {
+            matchedTags.add(tag!);
+            tagIds.add(tag.id!);
+          }
+        }
+
+        if (priorityStr.isNotEmpty) {
+          final tag = allTags
+              .where(
+                (t) => t.isPriority && t.infomaniakMapping == priorityStr,
+              )
+              .firstOrNull;
+          if (tag?.id != null) {
+            matchedTags.add(tag!);
+            tagIds.add(tag.id!);
+          }
+        }
+      }
 
       EventType type = EventType.appointment;
       if (isAllDay) type = EventType.allDay;
@@ -366,15 +453,14 @@ class InfomaniakService {
         startDate: startDate,
         endDate: endDate,
         isAllDay: isAllDay,
-        location: location.isNotEmpty
-            ? location.replaceAll('\\,', ',')
-            : null,
-        description: description.isNotEmpty
-            ? description.replaceAll('\\n', '\n')
-            : null,
+        location: location.isNotEmpty ? location.replaceAll('\\,', ',') : null,
+        description:
+            description.isNotEmpty ? description.replaceAll('\\n', '\n') : null,
         rrule: rrule.isNotEmpty ? rrule : null,
         calendarId: calendarId,
         etag: etag,
+        tagIds: tagIds,
+        tags: matchedTags,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );

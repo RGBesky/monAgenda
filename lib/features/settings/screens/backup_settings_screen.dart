@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../providers/settings_provider.dart';
 import '../../../services/backup_service.dart';
 import '../../../core/database/database_helper.dart';
 
@@ -55,7 +54,6 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
           TextField(
             controller: _driveIdController,
             decoration: const InputDecoration(
@@ -66,7 +64,6 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
           TextField(
             controller: _passwordController,
             decoration: const InputDecoration(
@@ -78,7 +75,6 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
             obscureText: true,
           ),
           const SizedBox(height: 16),
-
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -97,7 +93,6 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-
           OutlinedButton.icon(
             onPressed: _isLoading ? null : _performRestore,
             icon: const Icon(Icons.cloud_download_outlined),
@@ -109,8 +104,7 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
   }
 
   Future<void> _performBackup() async {
-    if (_passwordController.text.isEmpty ||
-        _driveIdController.text.isEmpty) {
+    if (_passwordController.text.isEmpty || _driveIdController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Renseignez l\'ID kDrive et un mot de passe'),
@@ -122,10 +116,10 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final settings = ref.read(settingsProvider).valueOrNull;
+      // TODO: kDrive backup nécessite un token API dédié (OAuth2)
       final backupService = BackupService(db: DatabaseHelper.instance);
       backupService.setCredentials(
-        token: settings?.infomaniakToken ?? '',
+        token: '', // kDrive API token – à configurer séparément
         driveId: _driveIdController.text.trim(),
       );
 
@@ -156,8 +150,7 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
   }
 
   Future<void> _performRestore() async {
-    if (_passwordController.text.isEmpty ||
-        _driveIdController.text.isEmpty) {
+    if (_passwordController.text.isEmpty || _driveIdController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Renseignez l\'ID kDrive et le mot de passe'),
@@ -191,10 +184,10 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final settings = ref.read(settingsProvider).valueOrNull;
+      // TODO: kDrive backup nécessite un token API dédié (OAuth2)
       final backupService = BackupService(db: DatabaseHelper.instance);
       backupService.setCredentials(
-        token: settings?.infomaniakToken ?? '',
+        token: '', // kDrive API token – à configurer séparément
         driveId: _driveIdController.text.trim(),
       );
 
@@ -206,9 +199,7 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              success
-                  ? 'Restauration réussie'
-                  : 'Aucune sauvegarde trouvée',
+              success ? 'Restauration réussie' : 'Aucune sauvegarde trouvée',
             ),
             backgroundColor: success ? Colors.green : null,
           ),

@@ -43,20 +43,18 @@ class WeatherModel {
 
   factory WeatherModel.fromJson(Map<String, dynamic> json, int index) {
     final daily = json['daily'] as Map<String, dynamic>;
-    final hourly = json['hourly'] as Map<String, dynamic>?;
 
     return WeatherModel(
       date: DateTime.parse((daily['time'] as List)[index] as String),
-      temperatureMin: ((daily['temperature_2m_min'] as List)[index] as num)
-          .toDouble(),
-      temperatureMax: ((daily['temperature_2m_max'] as List)[index] as num)
-          .toDouble(),
+      temperatureMin:
+          ((daily['temperature_2m_min'] as List)[index] as num).toDouble(),
+      temperatureMax:
+          ((daily['temperature_2m_max'] as List)[index] as num).toDouble(),
       weatherCode: ((daily['weathercode'] as List)[index] as num).toInt(),
-      precipitationProbability:
-          daily['precipitation_probability_max'] != null
-              ? ((daily['precipitation_probability_max'] as List)[index] as num)
-                  .toDouble()
-              : null,
+      precipitationProbability: daily['precipitation_probability_max'] != null
+          ? ((daily['precipitation_probability_max'] as List)[index] as num)
+              .toDouble()
+          : null,
     );
   }
 }

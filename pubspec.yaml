@@ -35,8 +35,8 @@ dependencies:
   pointycastle: ^3.9.1
 
   # Notifications locales
-  flutter_local_notifications: ^17.2.3
-  timezone: ^0.11.0
+  flutter_local_notifications: ^18.0.0
+  timezone: ^0.10.0
 
   # Contacts (Android)
   flutter_contacts: ^1.1.9+2
@@ -80,6 +80,9 @@ dependencies:
   sliver_tools: ^0.2.12
   shimmer: ^3.0.0
   cached_network_image: ^3.4.1
+  sqflite_common_ffi: ^2.4.0+2
+  sqlite3_flutter_libs: ^0.6.0+eol
+  hugeicons: ^1.1.5
 
 dependency_overrides:
   intl: ^0.20.0

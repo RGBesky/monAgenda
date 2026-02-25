@@ -5,10 +5,10 @@ import 'tag_model.dart';
 
 enum EventType {
   appointment, // Rendez-vous simple
-  allDay,      // Journée entière
-  recurring,   // Récurrent
-  task,        // Tâche Notion
-  multiDay,    // Projet multi-jours Notion
+  allDay, // Journée entière
+  recurring, // Récurrent
+  task, // Tâche Notion
+  multiDay, // Projet multi-jours Notion
 }
 
 class ParticipantModel extends Equatable {
@@ -23,16 +23,17 @@ class ParticipantModel extends Equatable {
   });
 
   Map<String, dynamic> toMap() => {
-    'email': email,
-    'name': name,
-    'status': status,
-  };
+        'email': email,
+        'name': name,
+        'status': status,
+      };
 
-  factory ParticipantModel.fromMap(Map<String, dynamic> map) => ParticipantModel(
-    email: map['email'] as String,
-    name: map['name'] as String?,
-    status: map['status'] as String? ?? 'pending',
-  );
+  factory ParticipantModel.fromMap(Map<String, dynamic> map) =>
+      ParticipantModel(
+        email: map['email'] as String,
+        name: map['name'] as String?,
+        status: map['status'] as String? ?? 'pending',
+      );
 
   @override
   List<Object?> get props => [email, status];
@@ -40,8 +41,8 @@ class ParticipantModel extends Equatable {
 
 class EventModel extends Equatable {
   final int? id;
-  final String? remoteId;       // UID ical ou page ID Notion
-  final String source;           // 'infomaniak', 'notion', 'ics'
+  final String? remoteId; // UID ical ou page ID Notion
+  final String source; // 'infomaniak', 'notion', 'ics'
   final EventType type;
   final String title;
   final DateTime startDate;
@@ -50,19 +51,20 @@ class EventModel extends Equatable {
   final String? location;
   final String? description;
   final List<ParticipantModel> participants;
-  final List<int> tagIds;        // IDs locaux des tags
-  final List<TagModel> tags;     // Objets tags (jointure)
-  final String? rrule;           // Règle récurrence RRULE
-  final String? recurrenceId;    // Pour les exceptions de récurrence
-  final String? calendarId;      // ID calendrier Infomaniak
+  final List<int> tagIds; // IDs locaux des tags
+  final List<TagModel> tags; // Objets tags (jointure)
+  final String? rrule; // Règle récurrence RRULE
+  final String? recurrenceId; // Pour les exceptions de récurrence
+  final String? calendarId; // ID calendrier Infomaniak
   final String? notionPageId;
   final String? icsSubscriptionId;
+  final String? status; // État d'avancement (Notion)
   final int? reminderMinutes;
   final bool isDeleted;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? syncedAt;
-  final String? etag;            // ETag pour la détection de conflits CalDAV
+  final String? etag; // ETag pour la détection de conflits CalDAV
 
   const EventModel({
     this.id,
@@ -83,6 +85,7 @@ class EventModel extends Equatable {
     this.calendarId,
     this.notionPageId,
     this.icsSubscriptionId,
+    this.status,
     this.reminderMinutes,
     this.isDeleted = false,
     this.createdAt,
@@ -95,7 +98,8 @@ class EventModel extends Equatable {
   bool get isFromNotion => source == AppConstants.sourceNotion;
   bool get isFromIcs => source == AppConstants.sourceIcs;
   bool get isTask => type == EventType.task;
-  bool get isMultiDay => type == EventType.multiDay ||
+  bool get isMultiDay =>
+      type == EventType.multiDay ||
       (endDate.difference(startDate).inDays > 0 && !isAllDay);
 
   TagModel? get priorityTag => tags.where((t) => t.isPriority).firstOrNull;
@@ -120,6 +124,7 @@ class EventModel extends Equatable {
     String? calendarId,
     String? notionPageId,
     String? icsSubscriptionId,
+    String? status,
     int? reminderMinutes,
     bool? isDeleted,
     DateTime? createdAt,
@@ -146,6 +151,7 @@ class EventModel extends Equatable {
       calendarId: calendarId ?? this.calendarId,
       notionPageId: notionPageId ?? this.notionPageId,
       icsSubscriptionId: icsSubscriptionId ?? this.icsSubscriptionId,
+      status: status ?? this.status,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
@@ -174,6 +180,7 @@ class EventModel extends Equatable {
       'calendar_id': calendarId,
       'notion_page_id': notionPageId,
       'ics_subscription_id': icsSubscriptionId,
+      'status': status,
       'reminder_minutes': reminderMinutes,
       'is_deleted': isDeleted ? 1 : 0,
       'created_at': createdAt?.toIso8601String(),
@@ -217,6 +224,7 @@ class EventModel extends Equatable {
       calendarId: map['calendar_id'] as String?,
       notionPageId: map['notion_page_id'] as String?,
       icsSubscriptionId: map['ics_subscription_id'] as String?,
+      status: map['status'] as String?,
       reminderMinutes: map['reminder_minutes'] as int?,
       isDeleted: (map['is_deleted'] as int?) == 1,
       createdAt: map['created_at'] != null

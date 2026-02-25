@@ -6,6 +6,10 @@ import 'package:encrypt/encrypt.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
+import '../core/models/tag_model.dart';
+import '../core/models/notion_database_model.dart';
+import '../core/models/ics_subscription_model.dart';
+import '../core/models/event_model.dart';
 
 /// Service de sauvegarde/restauration sur kDrive (Infomaniak).
 /// Configuration chiffrée AES-256.
@@ -29,8 +33,7 @@ class BackupService {
     _dio.options.headers['Authorization'] = 'Bearer $token';
   }
 
-  bool get isConfigured =>
-      _bearerToken != null && _driveId != null;
+  bool get isConfigured => _bearerToken != null && _driveId != null;
 
   /// Sauvegarde la configuration sur kDrive.
   Future<void> backup({required String encryptionPassword}) async {
@@ -73,7 +76,8 @@ class BackupService {
       final response = await _dio.get(
         '/$_driveId/files',
         queryParameters: {
-          'path': '${AppConstants.kDriveBackupFolder}/${AppConstants.kDriveBackupFileName}',
+          'path':
+              '${AppConstants.kDriveBackupFolder}/${AppConstants.kDriveBackupFileName}',
         },
       );
 
@@ -123,8 +127,34 @@ class BackupService {
     final notionDbs = config['notion_databases'] as List? ?? [];
     final icsSubscriptions = config['ics_subscriptions'] as List? ?? [];
 
+    // Restaurer les tags (suppression puis ré-import)
+    final existingTags = await _db.getAllTags();
+    for (final tag in existingTags) {
+      if (tag.id != null) await _db.deleteTag(tag.id!);
+    }
     for (final tagMap in tags) {
-      // Import des tags (gestion des doublons)
+      final tag = TagModel.fromMap(tagMap as Map<String, dynamic>);
+      await _db.insertTag(tag);
+    }
+
+    // Restaurer les BDD Notion
+    final existingDbs = await _db.getNotionDatabases();
+    for (final db in existingDbs) {
+      if (db.id != null) await _db.deleteNotionDatabase(db.id!);
+    }
+    for (final dbMap in notionDbs) {
+      final db = NotionDatabaseModel.fromMap(dbMap as Map<String, dynamic>);
+      await _db.insertNotionDatabase(db);
+    }
+
+    // Restaurer les abonnements .ics
+    final existingSubs = await _db.getIcsSubscriptions();
+    for (final sub in existingSubs) {
+      if (sub.id != null) await _db.deleteIcsSubscription(sub.id!);
+    }
+    for (final subMap in icsSubscriptions) {
+      final sub = IcsSubscriptionModel.fromMap(subMap as Map<String, dynamic>);
+      await _db.insertIcsSubscription(sub);
     }
   }
 
@@ -167,23 +197,28 @@ class BackupService {
   }
 
   /// Exporte les événements en CSV.
-  static String exportToCsv(List<dynamic> events) {
+  static String exportToCsv(List<EventModel> events) {
     final lines = <String>[
       'ID,Titre,Début,Fin,Journée entière,Lieu,Description,Source,Catégories,Priorité',
     ];
 
     for (final event in events) {
+      final categories =
+          event.tags.where((t) => t.isCategory).map((t) => t.name).join('; ');
+      final priority =
+          event.tags.where((t) => t.isPriority).map((t) => t.name).join();
+
       lines.add([
         event.id?.toString() ?? '',
-        _csvEscape(event.title as String),
-        event.startDate.toString(),
-        event.endDate.toString(),
-        (event.isAllDay as bool) ? 'Oui' : 'Non',
-        _csvEscape(event.location as String? ?? ''),
-        _csvEscape(event.description as String? ?? ''),
-        event.source as String,
-        '',
-        '',
+        _csvEscape(event.title),
+        event.startDate.toIso8601String(),
+        event.endDate.toIso8601String(),
+        event.isAllDay ? 'Oui' : 'Non',
+        _csvEscape(event.location ?? ''),
+        _csvEscape(event.description ?? ''),
+        event.source,
+        _csvEscape(categories),
+        _csvEscape(priority),
       ].join(','));
     }
 

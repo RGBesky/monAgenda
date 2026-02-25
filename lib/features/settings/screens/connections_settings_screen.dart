@@ -1,5 +1,8 @@
+import 'package:collection/collection.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/app_colors.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/models/ics_subscription_model.dart';
 import '../../../core/models/notion_database_model.dart';
@@ -22,6 +25,11 @@ class _ConnectionsSettingsScreenState
   late TabController _tabController;
   bool _infomaniakLoading = false;
   bool _notionLoading = false;
+  final _infomaniakUsernameController = TextEditingController();
+  final _infomaniakPasswordController = TextEditingController();
+  final _infomaniakCalendarUrlController = TextEditingController();
+  final _notionApiKeyController = TextEditingController();
+  bool _controllersInitialized = false;
 
   @override
   void initState() {
@@ -36,6 +44,10 @@ class _ConnectionsSettingsScreenState
   @override
   void dispose() {
     _tabController.dispose();
+    _infomaniakUsernameController.dispose();
+    _infomaniakPasswordController.dispose();
+    _infomaniakCalendarUrlController.dispose();
+    _notionApiKeyController.dispose();
     super.dispose();
   }
 
@@ -66,9 +78,14 @@ class _ConnectionsSettingsScreenState
 
   Widget _buildInfomaniakTab() {
     final settings = ref.watch(settingsProvider).valueOrNull;
-    final tokenController = TextEditingController(
-      text: settings?.infomaniakToken ?? '',
-    );
+    if (!_controllersInitialized && settings != null) {
+      _infomaniakUsernameController.text = settings.infomaniakUsername ?? '';
+      _infomaniakPasswordController.text = settings.infomaniakAppPassword ?? '';
+      _infomaniakCalendarUrlController.text =
+          settings.infomaniakCalendarUrl ?? '';
+      _notionApiKeyController.text = settings.notionApiKey ?? '';
+      _controllersInitialized = true;
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -80,13 +97,17 @@ class _ConnectionsSettingsScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Configuration Infomaniak',
+                  'Configuration Infomaniak CalDAV',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'Obtenez un Bearer Token depuis manager.infomaniak.com → '
-                  'API Tokens. Scopes requis : workspace:calendar + user_info',
+                  'Utilisez la synchronisation CalDAV Infomaniak.\n'
+                  '1. Rendez-vous dans manager.infomaniak.com → kSuite → '
+                  'Mail → Synchronisation CalDAV.\n'
+                  '2. Copiez le nom d\'utilisateur et l\'URL du calendrier.\n'
+                  '3. Créez un mot de passe d\'application depuis '
+                  'votre profil Infomaniak.',
                   style: TextStyle(fontSize: 13),
                 ),
               ],
@@ -95,14 +116,34 @@ class _ConnectionsSettingsScreenState
         ),
         const SizedBox(height: 16),
         TextFormField(
-          controller: tokenController,
+          controller: _infomaniakUsernameController,
           decoration: const InputDecoration(
-            labelText: 'Bearer Token',
+            labelText: 'Nom d\'utilisateur',
+            prefixIcon: Icon(Icons.person),
+            border: OutlineInputBorder(),
+            helperText: 'Votre identifiant Infomaniak',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _infomaniakPasswordController,
+          decoration: const InputDecoration(
+            labelText: 'Mot de passe d\'application',
             prefixIcon: Icon(Icons.key),
             border: OutlineInputBorder(),
-            helperText: 'Token OAuth2 Infomaniak',
+            helperText: 'Généré depuis votre profil Infomaniak',
           ),
           obscureText: true,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _infomaniakCalendarUrlController,
+          decoration: const InputDecoration(
+            labelText: 'URL CalDAV du calendrier',
+            prefixIcon: Icon(Icons.link),
+            border: OutlineInputBorder(),
+            helperText: 'https://sync.infomaniak.com/calendars/…/…',
+          ),
         ),
         const SizedBox(height: 16),
         SizedBox(
@@ -110,10 +151,7 @@ class _ConnectionsSettingsScreenState
           child: FilledButton(
             onPressed: _infomaniakLoading
                 ? null
-                : () => _saveInfomaniakToken(
-                      context,
-                      tokenController.text,
-                    ),
+                : () => _saveInfomaniakCredentials(context),
             child: _infomaniakLoading
                 ? const SizedBox(
                     height: 16,
@@ -132,7 +170,14 @@ class _ConnectionsSettingsScreenState
             onPressed: () async {
               await ref
                   .read(settingsProvider.notifier)
-                  .updateInfomaniakToken('');
+                  .updateInfomaniakCredentials(
+                    username: '',
+                    appPassword: '',
+                    calendarUrl: '',
+                  );
+              _infomaniakUsernameController.clear();
+              _infomaniakPasswordController.clear();
+              _infomaniakCalendarUrlController.clear();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -150,9 +195,6 @@ class _ConnectionsSettingsScreenState
 
   Widget _buildNotionTab() {
     final settings = ref.watch(settingsProvider).valueOrNull;
-    final apiKeyController = TextEditingController(
-      text: settings?.notionApiKey ?? '',
-    );
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -179,12 +221,12 @@ class _ConnectionsSettingsScreenState
         ),
         const SizedBox(height: 16),
         TextFormField(
-          controller: apiKeyController,
+          controller: _notionApiKeyController,
           decoration: const InputDecoration(
             labelText: 'API Key (Integration Token)',
             prefixIcon: Icon(Icons.key),
             border: OutlineInputBorder(),
-            helperText: 'Commence par "secret_"',
+            helperText: 'Commence par "ntn_" ou "secret_"',
           ),
           obscureText: true,
         ),
@@ -195,7 +237,7 @@ class _ConnectionsSettingsScreenState
             onPressed: _notionLoading
                 ? null
                 : () =>
-                    _saveNotionApiKey(context, apiKeyController.text),
+                    _saveNotionApiKey(context, _notionApiKeyController.text),
             child: _notionLoading
                 ? const SizedBox(
                     height: 16,
@@ -242,27 +284,362 @@ class _ConnectionsSettingsScreenState
           );
         }
         return Column(
-          children: dbs
-              .map(
-                (db) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.table_chart_outlined),
-                  title: Text(db.name),
-                  trailing: Switch(
-                    value: db.isEnabled,
-                    onChanged: (v) async {
-                      await DatabaseHelper.instance.updateNotionDatabase(
-                        db.copyWith(isEnabled: v),
-                      );
-                      setState(() {});
-                    },
-                  ),
-                ),
-              )
-              .toList(),
+          children: dbs.map((db) => _buildNotionDbTile(db)).toList(),
         );
       },
     );
+  }
+
+  Widget _buildNotionDbTile(NotionDatabaseModel db) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: ExpansionTile(
+        leading: Icon(
+          Icons.table_chart_outlined,
+          color: db.isEnabled ? Colors.blue : Colors.grey,
+        ),
+        title: Text(
+          db.name,
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: db.isEnabled ? null : Colors.grey,
+          ),
+        ),
+        subtitle: Text(
+          db.isEnabled ? 'Activée' : 'Désactivée',
+          style: TextStyle(
+            fontSize: 12,
+            color: db.isEnabled ? Colors.green : Colors.grey,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(
+              value: db.isEnabled,
+              onChanged: (v) async {
+                await DatabaseHelper.instance.updateNotionDatabase(
+                  db.copyWith(isEnabled: v),
+                );
+                setState(() {});
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Supprimer cette base ?'),
+                    content: Text(
+                      'La base "${db.name}" sera retirée de la synchronisation.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Annuler'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Supprimer'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && db.id != null) {
+                  await DatabaseHelper.instance.deleteNotionDatabase(db.id!);
+                  setState(() {});
+                }
+              },
+            ),
+          ],
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildMappingRow('Titre', db.titleProperty),
+                _buildMappingRow('Date début', db.startDateProperty),
+                _buildMappingRow('Catégorie / Couleur', db.categoryProperty),
+                _buildMappingRow('Priorité', db.priorityProperty),
+                _buildMappingRow('État', db.statusProperty),
+                _buildMappingRow('Description', db.descriptionProperty),
+                _buildMappingRow('Lieu (Où)', db.locationProperty),
+                _buildMappingRow('Objectif (Pourquoi)', db.objectiveProperty),
+                _buildMappingRow('Matériel (Quoi)', db.materialProperty),
+                _buildMappingRow('Participants', db.participantsProperty),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _editNotionDbMappings(db),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Modifier les mappings'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMappingRow(String label, String? value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value ?? '—',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: value != null ? FontWeight.w500 : FontWeight.normal,
+                color: value != null ? null : Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Ouvre un dialogue pour modifier les mappings d'une BDD Notion.
+  /// Récupère le schéma en live pour proposer les propriétés disponibles.
+  Future<void> _editNotionDbMappings(NotionDatabaseModel db) async {
+    final settings = ref.read(settingsProvider).valueOrNull;
+    if (settings?.notionApiKey == null) return;
+
+    // Chargement du schéma
+    Map<String, dynamic>? schema;
+    try {
+      final service = NotionService();
+      service.setCredentials(apiKey: settings!.notionApiKey!);
+      schema = await service.getDatabaseSchema(db.effectiveSourceId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur schéma : $e')),
+        );
+      }
+      return;
+    }
+
+    final props = schema['properties'] as Map<String, dynamic>? ?? {};
+
+    // Construire les listes de propriétés par type
+    final allPropNames = ['— Aucune —', ...props.keys.toList()..sort()];
+
+    // Classifier
+    final datePropNames = <String>['— Aucune —'];
+    final selectPropNames = <String>['— Aucune —'];
+    final textPropNames = <String>['— Aucune —'];
+    final titlePropNames = <String>[];
+
+    for (final entry in props.entries) {
+      final type =
+          (entry.value as Map<String, dynamic>)['type'] as String? ?? '';
+      if (type == 'date') datePropNames.add(entry.key);
+      if (type == 'select' || type == 'multi_select' || type == 'status') {
+        selectPropNames.add(entry.key);
+      }
+      if (type == 'rich_text' ||
+          type == 'url' ||
+          type == 'email' ||
+          type == 'phone_number' ||
+          type == 'number') {
+        textPropNames.add(entry.key);
+      }
+      if (type == 'title') titlePropNames.add(entry.key);
+    }
+    // also add to text for participants/description
+    textPropNames.addAll(selectPropNames.skip(1));
+
+    // Controllers initialized with current values
+    String titleProp = db.titleProperty;
+    String? startDateProp = db.startDateProperty;
+    String? categoryProp = db.categoryProperty;
+    String? priorityProp = db.priorityProperty;
+    String? statusProp = db.statusProperty;
+    String? descProp = db.descriptionProperty;
+    String? locationProp = db.locationProperty;
+    String? objectiveProp = db.objectiveProperty;
+    String? materialProp = db.materialProperty;
+    String? participantsProp = db.participantsProperty;
+
+    String norm(String? v) => (v == null || v.isEmpty) ? '— Aucune —' : v;
+
+    if (!mounted) return;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            Widget buildDropdown(
+              String label,
+              String? current,
+              List<String> options,
+              ValueChanged<String?> onChanged, {
+              String? hint,
+            }) {
+              final val = norm(current);
+              final safeOptions =
+                  options.contains(val) ? options : [val, ...options];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('$label-$val'),
+                  initialValue: val,
+                  decoration: InputDecoration(
+                    labelText: label,
+                    helperText: hint,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  isExpanded: true,
+                  items: safeOptions
+                      .map((n) => DropdownMenuItem(
+                            value: n,
+                            child:
+                                Text(n, style: const TextStyle(fontSize: 13)),
+                          ))
+                      .toList(),
+                  onChanged: (v) => onChanged(
+                    v == '— Aucune —' ? null : v,
+                  ),
+                ),
+              );
+            }
+
+            return AlertDialog(
+              title: Text('Mappings — ${db.name}',
+                  style: const TextStyle(fontSize: 16)),
+              content: SizedBox(
+                width: 380,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      buildDropdown(
+                        'Titre',
+                        titleProp,
+                        titlePropNames.isEmpty ? allPropNames : titlePropNames,
+                        (v) => setDialogState(() => titleProp = v ?? 'Name'),
+                      ),
+                      buildDropdown(
+                        'Date de début',
+                        startDateProp,
+                        datePropNames,
+                        (v) => setDialogState(() => startDateProp = v),
+                      ),
+                      buildDropdown(
+                        'Catégorie / Couleur',
+                        categoryProp,
+                        selectPropNames,
+                        (v) => setDialogState(() => categoryProp = v),
+                        hint:
+                            'Détermine la couleur de l\'événement dans le calendrier',
+                      ),
+                      buildDropdown(
+                        'Priorité',
+                        priorityProp,
+                        selectPropNames,
+                        (v) => setDialogState(() => priorityProp = v),
+                      ),
+                      buildDropdown(
+                        'État d\'avancement',
+                        statusProp,
+                        selectPropNames,
+                        (v) => setDialogState(() => statusProp = v),
+                      ),
+                      buildDropdown(
+                        'Description',
+                        descProp,
+                        allPropNames,
+                        (v) => setDialogState(() => descProp = v),
+                      ),
+                      buildDropdown(
+                        'Lieu',
+                        locationProp,
+                        allPropNames,
+                        (v) => setDialogState(() => locationProp = v),
+                      ),
+                      buildDropdown(
+                        'Objectif',
+                        objectiveProp,
+                        allPropNames,
+                        (v) => setDialogState(() => objectiveProp = v),
+                      ),
+                      buildDropdown(
+                        'Matériel',
+                        materialProp,
+                        allPropNames,
+                        (v) => setDialogState(() => materialProp = v),
+                      ),
+                      buildDropdown(
+                        'Participants',
+                        participantsProp,
+                        allPropNames,
+                        (v) => setDialogState(() => participantsProp = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Annuler'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Enregistrer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      final updated = db.copyWith(
+        titleProperty: titleProp,
+        startDateProperty: startDateProp,
+        categoryProperty: categoryProp,
+        priorityProperty: priorityProp,
+        statusProperty: statusProp,
+        descriptionProperty: descProp,
+        locationProperty: locationProp,
+        objectiveProperty: objectiveProp,
+        materialProperty: materialProp,
+        participantsProperty: participantsProp,
+      );
+      await DatabaseHelper.instance.updateNotionDatabase(updated);
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mappings enregistrés'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildIcsTab() {
@@ -287,7 +664,7 @@ class _ConnectionsSettingsScreenState
   }
 
   Widget _buildIcsSubscriptionTile(IcsSubscriptionModel sub) {
-    final color = _colorFromHex(sub.colorHex);
+    final color = AppColors.fromHex(sub.colorHex);
     return ListTile(
       leading: CircleAvatar(
         radius: 10,
@@ -314,8 +691,7 @@ class _ConnectionsSettingsScreenState
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 18),
             onPressed: () async {
-              await DatabaseHelper.instance
-                  .deleteIcsSubscription(sub.id!);
+              await DatabaseHelper.instance.deleteIcsSubscription(sub.id!);
               setState(() {});
             },
           ),
@@ -324,21 +700,37 @@ class _ConnectionsSettingsScreenState
     );
   }
 
-  Future<void> _saveInfomaniakToken(
-    BuildContext context,
-    String token,
-  ) async {
-    if (token.trim().isEmpty) return;
+  Future<void> _saveInfomaniakCredentials(BuildContext context) async {
+    final username = _infomaniakUsernameController.text.trim();
+    final appPassword = _infomaniakPasswordController.text.trim();
+    final calendarUrl = _infomaniakCalendarUrlController.text.trim();
+
+    if (username.isEmpty || appPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Veuillez remplir le nom d\'utilisateur et le mot de passe'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _infomaniakLoading = true);
 
     try {
       final service = InfomaniakService();
-      service.setCredentials(token: token.trim());
-      await service.validateToken();
+      service.setCredentials(
+        username: username,
+        appPassword: appPassword,
+        calendarUrl: calendarUrl.isNotEmpty ? calendarUrl : null,
+      );
+      await service.validateCredentials();
 
-      await ref
-          .read(settingsProvider.notifier)
-          .updateInfomaniakToken(token.trim());
+      await ref.read(settingsProvider.notifier).updateInfomaniakCredentials(
+            username: username,
+            appPassword: appPassword,
+            calendarUrl: calendarUrl.isNotEmpty ? calendarUrl : null,
+          );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -349,11 +741,28 @@ class _ConnectionsSettingsScreenState
         );
       }
     } catch (e) {
+      String errorMsg = 'Erreur de connexion';
+      if (e is DioException) {
+        final status = e.response?.statusCode;
+        if (status == 401) {
+          errorMsg =
+              'Identifiants invalides (401). Vérifiez le nom d\'utilisateur '
+              'et le mot de passe d\'application.';
+        } else if (status == 404) {
+          errorMsg =
+              'URL non trouvée (404). Vérifiez l\'URL CalDAV du calendrier.';
+        } else {
+          errorMsg = 'Erreur $status : ${e.message}';
+        }
+      } else {
+        errorMsg = 'Erreur : $e';
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur de connexion : $e'),
+            content: Text(errorMsg),
             backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 6),
           ),
         );
       }
@@ -371,9 +780,7 @@ class _ConnectionsSettingsScreenState
       service.setCredentials(apiKey: key.trim());
       await service.validateApiKey();
 
-      await ref
-          .read(settingsProvider.notifier)
-          .updateNotionApiKey(key.trim());
+      await ref.read(settingsProvider.notifier).updateNotionApiKey(key.trim());
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -384,11 +791,29 @@ class _ConnectionsSettingsScreenState
         );
       }
     } catch (e) {
+      String errorMsg = 'Erreur de connexion';
+      if (e is DioException) {
+        final status = e.response?.statusCode;
+        final body = e.response?.data;
+        if (status == 401) {
+          final detail = body is Map ? body['message'] ?? '' : '';
+          errorMsg = 'Clé API invalide (401). '
+              'Vérifiez votre token sur notion.so/my-integrations.\n$detail';
+        } else if (status == 403) {
+          errorMsg =
+              'Accès refusé (403). Vérifiez les permissions de l\'intégration.';
+        } else {
+          errorMsg = 'Erreur $status : ${e.message}';
+        }
+      } else {
+        errorMsg = 'Erreur : $e';
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur de connexion : $e'),
+            content: Text(errorMsg),
             backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 6),
           ),
         );
       }
@@ -401,19 +826,59 @@ class _ConnectionsSettingsScreenState
     final settings = ref.read(settingsProvider).valueOrNull;
     if (settings?.notionApiKey == null) return;
 
+    setState(() => _notionLoading = true);
+
     try {
       final service = NotionService();
       service.setCredentials(apiKey: settings!.notionApiKey!);
       final databases = await service.searchDatabases();
 
+      int added = 0;
+
       for (final db in databases) {
+        final props = db['properties'] as Map<String, dynamic>? ?? {};
+        final propNames = props.keys.toList();
+
+        // Auto-detect property mappings from the schema
+        String? findProp(List<String> candidates) {
+          for (final c in candidates) {
+            final match = propNames.firstWhereOrNull(
+              (p) => p.toLowerCase().contains(c.toLowerCase()),
+            );
+            if (match != null) return match;
+          }
+          return null;
+        }
+
+        // Title property : look for a 'title' type property
+        String titleProp = 'Name';
+        for (final entry in props.entries) {
+          if ((entry.value as Map<String, dynamic>)['type'] == 'title') {
+            titleProp = entry.key;
+            break;
+          }
+        }
+
+        final databaseId = db['database_id'] as String;
+
         await DatabaseHelper.instance.insertNotionDatabase(
           NotionDatabaseModel(
-            notionId: db['id'] as String,
+            notionId: databaseId,
             name: db['name'] as String,
-            titleProperty: 'Name',
+            titleProperty: titleProp,
+            startDateProperty: findProp(['Date']),
+            categoryProperty: findProp(['Projet', 'Catégorie', 'Category']),
+            priorityProperty: findProp(['Priorité', 'Priority']),
+            descriptionProperty: findProp(['Comment', 'Description']),
+            participantsProperty:
+                findProp(['Qui', 'Participant', 'Responsable']),
+            statusProperty: findProp(['État', 'Status', 'Statut']),
+            locationProperty: findProp(['Où', 'Location', 'Lieu']),
+            objectiveProperty: findProp(['Pourquoi', 'Objectif', 'Objective']),
+            materialProperty: findProp(['Quoi', 'Matériel', 'Material']),
           ),
         );
+        added++;
       }
 
       setState(() {});
@@ -421,16 +886,33 @@ class _ConnectionsSettingsScreenState
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${databases.length} base(s) trouvée(s)'),
+            content: Text('$added base(s) de données trouvée(s)'),
+            backgroundColor: added > 0 ? Colors.green : null,
           ),
         );
       }
     } catch (e) {
+      String errorMsg = 'Erreur lors de la découverte';
+      if (e is DioException) {
+        final status = e.response?.statusCode;
+        if (status == 401) {
+          errorMsg = 'Clé API invalide. Vérifiez votre intégration Notion.';
+        } else {
+          errorMsg = 'Erreur $status : ${e.message}';
+        }
+      } else {
+        errorMsg = 'Erreur : $e';
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
+    } finally {
+      setState(() => _notionLoading = false);
     }
   }
 
@@ -487,12 +969,5 @@ class _ConnectionsSettingsScreenState
       );
       setState(() {});
     }
-  }
-
-  Color _colorFromHex(String hex) {
-    final buffer = StringBuffer();
-    if (hex.length == 6 || hex.length == 7) buffer.write('ff');
-    buffer.write(hex.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
   }
 }

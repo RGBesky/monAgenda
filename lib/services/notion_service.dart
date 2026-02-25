@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:collection/collection.dart';
 import '../core/constants/app_constants.dart';
+import '../core/constants/app_colors.dart';
 import '../core/models/event_model.dart';
 import '../core/models/notion_database_model.dart';
 import '../core/models/tag_model.dart';
@@ -44,11 +46,15 @@ class NotionService {
       },
     });
 
-    final results = (response.data['results'] as List).cast<Map<String, dynamic>>();
-    return results.map((db) => {
-      'id': db['id'] as String,
-      'name': _extractTitle(db),
-      'properties': db['properties'] as Map<String, dynamic>,
+    final results =
+        (response.data['results'] as List).cast<Map<String, dynamic>>();
+    return results.map((db) {
+      return {
+        'id': db['id'] as String,
+        'database_id': db['id'] as String,
+        'name': _extractTitle(db),
+        'properties': db['properties'] as Map<String, dynamic>,
+      };
     }).toList();
   }
 
@@ -61,6 +67,7 @@ class NotionService {
   /// Requête une base de données pour obtenir les pages (événements).
   Future<List<Map<String, dynamic>>> queryDatabase({
     required String databaseId,
+    String? dateProperty,
     DateTime? startDate,
     DateTime? endDate,
     String? cursor,
@@ -70,25 +77,27 @@ class NotionService {
       if (cursor != null) 'start_cursor': cursor,
     };
 
-    // Filtre sur les dates si spécifiées
-    if (startDate != null || endDate != null) {
-      final dateFilter = <Map<String, dynamic>>[];
-      if (startDate != null) {
-        dateFilter.add({
-          'property': 'Date',
-          'date': {'on_or_after': startDate.toIso8601String()},
-        });
-      }
-      if (endDate != null) {
-        dateFilter.add({
-          'property': 'Date',
-          'date': {'on_or_before': endDate.toIso8601String()},
-        });
-      }
-      if (dateFilter.length == 1) {
-        body['filter'] = dateFilter.first;
-      } else if (dateFilter.length > 1) {
-        body['filter'] = {'and': dateFilter};
+    // Filtre sur les dates si une propriété date est spécifiée
+    if (dateProperty != null && dateProperty.isNotEmpty) {
+      if (startDate != null || endDate != null) {
+        final dateFilter = <Map<String, dynamic>>[];
+        if (startDate != null) {
+          dateFilter.add({
+            'property': dateProperty,
+            'date': {'on_or_after': startDate.toIso8601String()},
+          });
+        }
+        if (endDate != null) {
+          dateFilter.add({
+            'property': dateProperty,
+            'date': {'on_or_before': endDate.toIso8601String()},
+          });
+        }
+        if (dateFilter.length == 1) {
+          body['filter'] = dateFilter.first;
+        } else if (dateFilter.length > 1) {
+          body['filter'] = {'and': dateFilter};
+        }
       }
     }
 
@@ -104,6 +113,7 @@ class NotionService {
     if (data['has_more'] == true && data['next_cursor'] != null) {
       final more = await queryDatabase(
         databaseId: databaseId,
+        dateProperty: dateProperty,
         startDate: startDate,
         endDate: endDate,
         cursor: data['next_cursor'] as String,
@@ -119,10 +129,12 @@ class NotionService {
     required NotionDatabaseModel dbModel,
     required EventModel event,
     required List<TagModel> allTags,
+    Map<String, dynamic>? schema,
   }) async {
-    final properties = _buildProperties(dbModel, event, allTags);
+    final properties =
+        _buildProperties(dbModel, event, allTags, schema: schema);
     final response = await _dio.post('/pages', data: {
-      'parent': {'database_id': dbModel.notionId},
+      'parent': {'database_id': dbModel.effectiveSourceId},
       'properties': properties,
     });
     return response.data as Map<String, dynamic>;
@@ -134,8 +146,10 @@ class NotionService {
     required NotionDatabaseModel dbModel,
     required EventModel event,
     required List<TagModel> allTags,
+    Map<String, dynamic>? schema,
   }) async {
-    final properties = _buildProperties(dbModel, event, allTags);
+    final properties =
+        _buildProperties(dbModel, event, allTags, schema: schema);
     final response = await _dio.patch('/pages/$pageId', data: {
       'properties': properties,
     });
@@ -145,6 +159,74 @@ class NotionService {
   /// Archive (supprime) une page Notion.
   Future<void> archivePage(String pageId) async {
     await _dio.patch('/pages/$pageId', data: {'archived': true});
+  }
+
+  /// Extrait les options de catégorie depuis le schéma d'une BDD Notion.
+  /// Retourne les TagModels pour les options qui n'existent pas encore localement.
+  List<TagModel> extractMissingCategoryTags({
+    required Map<String, dynamic> schema,
+    required NotionDatabaseModel dbModel,
+    required List<TagModel> allTags,
+  }) {
+    final missingTags = <TagModel>[];
+    final propName = dbModel.categoryProperty;
+    if (propName == null) return missingTags;
+
+    final props = schema['properties'] as Map<String, dynamic>? ?? {};
+    final prop = props[propName] as Map<String, dynamic>?;
+    if (prop == null) return missingTags;
+
+    final type = prop['type'] as String?;
+    List<Map<String, dynamic>> options = [];
+
+    if (type == 'multi_select') {
+      final ms = prop['multi_select'] as Map<String, dynamic>?;
+      options = (ms?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    } else if (type == 'select') {
+      final sel = prop['select'] as Map<String, dynamic>?;
+      options = (sel?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    } else if (type == 'status') {
+      final st = prop['status'] as Map<String, dynamic>?;
+      final groups =
+          (st?['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      for (final g in groups) {
+        final groupOptions = (g['option_ids'] as List?)?.cast<String>() ?? [];
+        // Status options are flat in the 'options' list
+        final statusOptions =
+            (st?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        for (final so in statusOptions) {
+          if (!options.any((o) => o['id'] == so['id'])) {
+            options.add(so);
+          }
+        }
+        if (groupOptions.isNotEmpty) break; // just to trigger reading options
+      }
+      // Fallback: read options directly
+      if (options.isEmpty) {
+        options = (st?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      }
+    }
+
+    final existingCount = allTags.where((t) => t.isCategory).length;
+
+    for (int i = 0; i < options.length; i++) {
+      final name = options[i]['name'] as String?;
+      final color = options[i]['color'] as String? ?? 'default';
+      if (name == null || name.isEmpty) continue;
+
+      final exists = allTags.any((t) => t.isCategory && t.name == name);
+      if (!exists) {
+        missingTags.add(TagModel(
+          type: AppConstants.tagTypeCategory,
+          name: name,
+          colorHex: AppColors.toHex(AppColors.fromNotionColor(color)),
+          notionMapping: name,
+          sortOrder: existingCount + i,
+        ));
+      }
+    }
+
+    return missingTags;
   }
 
   /// Convertit une page Notion en EventModel.
@@ -164,12 +246,27 @@ class NotionService {
       if (title.isEmpty) return null;
 
       // Dates
-      final dateProp = dbModel.startDateProperty != null
-          ? props[dbModel.startDateProperty]
-          : null;
       DateTime? startDate;
       DateTime? endDate;
       bool isAllDay = false;
+
+      // Chercher la propriété date configurée, ou auto-détecter
+      Map<String, dynamic>? dateProp;
+      if (dbModel.startDateProperty != null) {
+        dateProp = props[dbModel.startDateProperty] as Map<String, dynamic>?;
+      }
+      // Fallback : chercher la première propriété de type 'date'
+      if (dateProp == null || dateProp['date'] == null) {
+        for (final entry in props.entries) {
+          final val = entry.value;
+          if (val is Map<String, dynamic> &&
+              val['type'] == 'date' &&
+              val['date'] != null) {
+            dateProp = val;
+            break;
+          }
+        }
+      }
 
       if (dateProp != null && dateProp['date'] != null) {
         final dateObj = dateProp['date'] as Map<String, dynamic>;
@@ -183,15 +280,14 @@ class NotionService {
         if (endStr != null) {
           endDate = DateTime.parse(endStr);
         } else if (startDate != null) {
-          endDate = isAllDay
-              ? startDate
-              : startDate.add(const Duration(hours: 1));
+          endDate =
+              isAllDay ? startDate : startDate.add(const Duration(hours: 1));
         }
       }
 
       if (startDate == null) return null;
 
-      // Catégories
+      // Catégories — support multi_select ET select
       final categoryNames = <String>[];
       final tagIdsList = <int>[];
       final matchedTags = <TagModel>[];
@@ -199,9 +295,22 @@ class NotionService {
       if (dbModel.categoryProperty != null) {
         final catProp = props[dbModel.categoryProperty];
         if (catProp != null) {
-          final options = catProp['multi_select'] as List? ?? [];
-          for (final opt in options) {
-            final name = (opt as Map<String, dynamic>)['name'] as String?;
+          final catType = catProp['type'] as String?;
+          List<Map<String, dynamic>> catOptions = [];
+
+          if (catType == 'multi_select') {
+            catOptions = ((catProp['multi_select'] as List?) ?? [])
+                .cast<Map<String, dynamic>>();
+          } else if (catType == 'select') {
+            final selected = catProp['select'] as Map<String, dynamic>?;
+            if (selected != null) catOptions = [selected];
+          } else if (catType == 'status') {
+            final statusObj = catProp['status'] as Map<String, dynamic>?;
+            if (statusObj != null) catOptions = [statusObj];
+          }
+
+          for (final opt in catOptions) {
+            final name = opt['name'] as String?;
             if (name != null) {
               categoryNames.add(name);
               final tag = allTags.firstWhereOrNull(
@@ -236,13 +345,68 @@ class NotionService {
         }
       }
 
-      // Description
-      String? description;
+      // Description — enrichie avec Où / Pourquoi / Quoi
+      final descParts = <String>[];
+
+      // 1. Texte principal (Comment ?)
       if (dbModel.descriptionProperty != null) {
         final descProp = props[dbModel.descriptionProperty];
-        description = _extractRichText(descProp);
-        if (description.isEmpty) description = null;
+        final mainDesc = _extractRichText(descProp);
+        if (mainDesc.isNotEmpty) {
+          descParts.add(mainDesc);
+        }
       }
+
+      // 2. Où ?
+      if (dbModel.locationProperty != null) {
+        final locProp = props[dbModel.locationProperty];
+        final locText = _extractRichText(locProp);
+        if (locText.isNotEmpty) {
+          descParts.add('📍 Où : $locText');
+        }
+      }
+
+      // 3. Pourquoi ?
+      if (dbModel.objectiveProperty != null) {
+        final objProp = props[dbModel.objectiveProperty];
+        final objText = _extractRichText(objProp);
+        if (objText.isNotEmpty) {
+          descParts.add('🎯 Pourquoi : $objText');
+        }
+      }
+
+      // 4. Quoi ?
+      if (dbModel.materialProperty != null) {
+        final matProp = props[dbModel.materialProperty];
+        final matText = _extractRichText(matProp);
+        if (matText.isNotEmpty) {
+          descParts.add('🧰 Quoi : $matText');
+        }
+      }
+
+      // 5. État d'avancement
+      String? statusValue;
+      if (dbModel.statusProperty != null) {
+        final statusProp = props[dbModel.statusProperty];
+        if (statusProp != null) {
+          // Notion status peut être 'status', 'select' ou 'rich_text'
+          final statusObj = statusProp['status'] as Map<String, dynamic>?;
+          final selectObj = statusProp['select'] as Map<String, dynamic>?;
+          if (statusObj != null) {
+            statusValue = statusObj['name'] as String?;
+          } else if (selectObj != null) {
+            statusValue = selectObj['name'] as String?;
+          } else {
+            final rt = _extractRichText(statusProp);
+            if (rt.isNotEmpty) statusValue = rt;
+          }
+          if (statusValue != null && statusValue.isNotEmpty) {
+            descParts.add('📊 État : $statusValue');
+          }
+        }
+      }
+
+      final description = descParts.isNotEmpty ? descParts.join('\n\n') : null;
 
       // Type : multi-day si durée > 1 jour
       final type = (endDate != null &&
@@ -260,6 +424,7 @@ class NotionService {
         endDate: endDate ?? startDate.add(const Duration(hours: 1)),
         isAllDay: isAllDay,
         description: description,
+        status: statusValue,
         tagIds: tagIdsList,
         tags: matchedTags,
         notionPageId: id,
@@ -278,8 +443,9 @@ class NotionService {
   Map<String, dynamic> _buildProperties(
     NotionDatabaseModel dbModel,
     EventModel event,
-    List<TagModel> allTags,
-  ) {
+    List<TagModel> allTags, {
+    Map<String, dynamic>? schema,
+  }) {
     final properties = <String, dynamic>{};
 
     // Titre
@@ -310,13 +476,42 @@ class NotionService {
       properties[dbModel.startDateProperty!] = {'date': dateValue};
     }
 
-    // Catégories
+    // Catégories — détecter le type depuis le schéma (select / multi_select / status)
     if (dbModel.categoryProperty != null) {
-      final categories = event.tags
-          .where((t) => t.isCategory)
-          .map((t) => {'name': t.name})
-          .toList();
-      properties[dbModel.categoryProperty!] = {'multi_select': categories};
+      final categories = event.tags.where((t) => t.isCategory).toList();
+
+      // Déterminer le type réel de la propriété depuis le schéma
+      String catType = 'multi_select'; // fallback
+      if (schema != null) {
+        final schemaProps = schema['properties'] as Map<String, dynamic>? ?? {};
+        final catProp =
+            schemaProps[dbModel.categoryProperty] as Map<String, dynamic>?;
+        if (catProp != null) {
+          catType = catProp['type'] as String? ?? 'multi_select';
+        }
+      }
+
+      if (catType == 'select') {
+        // select : une seule catégorie
+        final first = categories.firstOrNull;
+        if (first != null) {
+          properties[dbModel.categoryProperty!] = {
+            'select': {'name': first.name},
+          };
+        }
+      } else if (catType == 'status') {
+        final first = categories.firstOrNull;
+        if (first != null) {
+          properties[dbModel.categoryProperty!] = {
+            'status': {'name': first.name},
+          };
+        }
+      } else {
+        // multi_select (défaut)
+        properties[dbModel.categoryProperty!] = {
+          'multi_select': categories.map((t) => {'name': t.name}).toList(),
+        };
+      }
     }
 
     // Priorité
@@ -329,19 +524,58 @@ class NotionService {
       }
     }
 
-    // Description
+    // Description — on écrit uniquement le texte principal (sans les sections enrichies)
     if (dbModel.descriptionProperty != null && event.description != null) {
-      properties[dbModel.descriptionProperty!] = {
+      // Extraire le texte avant les sections emoji ajoutées
+      final cleanDesc = _extractMainDescription(event.description!);
+      if (cleanDesc.isNotEmpty) {
+        properties[dbModel.descriptionProperty!] = {
+          'rich_text': [
+            {
+              'type': 'text',
+              'text': {'content': cleanDesc},
+            },
+          ],
+        };
+      }
+    }
+
+    // Où ? — écrire dans la propriété Notion dédiée si elle existe
+    if (dbModel.locationProperty != null && event.location != null) {
+      properties[dbModel.locationProperty!] = {
         'rich_text': [
           {
             'type': 'text',
-            'text': {'content': event.description!},
+            'text': {'content': event.location!},
           },
         ],
       };
     }
 
+    // État d'avancement
+    if (dbModel.statusProperty != null && event.status != null) {
+      properties[dbModel.statusProperty!] = {
+        'status': {'name': event.status!},
+      };
+    }
+
     return properties;
+  }
+
+  /// Extrait le texte principal de la description, avant les sections enrichies (📍/🎯/🧰/📊).
+  String _extractMainDescription(String description) {
+    final lines = description.split('\n');
+    final buffer = StringBuffer();
+    for (final line in lines) {
+      if (line.startsWith('📍') ||
+          line.startsWith('🎯') ||
+          line.startsWith('🧰') ||
+          line.startsWith('📊')) {
+        break;
+      }
+      buffer.writeln(line);
+    }
+    return buffer.toString().trim();
   }
 
   String _extractTitle(Map<String, dynamic> db) {
@@ -357,14 +591,5 @@ class NotionService {
     return list
         .map((item) => (item as Map)['plain_text'] as String? ?? '')
         .join();
-  }
-}
-
-extension _ListExtension<T> on List<T> {
-  T? firstWhereOrNull(bool Function(T) test) {
-    for (final element in this) {
-      if (test(element)) return element;
-    }
-    return null;
   }
 }

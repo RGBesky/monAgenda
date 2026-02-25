@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/tag_model.dart';
 import '../../../providers/tags_provider.dart';
@@ -61,10 +62,8 @@ class TagsSettingsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erreur : $e')),
         data: (tags) {
-          final categories =
-              tags.where((t) => t.isCategory).toList();
-          final priorities =
-              tags.where((t) => t.isPriority).toList();
+          final categories = tags.where((t) => t.isCategory).toList();
+          final priorities = tags.where((t) => t.isPriority).toList();
 
           return ListView(
             children: [
@@ -139,7 +138,7 @@ class TagsSettingsScreen extends ConsumerWidget {
   }
 
   Widget _buildTagTile(BuildContext context, WidgetRef ref, TagModel tag) {
-    final color = _colorFromHex(tag.colorHex);
+    final color = AppColors.fromHex(tag.colorHex);
     return ListTile(
       leading: Container(
         width: 24,
@@ -175,7 +174,7 @@ class TagsSettingsScreen extends ConsumerWidget {
   }) async {
     String name = tag?.name ?? '';
     String colorHex = tag?.colorHex ?? '#1E88E5';
-    Color currentColor = _colorFromHex(colorHex);
+    Color currentColor = AppColors.fromHex(colorHex);
 
     await showDialog(
       context: context,
@@ -208,7 +207,7 @@ class TagsSettingsScreen extends ConsumerWidget {
                                 setDialogState(() {
                                   currentColor = c;
                                   colorHex =
-                                      '#${c.value.toRadixString(16).substring(2).toUpperCase()}';
+                                      '#${c.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
                                 });
                               },
                             ),
@@ -229,7 +228,7 @@ class TagsSettingsScreen extends ConsumerWidget {
                         color: currentColor,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Colors.grey.withOpacity(0.3),
+                          color: Colors.grey.withValues(alpha: 0.3),
                         ),
                       ),
                     ),
@@ -304,12 +303,5 @@ class TagsSettingsScreen extends ConsumerWidget {
     if (confirmed == true && tag.id != null) {
       await ref.read(tagsNotifierProvider.notifier).deleteTag(tag.id!);
     }
-  }
-
-  Color _colorFromHex(String hex) {
-    final buffer = StringBuffer();
-    if (hex.length == 6 || hex.length == 7) buffer.write('ff');
-    buffer.write(hex.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
   }
 }

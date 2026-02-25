@@ -30,36 +30,30 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            RadioListTile<String>(
-              title: const Text('Automatique (système)'),
-              subtitle: const Text('Suit les préférences de votre appareil'),
-              value: AppConstants.themeAuto,
+            RadioGroup<String>(
               groupValue: settings.theme,
               onChanged: (v) async {
                 if (v != null) {
                   await ref.read(settingsProvider.notifier).setTheme(v);
                 }
               },
-            ),
-            RadioListTile<String>(
-              title: const Text('Mode clair'),
-              value: AppConstants.themeLight,
-              groupValue: settings.theme,
-              onChanged: (v) async {
-                if (v != null) {
-                  await ref.read(settingsProvider.notifier).setTheme(v);
-                }
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('Mode sombre'),
-              value: AppConstants.themeDark,
-              groupValue: settings.theme,
-              onChanged: (v) async {
-                if (v != null) {
-                  await ref.read(settingsProvider.notifier).setTheme(v);
-                }
-              },
+              child: const Column(
+                children: [
+                  RadioListTile<String>(
+                    title: Text('Automatique (système)'),
+                    subtitle: Text('Suit les préférences de votre appareil'),
+                    value: AppConstants.themeAuto,
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Mode clair'),
+                    value: AppConstants.themeLight,
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Mode sombre'),
+                    value: AppConstants.themeDark,
+                  ),
+                ],
+              ),
             ),
             const Divider(height: 1),
 
@@ -76,53 +70,33 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            RadioListTile<String>(
-              title: const Text('Mois'),
-              value: AppConstants.viewMonth,
+            RadioGroup<String>(
               groupValue: settings.defaultView,
               onChanged: (v) async {
                 if (v != null) {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setDefaultView(v);
+                  await ref.read(settingsProvider.notifier).setDefaultView(v);
                 }
               },
-            ),
-            RadioListTile<String>(
-              title: const Text('Semaine'),
-              value: AppConstants.viewWeek,
-              groupValue: settings.defaultView,
-              onChanged: (v) async {
-                if (v != null) {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setDefaultView(v);
-                }
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('Jour'),
-              value: AppConstants.viewDay,
-              groupValue: settings.defaultView,
-              onChanged: (v) async {
-                if (v != null) {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setDefaultView(v);
-                }
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('Agenda'),
-              value: AppConstants.viewAgenda,
-              groupValue: settings.defaultView,
-              onChanged: (v) async {
-                if (v != null) {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setDefaultView(v);
-                }
-              },
+              child: const Column(
+                children: [
+                  RadioListTile<String>(
+                    title: Text('Mois'),
+                    value: AppConstants.viewMonth,
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Semaine'),
+                    value: AppConstants.viewWeek,
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Jour'),
+                    value: AppConstants.viewDay,
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Agenda'),
+                    value: AppConstants.viewAgenda,
+                  ),
+                ],
+              ),
             ),
             const Divider(height: 1),
 
@@ -139,9 +113,7 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            RadioListTile<String>(
-              title: const Text('Lundi'),
-              value: AppConstants.firstDayMonday,
+            RadioGroup<String>(
               groupValue: settings.firstDayOfWeek,
               onChanged: (v) async {
                 if (v != null) {
@@ -150,18 +122,18 @@ class AppearanceSettingsScreen extends ConsumerWidget {
                       .setFirstDayOfWeek(v);
                 }
               },
-            ),
-            RadioListTile<String>(
-              title: const Text('Dimanche'),
-              value: AppConstants.firstDaySunday,
-              groupValue: settings.firstDayOfWeek,
-              onChanged: (v) async {
-                if (v != null) {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setFirstDayOfWeek(v);
-                }
-              },
+              child: const Column(
+                children: [
+                  RadioListTile<String>(
+                    title: Text('Lundi'),
+                    value: AppConstants.firstDayMonday,
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Dimanche'),
+                    value: AppConstants.firstDaySunday,
+                  ),
+                ],
+              ),
             ),
           ],
         ),

@@ -1,7 +1,7 @@
 class AppConstants {
-  // API Infomaniak
+  // Infomaniak CalDAV
   static const String infomaniakApiBase = 'https://api.infomaniak.com';
-  static const String infomaniakCalDavBase = 'https://caldav.infomaniak.com';
+  static const String infomaniakCalDavBase = 'https://sync.infomaniak.com';
   static const String infomaniakScopeCalendar = 'workspace:calendar';
   static const String infomaniakScopeUserInfo = 'user_info';
 
@@ -19,7 +19,7 @@ class AppConstants {
 
   // Base de données locale
   static const String dbName = 'unified_calendar.db';
-  static const int dbVersion = 1;
+  static const int dbVersion = 4;
 
   // Tables SQLite
   static const String tableEvents = 'events';
@@ -51,23 +51,23 @@ class AppConstants {
   // Taille des logos source (px)
   static const double sourceLogoSize = 16.0;
 
-  // Tags prédéfinis
+  // Tags prédéfinis — palette Notion
   static const List<Map<String, dynamic>> defaultCategories = [
-    {'name': 'Travail', 'color': '#1E88E5'},
-    {'name': 'Perso', 'color': '#43A047'},
-    {'name': 'Santé', 'color': '#E53935'},
-    {'name': 'Famille', 'color': '#FB8C00'},
-    {'name': 'Sport', 'color': '#00ACC1'},
-    {'name': 'Social', 'color': '#8E24AA'},
-    {'name': 'Formation', 'color': '#F4511E'},
-    {'name': 'Administratif', 'color': '#6D4C41'},
+    {'name': 'Travail', 'color': '#007AFF'},
+    {'name': 'Perso', 'color': '#34C759'},
+    {'name': 'Santé', 'color': '#FF3B30'},
+    {'name': 'Famille', 'color': '#FF9500'},
+    {'name': 'Sport', 'color': '#30B0C7'},
+    {'name': 'Social', 'color': '#AF52DE'},
+    {'name': 'Formation', 'color': '#FFCC00'},
+    {'name': 'Administratif', 'color': '#8E8E93'},
   ];
 
   static const List<Map<String, dynamic>> defaultPriorities = [
-    {'name': 'Urgent', 'color': '#E53935', 'level': 1},
-    {'name': 'Haute', 'color': '#FB8C00', 'level': 2},
-    {'name': 'Normale', 'color': '#43A047', 'level': 3},
-    {'name': 'Basse', 'color': '#90A4AE', 'level': 4},
+    {'name': 'Urgent', 'color': '#FF3B30', 'level': 1},
+    {'name': 'Haute', 'color': '#FF9500', 'level': 2},
+    {'name': 'Normale', 'color': '#34C759', 'level': 3},
+    {'name': 'Basse', 'color': '#8E8E93', 'level': 4},
   ];
 
   // Vues calendrier

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/event_model.dart';
-import '../../../core/models/tag_model.dart';
 import '../../../core/utils/date_utils.dart';
 
 /// Bloc visuel d'un événement dans le calendrier.
@@ -40,7 +39,7 @@ class EventBlock extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
-          color: categoryColor.withOpacity(0.85),
+          color: categoryColor.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(4),
           border: Border(
             left: BorderSide(
@@ -109,7 +108,7 @@ class EventBlock extends StatelessWidget {
               '${CalendarDateUtils.formatDisplayTime(event.startDate)} – '
               '${CalendarDateUtils.formatDisplayTime(event.endDate)}',
               style: TextStyle(
-                color: textColor.withOpacity(0.85),
+                color: textColor.withValues(alpha: 0.85),
                 fontSize: 10,
               ),
             ),
@@ -127,7 +126,7 @@ class EventBlock extends StatelessWidget {
                         vertical: 1,
                       ),
                       decoration: BoxDecoration(
-                        color: textColor.withOpacity(0.15),
+                        color: textColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
@@ -154,9 +153,8 @@ class EventBlock extends StatelessWidget {
     return SizedBox(
       width: AppConstants.sourceLogoSize,
       height: AppConstants.sourceLogoSize,
-      child: event.isFromInfomaniak
-          ? _buildInfomaniakLogo()
-          : _buildNotionLogo(),
+      child:
+          event.isFromInfomaniak ? _buildInfomaniakLogo() : _buildNotionLogo(),
     );
   }
 
@@ -231,7 +229,8 @@ class EventBlock extends StatelessWidget {
     }
     // Couleur selon la source si pas de catégorie
     if (event.isFromIcs && event.icsSubscriptionId != null) {
-      return AppColors.categoryAdmin; // Sera remplacé par la couleur de l'abonnement
+      return AppColors
+          .categoryAdmin; // Sera remplacé par la couleur de l'abonnement
     }
     return AppColors.categoryWork;
   }
@@ -257,9 +256,8 @@ class MultiDayEventBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final priorityColor = _getPriorityColor();
     final categoryColor = _getCategoryColor();
-    final textColor = categoryColor.computeLuminance() > 0.5
-        ? Colors.black87
-        : Colors.white;
+    final textColor =
+        categoryColor.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
 
     return GestureDetector(
       onTap: onTap,
@@ -267,7 +265,7 @@ class MultiDayEventBar extends StatelessWidget {
         height: 22,
         margin: const EdgeInsets.only(bottom: 2),
         decoration: BoxDecoration(
-          color: categoryColor.withOpacity(0.85),
+          color: categoryColor.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(3),
           border: Border(
             left: BorderSide(color: priorityColor, width: 4),

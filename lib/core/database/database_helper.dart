@@ -50,6 +50,7 @@ class DatabaseHelper {
         calendar_id TEXT,
         notion_page_id TEXT,
         ics_subscription_id TEXT,
+        status TEXT,
         reminder_minutes INTEGER,
         is_deleted INTEGER DEFAULT 0,
         created_at TEXT,
@@ -86,6 +87,7 @@ class DatabaseHelper {
       CREATE TABLE ${AppConstants.tableNotionDatabases} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         notion_id TEXT NOT NULL UNIQUE,
+        data_source_id TEXT,
         name TEXT NOT NULL,
         title_property TEXT DEFAULT 'Name',
         start_date_property TEXT,
@@ -95,6 +97,9 @@ class DatabaseHelper {
         description_property TEXT,
         participants_property TEXT,
         status_property TEXT,
+        location_property TEXT,
+        objective_property TEXT,
+        material_property TEXT,
         is_enabled INTEGER DEFAULT 1,
         last_synced_at TEXT
       )
@@ -138,7 +143,27 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Migrations futures
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE ${AppConstants.tableNotionDatabases} ADD COLUMN location_property TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE ${AppConstants.tableNotionDatabases} ADD COLUMN objective_property TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE ${AppConstants.tableNotionDatabases} ADD COLUMN material_property TEXT',
+      );
+    }
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE ${AppConstants.tableNotionDatabases} ADD COLUMN data_source_id TEXT',
+      );
+    }
+    if (oldVersion < 4) {
+      await db.execute(
+        'ALTER TABLE ${AppConstants.tableEvents} ADD COLUMN status TEXT',
+      );
+    }
   }
 
   Future<void> _insertDefaultTags(Database db) async {
@@ -186,8 +211,7 @@ class DatabaseHelper {
     final db = await database;
     await db.update(
       AppConstants.tableEvents,
-      event.toMap()
-        ..['updated_at'] = DateTime.now().toIso8601String(),
+      event.toMap()..['updated_at'] = DateTime.now().toIso8601String(),
       where: 'id = ?',
       whereArgs: [event.id],
     );
@@ -228,8 +252,7 @@ class DatabaseHelper {
     final db = await database;
     final maps = await db.query(
       AppConstants.tableEvents,
-      where:
-          'is_deleted = 0 AND start_date <= ? AND end_date >= ?',
+      where: 'is_deleted = 0 AND start_date <= ? AND end_date >= ?',
       whereArgs: [end.toIso8601String(), start.toIso8601String()],
       orderBy: 'start_date ASC',
     );

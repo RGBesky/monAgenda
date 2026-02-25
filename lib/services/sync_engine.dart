@@ -7,6 +7,7 @@ import 'infomaniak_service.dart';
 import 'notion_service.dart';
 import 'ics_service.dart';
 import 'notification_service.dart';
+import 'widget_service.dart';
 
 enum SyncResult { success, partialSuccess, failure, offline }
 
@@ -39,20 +40,21 @@ class SyncEngine {
         _notifications = notifications;
 
   /// Synchronisation complète de toutes les sources.
-  Future<SyncResult> syncAll({
+  /// Retourne un tuple (SyncResult, Map<source, errorMessage>).
+  Future<(SyncResult, Map<String, String>)> syncAll({
     DateTime? rangeStart,
     DateTime? rangeEnd,
   }) async {
-    if (_isSyncing) return SyncResult.failure;
+    if (_isSyncing) return (SyncResult.failure, <String, String>{});
     _isSyncing = true;
     _syncStreamController.add(SyncStatus.syncing);
 
-    final start = rangeStart ??
-        DateTime.now().subtract(const Duration(days: 30));
-    final end = rangeEnd ??
-        DateTime.now().add(const Duration(days: 365));
+    final start =
+        rangeStart ?? DateTime.now().subtract(const Duration(days: 30));
+    final end = rangeEnd ?? DateTime.now().add(const Duration(days: 365));
 
     var success = true;
+    final errors = <String, String>{};
 
     // Sync Infomaniak
     if (_infomaniak.isConfigured) {
@@ -60,6 +62,7 @@ class SyncEngine {
         await _syncInfomaniak(start, end);
       } catch (e) {
         success = false;
+        errors['Infomaniak'] = e.toString();
         await _db.upsertSyncState(SyncStateModel(
           source: AppConstants.sourceInfomaniak,
           status: SyncStatus.error,
@@ -74,10 +77,11 @@ class SyncEngine {
         await _syncNotion(start, end);
       } catch (e) {
         success = false;
+        errors['Notion'] = e.toString();
         final notionDbs = await _db.getNotionDatabases();
         for (final db in notionDbs) {
           await _db.upsertSyncState(SyncStateModel(
-            source: db.notionId,
+            source: db.effectiveSourceId,
             status: SyncStatus.error,
             errorMessage: e.toString(),
           ));
@@ -90,19 +94,29 @@ class SyncEngine {
       await _syncIcsSubscriptions();
     } catch (e) {
       success = false;
+      errors['.ics'] = e.toString();
     }
 
     _isSyncing = false;
     _syncStreamController.add(success ? SyncStatus.success : SyncStatus.error);
 
-    return success ? SyncResult.success : SyncResult.partialSuccess;
+    return (
+      success ? SyncResult.success : SyncResult.partialSuccess,
+      errors,
+    );
   }
 
   Future<void> _syncInfomaniak(DateTime start, DateTime end) async {
     final state = await _db.getSyncState(AppConstants.sourceInfomaniak);
 
     // Vérifier si le calendrier a changé via ctag
-    final currentToken = await _infomaniak.getSyncToken();
+    String? currentToken;
+    try {
+      currentToken = await _infomaniak.getSyncToken();
+    } catch (_) {
+      // ctag non disponible, on force la sync
+    }
+
     if (currentToken != null &&
         state?.syncToken == currentToken &&
         state?.status == SyncStatus.success) {
@@ -115,6 +129,8 @@ class SyncEngine {
       end: end,
     );
 
+    final allTags = await _db.getAllTags();
+
     for (final raw in rawEvents) {
       final ical = raw['ical'] as String;
       final etag = raw['etag'] as String?;
@@ -123,6 +139,7 @@ class SyncEngine {
         ical,
         calendarId: 'default',
         etag: etag,
+        allTags: allTags,
       );
 
       if (event != null) {
@@ -137,40 +154,53 @@ class SyncEngine {
       status: SyncStatus.success,
     ));
 
-    // Reprogrammer les notifications
-    await _rescheduleNotifications();
+    // Reprogrammer les notifications (non supporté sur desktop)
+    try {
+      await _rescheduleNotifications();
+    } catch (_) {}
 
     // Mettre à jour le widget Android
-    await _updateWidget();
+    try {
+      await _updateWidget();
+    } catch (_) {}
   }
 
   Future<void> _updateWidget() async {
     try {
-      // Import conditionnel — pas disponible sur Linux
-      // ignore: avoid_dynamic_calls
-      await _tryUpdateWidget();
+      await WidgetService.updateWidget();
     } catch (_) {}
-  }
-
-  Future<void> _tryUpdateWidget() async {
-    // Appel via dynamic pour éviter l'import conditionnel
-    // home_widget gère la disponibilité de la plateforme
-    const platform = bool.fromEnvironment('dart.library.io');
-    if (platform) {
-      // WidgetService.updateWidget() appelé depuis la couche app
-    }
   }
 
   Future<void> _syncNotion(DateTime start, DateTime end) async {
     final notionDbs = await _db.getNotionDatabases();
-    final allTags = await _db.getAllTags();
+    var allTags = await _db.getAllTags();
 
     for (final notionDb in notionDbs) {
       if (!notionDb.isEnabled) continue;
 
       try {
+        // ── Pré-créer les tags catégorie depuis le schéma Notion ──
+        try {
+          final schema =
+              await _notion.getDatabaseSchema(notionDb.effectiveSourceId);
+          final missingTags = _notion.extractMissingCategoryTags(
+            schema: schema,
+            dbModel: notionDb,
+            allTags: allTags,
+          );
+          for (final tag in missingTags) {
+            await _db.insertTag(tag);
+          }
+          if (missingTags.isNotEmpty) {
+            allTags = await _db.getAllTags();
+          }
+        } catch (_) {
+          // Schema fetch failed — continuer avec les tags existants
+        }
+
         final pages = await _notion.queryDatabase(
-          databaseId: notionDb.notionId,
+          databaseId: notionDb.effectiveSourceId,
+          dateProperty: notionDb.startDateProperty,
           startDate: start,
           endDate: end,
         );
@@ -188,13 +218,13 @@ class SyncEngine {
         }
 
         await _db.upsertSyncState(SyncStateModel(
-          source: notionDb.notionId,
+          source: notionDb.effectiveSourceId,
           lastSyncedAt: DateTime.now(),
           status: SyncStatus.success,
         ));
       } catch (e) {
         await _db.upsertSyncState(SyncStateModel(
-          source: notionDb.notionId,
+          source: notionDb.effectiveSourceId,
           status: SyncStatus.error,
           errorMessage: e.toString(),
         ));
@@ -209,11 +239,10 @@ class SyncEngine {
       if (!sub.isEnabled) continue;
 
       try {
-        final icsServiceInstance = IcsService();
-        final events = await icsServiceInstance.fetchSubscription(sub);
+        final events = await _ics.fetchSubscription(sub);
 
         // Supprimer les anciens événements de cet abonnement
-        // (sera remplacé par les nouveaux)
+        await _deleteEventsByIcsSubscription(sub.id.toString());
 
         for (final event in events) {
           await _upsertEvent(event.copyWith(
@@ -227,6 +256,16 @@ class SyncEngine {
         // Ignorer les erreurs de sync .ics
       }
     }
+  }
+
+  /// Supprime les événements d'un abonnement .ics avant ré-import.
+  Future<void> _deleteEventsByIcsSubscription(String subscriptionId) async {
+    final db = await _db.database;
+    await db.delete(
+      AppConstants.tableEvents,
+      where: 'ics_subscription_id = ? AND source = ?',
+      whereArgs: [subscriptionId, AppConstants.sourceIcs],
+    );
   }
 
   Future<void> _upsertEvent(EventModel event) async {
@@ -272,6 +311,7 @@ class SyncEngine {
   /// Pousse un événement local vers Infomaniak.
   Future<void> pushEventToInfomaniak(EventModel event) async {
     if (!_infomaniak.isConfigured) return;
+    if (event.id == null) return;
 
     final etag = await _infomaniak.putEvent(event);
     await _db.updateEvent(event.copyWith(
@@ -282,13 +322,23 @@ class SyncEngine {
 
   /// Pousse un événement/tâche vers Notion.
   Future<void> pushEventToNotion(EventModel event) async {
-    if (!_notion.isConfigured) return;
+    if (!_notion.isConfigured) {
+      throw Exception('Notion n\'est pas configuré. Vérifiez vos paramètres.');
+    }
 
     final notionDbs = await _db.getNotionDatabases();
-    if (notionDbs.isEmpty) return;
+    if (notionDbs.isEmpty) {
+      throw Exception('Aucune base de données Notion configurée.');
+    }
 
     final allTags = await _db.getAllTags();
     final db = notionDbs.first; // V1 : première BDD par défaut
+
+    // Récupérer le schéma pour détecter les types de propriétés
+    Map<String, dynamic>? schema;
+    try {
+      schema = await _notion.getDatabaseSchema(db.effectiveSourceId);
+    } catch (_) {}
 
     if (event.notionPageId != null) {
       await _notion.updatePage(
@@ -296,12 +346,14 @@ class SyncEngine {
         dbModel: db,
         event: event,
         allTags: allTags,
+        schema: schema,
       );
     } else {
       final page = await _notion.createPage(
         dbModel: db,
         event: event,
         allTags: allTags,
+        schema: schema,
       );
       await _db.updateEvent(event.copyWith(
         notionPageId: page['id'] as String?,

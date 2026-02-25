@@ -5,8 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
 
 class AppSettings {
-  final String? infomaniakToken;
-  final String? infomaniakCalendarId;
+  final String? infomaniakUsername;
+  final String? infomaniakAppPassword;
+  final String? infomaniakCalendarUrl;
   final String? notionApiKey;
   final String theme;
   final String defaultView;
@@ -22,8 +23,9 @@ class AppSettings {
   final bool isOffline;
 
   const AppSettings({
-    this.infomaniakToken,
-    this.infomaniakCalendarId,
+    this.infomaniakUsername,
+    this.infomaniakAppPassword,
+    this.infomaniakCalendarUrl,
     this.notionApiKey,
     this.theme = AppConstants.themeAuto,
     this.defaultView = AppConstants.viewWeek,
@@ -40,8 +42,9 @@ class AppSettings {
   });
 
   AppSettings copyWith({
-    String? infomaniakToken,
-    String? infomaniakCalendarId,
+    String? infomaniakUsername,
+    String? infomaniakAppPassword,
+    String? infomaniakCalendarUrl,
     String? notionApiKey,
     String? theme,
     String? defaultView,
@@ -57,8 +60,11 @@ class AppSettings {
     bool? isOffline,
   }) {
     return AppSettings(
-      infomaniakToken: infomaniakToken ?? this.infomaniakToken,
-      infomaniakCalendarId: infomaniakCalendarId ?? this.infomaniakCalendarId,
+      infomaniakUsername: infomaniakUsername ?? this.infomaniakUsername,
+      infomaniakAppPassword:
+          infomaniakAppPassword ?? this.infomaniakAppPassword,
+      infomaniakCalendarUrl:
+          infomaniakCalendarUrl ?? this.infomaniakCalendarUrl,
       notionApiKey: notionApiKey ?? this.notionApiKey,
       theme: theme ?? this.theme,
       defaultView: defaultView ?? this.defaultView,
@@ -66,8 +72,7 @@ class AppSettings {
       defaultReminderMinutes:
           defaultReminderMinutes ?? this.defaultReminderMinutes,
       morningSummaryHour: morningSummaryHour ?? this.morningSummaryHour,
-      morningSummaryMinute:
-          morningSummaryMinute ?? this.morningSummaryMinute,
+      morningSummaryMinute: morningSummaryMinute ?? this.morningSummaryMinute,
       morningSummaryEnabled:
           morningSummaryEnabled ?? this.morningSummaryEnabled,
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
@@ -79,7 +84,10 @@ class AppSettings {
   }
 
   bool get isInfomaniakConfigured =>
-      infomaniakToken != null && infomaniakToken!.isNotEmpty;
+      infomaniakUsername != null &&
+      infomaniakUsername!.isNotEmpty &&
+      infomaniakAppPassword != null &&
+      infomaniakAppPassword!.isNotEmpty;
   bool get isNotionConfigured =>
       notionApiKey != null && notionApiKey!.isNotEmpty;
 
@@ -100,9 +108,10 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
-  static const _keyInfomaniakToken = 'infomaniak_token';
+  static const _keyInfomaniakUsername = 'infomaniak_username';
+  static const _keyInfomaniakAppPassword = 'infomaniak_app_password';
+  static const _keyInfomaniakCalendarUrl = 'infomaniak_calendar_url';
   static const _keyNotionApiKey = 'notion_api_key';
-  static const _keyInfomaniakCalendarId = 'infomaniak_calendar_id';
 
   @override
   Future<AppSettings> build() async {
@@ -112,28 +121,30 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   Future<AppSettings> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Tokens depuis le stockage sécurisé
-    final infomaniakToken = await _storage.read(key: _keyInfomaniakToken);
+    // Identifiants depuis le stockage sécurisé
+    final infomaniakUsername = await _storage.read(key: _keyInfomaniakUsername);
+    final infomaniakAppPassword =
+        await _storage.read(key: _keyInfomaniakAppPassword);
+    final infomaniakCalendarUrl =
+        await _storage.read(key: _keyInfomaniakCalendarUrl);
     final notionApiKey = await _storage.read(key: _keyNotionApiKey);
-    final calendarId = await _storage.read(key: _keyInfomaniakCalendarId);
 
     return AppSettings(
-      infomaniakToken: infomaniakToken,
-      infomaniakCalendarId: calendarId,
+      infomaniakUsername: infomaniakUsername,
+      infomaniakAppPassword: infomaniakAppPassword,
+      infomaniakCalendarUrl: infomaniakCalendarUrl,
       notionApiKey: notionApiKey,
       theme: prefs.getString('theme') ?? AppConstants.themeAuto,
       defaultView: prefs.getString('default_view') ?? AppConstants.viewWeek,
       firstDayOfWeek:
           prefs.getString('first_day') ?? AppConstants.firstDayMonday,
-      defaultReminderMinutes:
-          prefs.getInt('reminder_minutes') ?? AppConstants.defaultReminderMinutes,
-      morningSummaryHour:
-          prefs.getInt('morning_hour') ?? AppConstants.defaultMorningSummaryHour,
-      morningSummaryMinute:
-          prefs.getInt('morning_minute') ??
-              AppConstants.defaultMorningSummaryMinute,
-      morningSummaryEnabled:
-          prefs.getBool('morning_summary') ?? true,
+      defaultReminderMinutes: prefs.getInt('reminder_minutes') ??
+          AppConstants.defaultReminderMinutes,
+      morningSummaryHour: prefs.getInt('morning_hour') ??
+          AppConstants.defaultMorningSummaryHour,
+      morningSummaryMinute: prefs.getInt('morning_minute') ??
+          AppConstants.defaultMorningSummaryMinute,
+      morningSummaryEnabled: prefs.getBool('morning_summary') ?? true,
       reminderEnabled: prefs.getBool('reminder_enabled') ?? true,
       pythonScriptPath: prefs.getString('python_script_path'),
       pptTemplatePath: prefs.getString('ppt_template_path'),
@@ -141,22 +152,34 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     );
   }
 
-  Future<void> updateInfomaniakToken(String token) async {
-    await _storage.write(key: _keyInfomaniakToken, value: token);
+  Future<void> updateInfomaniakCredentials({
+    required String username,
+    required String appPassword,
+    String? calendarUrl,
+  }) async {
+    await _storage.write(key: _keyInfomaniakUsername, value: username);
+    await _storage.write(key: _keyInfomaniakAppPassword, value: appPassword);
+    if (calendarUrl != null) {
+      await _storage.write(key: _keyInfomaniakCalendarUrl, value: calendarUrl);
+    }
     final current = state.valueOrNull ?? const AppSettings();
-    state = AsyncData(current.copyWith(infomaniakToken: token));
+    state = AsyncData(current.copyWith(
+      infomaniakUsername: username,
+      infomaniakAppPassword: appPassword,
+      infomaniakCalendarUrl: calendarUrl,
+    ));
+  }
+
+  Future<void> updateInfomaniakCalendarUrl(String url) async {
+    await _storage.write(key: _keyInfomaniakCalendarUrl, value: url);
+    final current = state.valueOrNull ?? const AppSettings();
+    state = AsyncData(current.copyWith(infomaniakCalendarUrl: url));
   }
 
   Future<void> updateNotionApiKey(String key) async {
     await _storage.write(key: _keyNotionApiKey, value: key);
     final current = state.valueOrNull ?? const AppSettings();
     state = AsyncData(current.copyWith(notionApiKey: key));
-  }
-
-  Future<void> updateInfomaniakCalendarId(String id) async {
-    await _storage.write(key: _keyInfomaniakCalendarId, value: id);
-    final current = state.valueOrNull ?? const AppSettings();
-    state = AsyncData(current.copyWith(infomaniakCalendarId: id));
   }
 
   Future<void> updatePreference(String key, dynamic value) async {
@@ -191,7 +214,6 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   }
 }
 
-final settingsProvider =
-    AsyncNotifierProvider<SettingsNotifier, AppSettings>(
+final settingsProvider = AsyncNotifierProvider<SettingsNotifier, AppSettings>(
   SettingsNotifier.new,
 );

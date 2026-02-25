@@ -52,22 +52,28 @@ class NotificationService {
 
     if (reminderTime.isBefore(DateTime.now())) return;
 
-    await _plugin.zonedSchedule(
-      event.id!,
-      'Rappel : ${event.title}',
-      _buildReminderBody(event),
-      tz.TZDateTime.from(reminderTime, tz.local),
-      _buildNotificationDetails(),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      payload: 'event:${event.id}',
-    );
+    try {
+      await _plugin.zonedSchedule(
+        event.id!,
+        'Rappel : ${event.title}',
+        _buildReminderBody(event),
+        tz.TZDateTime.from(reminderTime, tz.local),
+        _buildNotificationDetails(),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: 'event:${event.id}',
+      );
+    } catch (_) {
+      // zonedSchedule non supporté sur desktop Linux
+    }
   }
 
   /// Annule le rappel d'un événement.
   Future<void> cancelEventReminder(int eventId) async {
-    await _plugin.cancel(eventId);
+    try {
+      await _plugin.cancel(eventId);
+    } catch (_) {}
   }
 
   /// Programme le résumé matinal quotidien.
@@ -77,7 +83,9 @@ class NotificationService {
   }) async {
     const id = 999999; // ID fixe pour le résumé matinal
 
-    await _plugin.cancel(id);
+    try {
+      await _plugin.cancel(id);
+    } catch (_) {}
 
     final now = tz.TZDateTime.now(tz.local);
     var scheduledDate = tz.TZDateTime(
@@ -93,23 +101,29 @@ class NotificationService {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
 
-    await _plugin.zonedSchedule(
-      id,
-      'Votre journée',
-      'Appuyez pour voir vos événements du jour',
-      scheduledDate,
-      _buildNotificationDetails(channelId: 'daily_summary'),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'daily_summary',
-    );
+    try {
+      await _plugin.zonedSchedule(
+        id,
+        'Votre journée',
+        'Appuyez pour voir vos événements du jour',
+        scheduledDate,
+        _buildNotificationDetails(channelId: 'daily_summary'),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+        payload: 'daily_summary',
+      );
+    } catch (_) {
+      // zonedSchedule non supporté sur desktop Linux
+    }
   }
 
   /// Annule toutes les notifications d'une source.
   Future<void> cancelAllReminders() async {
-    await _plugin.cancelAll();
+    try {
+      await _plugin.cancelAll();
+    } catch (_) {}
   }
 
   /// Affiche une notification immédiate (ex: fin de sync).
@@ -131,8 +145,7 @@ class NotificationService {
     final timeStr = event.isAllDay
         ? 'Toute la journée'
         : CalendarDateUtils.formatDisplayTime(event.startDate);
-    final locationStr =
-        event.location != null ? '\n📍 ${event.location}' : '';
+    final locationStr = event.location != null ? '\n📍 ${event.location}' : '';
     return '$timeStr$locationStr';
   }
 
@@ -148,11 +161,11 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
-      color: Color(0xFF1565C0),
+      color: const Color(0xFF1565C0),
     );
 
     const linuxDetails = LinuxNotificationDetails(
-      category: LinuxNotificationCategory.reminder,
+      category: LinuxNotificationCategory.email,
     );
 
     return NotificationDetails(

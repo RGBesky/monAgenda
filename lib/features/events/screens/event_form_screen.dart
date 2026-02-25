@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/models/tag_model.dart';
 import '../../../core/utils/date_utils.dart';
-import '../../../core/utils/platform_utils.dart';
 import '../../../providers/events_provider.dart';
-import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/tags_provider.dart';
 
@@ -198,8 +197,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             Text(
               'Destination',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
             const SizedBox(height: 8),
             Row(
@@ -246,7 +245,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isSelected
-              ? color.withOpacity(0.1)
+              ? color.withValues(alpha: 0.1)
               : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
@@ -281,14 +280,14 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
                 Text(
                   label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
                 Text(
                   subtitle,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                 ),
               ],
             ),
@@ -343,8 +342,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         Text(
           'Catégories',
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -356,8 +355,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         Text(
           'Priorité',
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -371,7 +370,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
 
   Widget _buildTagChip(TagModel tag) {
     final isSelected = _selectedTags.any((t) => t.id == tag.id);
-    final color = _colorFromHex(tag.colorHex);
+    final color = AppColors.fromHex(tag.colorHex);
 
     return FilterChip(
       label: Text(tag.name),
@@ -389,7 +388,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           }
         });
       },
-      selectedColor: color.withOpacity(0.2),
+      selectedColor: color.withValues(alpha: 0.2),
       checkmarkColor: color,
       side: BorderSide(
         color: isSelected ? color : Colors.transparent,
@@ -436,7 +435,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
 
   Widget _buildReminderSection() {
     return DropdownButtonFormField<int?>(
-      value: _reminderMinutes,
+      initialValue: _reminderMinutes,
       decoration: const InputDecoration(
         labelText: 'Rappel',
         prefixIcon: Icon(Icons.notifications_outlined),
@@ -458,7 +457,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
 
   Widget _buildRecurrenceSection() {
     return DropdownButtonFormField<String?>(
-      value: _rrule,
+      initialValue: _rrule,
       decoration: const InputDecoration(
         labelText: 'Récurrence',
         prefixIcon: Icon(Icons.repeat),
@@ -586,7 +585,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final isOffline = ref.read(isOfflineProvider);
+    final isOffline = ref.read(isOfflineProvider).value ?? false;
     if (isOffline) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -602,10 +601,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final tagIds = _selectedTags
-          .where((t) => t.id != null)
-          .map((t) => t.id!)
-          .toList();
+      final tagIds =
+          _selectedTags.where((t) => t.id != null).map((t) => t.id!).toList();
 
       EventType type;
       if (_isAllDay) {
@@ -649,14 +646,17 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       );
 
       final notifier = ref.read(eventsNotifierProvider.notifier);
+      EventModel savedEvent;
       if (widget.event == null) {
-        await notifier.createEvent(event);
+        final newId = await notifier.createEvent(event);
+        savedEvent = event.copyWith(id: newId);
       } else {
         await notifier.updateEvent(event);
+        savedEvent = event;
       }
 
       // Push vers la source distante
-      await ref.read(syncNotifierProvider.notifier).pushEvent(event);
+      await ref.read(syncNotifierProvider.notifier).pushEvent(savedEvent);
 
       if (mounted) Navigator.pop(context, event);
     } catch (e) {
@@ -671,12 +671,5 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Color _colorFromHex(String hex) {
-    final buffer = StringBuffer();
-    if (hex.length == 6 || hex.length == 7) buffer.write('ff');
-    buffer.write(hex.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
   }
 }
