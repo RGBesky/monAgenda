@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Calendrier Unifié
+Comment=Application calendrier Infomaniak · Notion · Flutter
+Exec=unified_calendar %U
+Icon=unified_calendar
+Terminal=false
+Categories=Office;Calendar;
+Keywords=calendrier;agenda;infomaniak;notion;
+MimeType=text/calendar;application/ics;x-scheme-handler/webcal;
+StartupNotify=true
