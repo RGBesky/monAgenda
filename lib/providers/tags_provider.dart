@@ -69,6 +69,15 @@ class TagsNotifier extends AsyncNotifier<List<TagModel>> {
         sortOrder: pri['level'] as int,
       ));
     }
+    for (int i = 0; i < AppConstants.defaultStatuses.length; i++) {
+      final st = AppConstants.defaultStatuses[i];
+      await DatabaseHelper.instance.insertTag(TagModel(
+        type: AppConstants.tagTypeStatus,
+        name: st['name'] as String,
+        colorHex: st['color'] as String,
+        sortOrder: i,
+      ));
+    }
     ref.invalidateSelf();
   }
 }

@@ -14,6 +14,9 @@ class InfomaniakService {
   String? _appPassword;
   String? _calendarUrl; // URL CalDAV complète
 
+  /// URL du calendrier actuellement configurée.
+  String? get calendarUrl => _calendarUrl;
+
   InfomaniakService()
       : _calDavDio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 15),
@@ -157,13 +160,28 @@ class InfomaniakService {
 
     final icsData = _eventToIcs(event.copyWith(remoteId: uid));
 
+    // Pour une mise à jour, récupérer l'ETag frais du serveur
+    // afin d'éviter 412 Precondition Failed
+    String? freshEtag;
+    if (event.etag != null) {
+      try {
+        final headResp = await _calDavDio.request(
+          eventUrl,
+          options: Options(method: 'HEAD'),
+        );
+        freshEtag = headResp.headers.value('ETag');
+      } catch (_) {
+        // Si HEAD échoue, tenter sans If-Match
+      }
+    }
+
     final response = await _calDavDio.put(
       eventUrl,
       data: icsData,
       options: Options(
         headers: {
           'Content-Type': 'text/calendar; charset=utf-8',
-          if (event.etag != null) 'If-Match': event.etag,
+          if (freshEtag != null) 'If-Match': freshEtag,
         },
       ),
     );
@@ -180,11 +198,21 @@ class InfomaniakService {
     final calUrl = url.endsWith('/') ? url : '$url/';
     final eventUrl = '$calUrl$uid.ics';
 
+    // Récupérer l'ETag frais pour éviter 412
+    String? freshEtag;
+    try {
+      final headResp = await _calDavDio.request(
+        eventUrl,
+        options: Options(method: 'HEAD'),
+      );
+      freshEtag = headResp.headers.value('ETag');
+    } catch (_) {}
+
     await _calDavDio.delete(
       eventUrl,
       options: Options(
         headers: {
-          if (etag != null) 'If-Match': etag,
+          if (freshEtag != null) 'If-Match': freshEtag,
         },
       ),
     );
@@ -248,8 +276,10 @@ class InfomaniakService {
     if (event.location != null) {
       sb.writeln('LOCATION:${_escapeIcs(event.location!)}');
     }
-    if (event.description != null) {
-      sb.writeln('DESCRIPTION:${_escapeIcs(event.description!)}');
+    // Description + métadonnées tags encodées
+    final descWithTags = _encodeDescriptionWithTags(event);
+    if (descWithTags.isNotEmpty) {
+      sb.writeln('DESCRIPTION:${_escapeIcs(descWithTags)}');
     }
     if (event.rrule != null) {
       sb.writeln('RRULE:${event.rrule}');
@@ -291,6 +321,95 @@ class InfomaniakService {
     return sb.toString();
   }
 
+  /// Encode la description + les tags dans un seul champ DESCRIPTION iCal.
+  /// Format :
+  ///   <description texte>
+  ///   ---
+  ///   #priorité:[Haute] #catégorie:[Santé,Travail] #statut:[En cours]
+  static String _encodeDescriptionWithTags(EventModel event) {
+    final parts = <String>[];
+
+    // Texte de description réel
+    if (event.description != null && event.description!.isNotEmpty) {
+      parts.add(event.description!);
+    }
+
+    // Construire la ligne de métadonnées tags
+    final tagParts = <String>[];
+
+    final priTag = event.tags.where((t) => t.isPriority).firstOrNull;
+    if (priTag != null) {
+      tagParts.add('#priorité:[${priTag.name}]');
+    }
+
+    final catTags = event.tags.where((t) => t.isCategory).toList();
+    if (catTags.isNotEmpty) {
+      tagParts.add('#catégorie:[${catTags.map((t) => t.name).join(',')}]');
+    }
+
+    final statusTag = event.tags.where((t) => t.isStatus).firstOrNull;
+    if (statusTag != null) {
+      tagParts.add('#statut:[${statusTag.name}]');
+    }
+
+    if (tagParts.isNotEmpty) {
+      parts.add('---');
+      parts.add(tagParts.join(' '));
+    }
+
+    return parts.join('\n');
+  }
+
+  /// Décode la description iCal : extrait le texte réel et les tags encodés.
+  /// Retourne (description nettoyée, liste de noms de tags trouvés par type).
+  static _ParsedDescription _decodeDescriptionWithTags(String raw) {
+    final unescaped = raw.replaceAll('\\n', '\n');
+    final lines = unescaped.split('\n');
+
+    // Chercher le séparateur ---
+    final sepIndex = lines.lastIndexOf('---');
+    if (sepIndex < 0 || sepIndex >= lines.length - 1) {
+      // Pas de métadonnées
+      return _ParsedDescription(
+        description: unescaped.trim().isEmpty ? null : unescaped.trim(),
+      );
+    }
+
+    // Texte avant le ---
+    final descPart = lines.sublist(0, sepIndex).join('\n').trim();
+    // Ligne(s) après le ---
+    final metaLine = lines.sublist(sepIndex + 1).join(' ').trim();
+
+    // Parser les tags : #type:[valeur]
+    final tagRegex = RegExp(r'#(priorité|catégorie|statut):\[([^\]]+)\]');
+    final priorityNames = <String>[];
+    final categoryNames = <String>[];
+    final statusNames = <String>[];
+
+    for (final match in tagRegex.allMatches(metaLine)) {
+      final type = match.group(1)!;
+      final values = match.group(2)!.split(',').map((s) => s.trim()).toList();
+      switch (type) {
+        case 'priorité':
+          priorityNames.addAll(values);
+          break;
+        case 'catégorie':
+          categoryNames.addAll(values);
+          break;
+        case 'statut':
+          statusNames.addAll(values);
+          break;
+      }
+    }
+
+    return _ParsedDescription(
+      description: descPart.isEmpty ? null : descPart,
+      priorityNames: priorityNames,
+      categoryNames: categoryNames,
+      statusNames: statusNames,
+    );
+  }
+
   String _escapeIcs(String value) {
     return value
         .replaceAll('\\', '\\\\')
@@ -304,16 +423,28 @@ class InfomaniakService {
     return '$timestamp-unified-calendar@infomaniak';
   }
 
+  /// Décode les entités XML courantes.
+  static String _decodeXmlEntities(String s) {
+    return s
+        .replaceAll('&quot;', '"')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&apos;', "'");
+  }
+
   String _extractDisplayName(String xmlResponse) {
-    final nameRegex = RegExp(r'<d:displayname>(.*?)</d:displayname>');
+    final nameRegex =
+        RegExp(r'<(?:d:|D:)?displayname[^>]*>(.*?)</(?:d:|D:)?displayname>');
     final match = nameRegex.firstMatch(xmlResponse);
     return match?.group(1) ?? 'Calendrier';
   }
 
   List<Map<String, dynamic>> _parseCalendarList(String xmlResponse) {
     final calendars = <Map<String, dynamic>>[];
-    final hrefRegex = RegExp(r'<d:href>(.*?)</d:href>');
-    final nameRegex = RegExp(r'<d:displayname>(.*?)</d:displayname>');
+    final hrefRegex = RegExp(r'<(?:d:|D:)?href[^>]*>(.*?)</(?:d:|D:)?href>');
+    final nameRegex =
+        RegExp(r'<(?:d:|D:)?displayname[^>]*>(.*?)</(?:d:|D:)?displayname>');
 
     final hrefs = hrefRegex.allMatches(xmlResponse).toList();
     final names = nameRegex.allMatches(xmlResponse).toList();
@@ -338,21 +469,24 @@ class InfomaniakService {
   List<Map<String, dynamic>> _parseEventMultiStatus(String xmlResponse) {
     final events = <Map<String, dynamic>>[];
     final responseRegex = RegExp(
-      r'<d:response>(.*?)</d:response>',
+      r'<(?:d:|D:)?response[^>]*>(.*?)</(?:d:|D:)?response>',
       dotAll: true,
     );
-    final etagRegex = RegExp(r'<d:getetag>(.*?)</d:getetag>');
+    final etagRegex =
+        RegExp(r'<(?:d:|D:)?getetag[^>]*>(.*?)</(?:d:|D:)?getetag>');
     final calDataRegex = RegExp(
-      r'<c:calendar-data>(.*?)</c:calendar-data>',
+      r'<(?:c:|cal:|C:)?calendar-data[^>]*>(.*?)</(?:c:|cal:|C:)?calendar-data>',
       dotAll: true,
     );
 
     for (final match in responseRegex.allMatches(xmlResponse)) {
       final block = match.group(1) ?? '';
-      final etag = etagRegex.firstMatch(block)?.group(1);
+      final rawEtag = etagRegex.firstMatch(block)?.group(1);
       final calData = calDataRegex.firstMatch(block)?.group(1);
 
       if (calData != null) {
+        // Décoder les entités XML dans l'ETag (&quot; → ")
+        final etag = rawEtag != null ? _decodeXmlEntities(rawEtag) : null;
         events.add({'etag': etag, 'ical': calData.trim()});
       }
     }
@@ -362,7 +496,7 @@ class InfomaniakService {
 
   String? _extractSyncToken(String xmlResponse) {
     final tokenRegex = RegExp(
-      r'<d:sync-token>(.*?)</d:sync-token>|<cs:getctag>(.*?)</cs:getctag>',
+      r'<(?:d:|D:)?sync-token[^>]*>(.*?)</(?:d:|D:)?sync-token>|<(?:cs:|CS:)?getctag[^>]*>(.*?)</(?:cs:|CS:)?getctag>',
     );
     final match = tokenRegex.firstMatch(xmlResponse);
     return match?.group(1) ?? match?.group(2);
@@ -376,9 +510,29 @@ class InfomaniakService {
     List<TagModel>? allTags,
   }) {
     try {
+      // Extraire uniquement le bloc VEVENT pour éviter de capturer
+      // les propriétés du VTIMEZONE (ex: DTSTART du bloc STANDARD)
+      final veventMatch = RegExp(
+        r'BEGIN:VEVENT(.*?)END:VEVENT',
+        dotAll: true,
+      ).firstMatch(ical);
+      final veventBlock = veventMatch?.group(1) ?? ical;
+
+      // Dé-folder les lignes iCal (RFC 5545 §3.1 : continuation = CRLF + espace/tab)
+      final unfolded = veventBlock
+          .replaceAll('\r\n ', '')
+          .replaceAll('\r\n\t', '')
+          .replaceAll('\n ', '')
+          .replaceAll('\n\t', '');
+
       String getValue(String key) {
-        final regex = RegExp('$key[^:]*:(.+?)(?=\\r?\\n[A-Z])', dotAll: false);
-        return regex.firstMatch(ical)?.group(1)?.trim() ?? '';
+        // Cherche "$key" suivi de params optionnels puis ":" et capture la valeur
+        // jusqu'à la fin de la ligne (ou fin du texte)
+        final regex = RegExp(
+          '^$key[^:\\r\\n]*:(.+)\$',
+          multiLine: true,
+        );
+        return regex.firstMatch(unfolded)?.group(1)?.trim() ?? '';
       }
 
       final uid = getValue('UID');
@@ -387,8 +541,9 @@ class InfomaniakService {
 
       final dtstart = getValue('DTSTART');
       final dtend = getValue('DTEND');
-      final isAllDay =
-          ical.contains('DTSTART;VALUE=DATE') && !dtstart.contains('T');
+      // Détection all-day : VALUE=DATE explicite OU valeur sans heure (8 chiffres)
+      final isAllDay = ical.contains('DTSTART;VALUE=DATE') ||
+          (dtstart.isNotEmpty && !dtstart.contains('T'));
 
       final startDate = dtstart.isNotEmpty
           ? CalendarDateUtils.fromICalDate(dtstart)
@@ -398,14 +553,23 @@ class InfomaniakService {
           : startDate.add(const Duration(hours: 1));
 
       final location = getValue('LOCATION');
-      final description = getValue('DESCRIPTION');
+      final rawDescription = getValue('DESCRIPTION');
       final rrule = getValue('RRULE');
       final categories = getValue('CATEGORIES');
       final priorityStr = getValue('PRIORITY');
 
+      // Décoder description + tags encodés dans DESCRIPTION
+      final parsed = _decodeDescriptionWithTags(rawDescription);
+      final description = parsed.description ?? '';
+
+      // Catégories depuis CATEGORIES iCal standard
       final categoryNames = categories.isNotEmpty
           ? categories.split(',').map((c) => c.trim()).toList()
           : <String>[];
+      // Ajouter les catégories encodées dans DESCRIPTION (sans doublons)
+      for (final cn in parsed.categoryNames) {
+        if (!categoryNames.contains(cn)) categoryNames.add(cn);
+      }
 
       final matchedTags = <TagModel>[];
       final tagIds = <int>[];
@@ -425,6 +589,7 @@ class InfomaniakService {
           }
         }
 
+        // Priorité depuis PRIORITY iCal standard
         if (priorityStr.isNotEmpty) {
           final tag = allTags
               .where(
@@ -434,6 +599,35 @@ class InfomaniakService {
           if (tag?.id != null) {
             matchedTags.add(tag!);
             tagIds.add(tag.id!);
+          }
+        }
+        // Priorité depuis DESCRIPTION encodée (fallback)
+        if (!matchedTags.any((t) => t.isPriority)) {
+          for (final pn in parsed.priorityNames) {
+            final tag = allTags
+                .where((t) =>
+                    t.isPriority &&
+                    t.name.toLowerCase() == pn.toLowerCase())
+                .firstOrNull;
+            if (tag?.id != null) {
+              matchedTags.add(tag!);
+              tagIds.add(tag.id!);
+              break;
+            }
+          }
+        }
+
+        // Statut depuis DESCRIPTION encodée
+        for (final sn in parsed.statusNames) {
+          final tag = allTags
+              .where((t) =>
+                  t.isStatus &&
+                  t.name.toLowerCase() == sn.toLowerCase())
+              .firstOrNull;
+          if (tag?.id != null) {
+            matchedTags.add(tag!);
+            tagIds.add(tag.id!);
+            break;
           }
         }
       }
@@ -455,7 +649,7 @@ class InfomaniakService {
         isAllDay: isAllDay,
         location: location.isNotEmpty ? location.replaceAll('\\,', ',') : null,
         description:
-            description.isNotEmpty ? description.replaceAll('\\n', '\n') : null,
+            description.isNotEmpty ? description : null,
         rrule: rrule.isNotEmpty ? rrule : null,
         calendarId: calendarId,
         etag: etag,
@@ -468,4 +662,19 @@ class InfomaniakService {
       return null;
     }
   }
+}
+
+/// Résultat du décodage de la description iCal avec métadonnées tags.
+class _ParsedDescription {
+  final String? description;
+  final List<String> priorityNames;
+  final List<String> categoryNames;
+  final List<String> statusNames;
+
+  const _ParsedDescription({
+    this.description,
+    this.priorityNames = const [],
+    this.categoryNames = const [],
+    this.statusNames = const [],
+  });
 }

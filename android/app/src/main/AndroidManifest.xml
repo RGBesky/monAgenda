@@ -84,16 +84,6 @@
                 android:resource="@xml/calendar_widget_info"/>
         </receiver>
 
-        <!-- Service de démarrage (reprogrammation notifications au reboot) -->
-        <receiver
-            android:name="com.example.unified_calendar.BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
-            </intent-filter>
-        </receiver>
-
         <!-- flutter_local_notifications -->
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="false"/>

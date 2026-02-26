@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/utils/date_utils.dart';
@@ -25,7 +26,11 @@ class EventDetailScreen extends ConsumerWidget {
         actions: [
           if (!event.isFromIcs) ...[
             IconButton(
-              icon: const Icon(Icons.edit_outlined),
+              icon: HugeIcon(
+                icon: HugeIcons.strokeRoundedEdit01,
+                color: Theme.of(context).colorScheme.onSurface,
+                size: 22,
+              ),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -37,7 +42,11 @@ class EventDetailScreen extends ConsumerWidget {
               tooltip: 'Modifier',
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline),
+              icon: const HugeIcon(
+                icon: HugeIcons.strokeRoundedDelete01,
+                color: Color(0xFFFF3B30),
+                size: 22,
+              ),
               onPressed: () => _confirmDelete(context, ref),
               tooltip: 'Supprimer',
             ),
@@ -86,7 +95,7 @@ class EventDetailScreen extends ConsumerWidget {
                   // Date
                   _buildDateRow(context, subColor),
                   // Status
-                  if (event.status != null && event.status!.isNotEmpty) ...[
+                  if (event.statusTag != null) ...[
                     const SizedBox(height: 10),
                     _buildStatusBadge(context, isDark),
                   ],
@@ -105,7 +114,7 @@ class EventDetailScreen extends ConsumerWidget {
             // ── Details ─────────────────────────────────────
             if (event.location != null) ...[
               _buildInfoRow(context,
-                  icon: Icons.location_on_outlined,
+                  hugeIcon: HugeIcons.strokeRoundedLocation01,
                   label: 'Lieu',
                   text: event.location!,
                   subColor: subColor,
@@ -115,7 +124,7 @@ class EventDetailScreen extends ConsumerWidget {
 
             if (event.description != null) ...[
               _buildInfoRow(context,
-                  icon: Icons.subject_rounded,
+                  hugeIcon: HugeIcons.strokeRoundedNote01,
                   label: 'Description',
                   text: event.description!,
                   subColor: subColor,
@@ -131,7 +140,7 @@ class EventDetailScreen extends ConsumerWidget {
 
             if (event.reminderMinutes != null) ...[
               _buildInfoRow(context,
-                  icon: Icons.notifications_outlined,
+                  hugeIcon: HugeIcons.strokeRoundedNotification01,
                   label: 'Rappel',
                   text:
                       '${event.reminderMinutes} minute${event.reminderMinutes! > 1 ? 's' : ''} avant',
@@ -142,7 +151,7 @@ class EventDetailScreen extends ConsumerWidget {
 
             if (event.rrule != null) ...[
               _buildInfoRow(context,
-                  icon: Icons.repeat_rounded,
+                  hugeIcon: HugeIcons.strokeRoundedRepeat,
                   label: 'Récurrence',
                   text: _formatRRule(event.rrule!),
                   subColor: subColor,
@@ -164,7 +173,10 @@ class EventDetailScreen extends ConsumerWidget {
       final same = CalendarDateUtils.isSameDay(event.startDate, event.endDate);
       return Row(
         children: [
-          Icon(Icons.calendar_today_rounded, size: 14, color: subColor),
+          HugeIcon(
+              icon: HugeIcons.strokeRoundedCalendar01,
+              size: 14,
+              color: subColor),
           const SizedBox(width: 6),
           Text(
             same
@@ -180,7 +192,8 @@ class EventDetailScreen extends ConsumerWidget {
 
     return Row(
       children: [
-        Icon(Icons.access_time_rounded, size: 14, color: subColor),
+        HugeIcon(
+            icon: HugeIcons.strokeRoundedTime01, size: 14, color: subColor),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -199,19 +212,19 @@ class EventDetailScreen extends ConsumerWidget {
   Widget _buildSourceBadge(BuildContext context, bool isDark) {
     String label;
     Color color;
-    IconData? icon;
+    dynamic hugeIcon;
     if (event.isFromInfomaniak) {
       label = 'Infomaniak';
       color = const Color(0xFF0098FF);
-      icon = Icons.cloud_outlined;
+      hugeIcon = HugeIcons.strokeRoundedCalendar03;
     } else if (event.isFromNotion) {
       label = 'Notion';
-      color = isDark ? const Color(0xFF9B9A97) : const Color(0xFF5856D6);
-      icon = Icons.auto_awesome_outlined;
+      color = isDark ? const Color(0xFF9B9A97) : const Color(0xFF37352F);
+      hugeIcon = HugeIcons.strokeRoundedTask01;
     } else {
       label = '.ics';
       color = const Color(0xFF787774);
-      icon = Icons.event_outlined;
+      hugeIcon = HugeIcons.strokeRoundedCalendar01;
     }
 
     return Container(
@@ -224,7 +237,7 @@ class EventDetailScreen extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
+          HugeIcon(icon: hugeIcon, size: 12, color: color),
           const SizedBox(width: 4),
           Text(
             label,
@@ -240,7 +253,8 @@ class EventDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildStatusBadge(BuildContext context, bool isDark) {
-    final statusColor = _statusColor(event.status!);
+    final stTag = event.statusTag!;
+    final statusColor = AppColors.fromHex(stTag.colorHex);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -260,7 +274,7 @@ class EventDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            event.status!,
+            stTag.name,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -270,23 +284,6 @@ class EventDetailScreen extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Color _statusColor(String status) {
-    final s = status.toLowerCase();
-    if (s.contains('terminé') || s.contains('done') || s.contains('fini')) {
-      return const Color(0xFF34C759);
-    }
-    if (s.contains('cours') || s.contains('progress')) {
-      return const Color(0xFF007AFF);
-    }
-    if (s.contains('attente') || s.contains('wait') || s.contains('pause')) {
-      return const Color(0xFFFF9500);
-    }
-    if (s.contains('annulé') || s.contains('cancel')) {
-      return const Color(0xFFFF3B30);
-    }
-    return const Color(0xFF8E8E93);
   }
 
   Widget _buildTagsSection(BuildContext context) {
@@ -336,7 +333,7 @@ class EventDetailScreen extends ConsumerWidget {
 
   Widget _buildInfoRow(
     BuildContext context, {
-    required IconData icon,
+    required dynamic hugeIcon,
     required String label,
     required String text,
     required Color subColor,
@@ -347,7 +344,7 @@ class EventDetailScreen extends ConsumerWidget {
       crossAxisAlignment:
           isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        Icon(icon, size: 18, color: subColor),
+        HugeIcon(icon: hugeIcon, size: 18, color: subColor),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -381,7 +378,10 @@ class EventDetailScreen extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.people_outline, size: 18, color: subColor),
+            HugeIcon(
+                icon: HugeIcons.strokeRoundedUserGroup,
+                size: 18,
+                color: subColor),
             const SizedBox(width: 10),
             Text(
               'Participants',
@@ -448,12 +448,20 @@ class EventDetailScreen extends ConsumerWidget {
   Widget _buildParticipantStatusIcon(String status) {
     switch (status) {
       case 'accepted':
-        return const Icon(Icons.check_circle_outline,
-            size: 16, color: Colors.green);
+        return const HugeIcon(
+            icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+            size: 16,
+            color: Colors.green);
       case 'declined':
-        return const Icon(Icons.cancel_outlined, size: 16, color: Colors.red);
+        return const HugeIcon(
+            icon: HugeIcons.strokeRoundedCancelCircle,
+            size: 16,
+            color: Colors.red);
       default:
-        return const Icon(Icons.help_outline, size: 16, color: Colors.orange);
+        return const HugeIcon(
+            icon: HugeIcons.strokeRoundedQuestion,
+            size: 16,
+            color: Colors.orange);
     }
   }
 

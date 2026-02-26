@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
@@ -13,8 +14,14 @@ import '../../../providers/tags_provider.dart';
 class EventFormScreen extends ConsumerStatefulWidget {
   final EventModel? event;
   final DateTime? initialDate;
+  final String? initialSource;
 
-  const EventFormScreen({super.key, this.event, this.initialDate});
+  const EventFormScreen({
+    super.key,
+    this.event,
+    this.initialDate,
+    this.initialSource,
+  });
 
   @override
   ConsumerState<EventFormScreen> createState() => _EventFormScreenState();
@@ -58,6 +65,9 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       _startDate = DateTime(now.year, now.month, now.day, now.hour + 1);
       _endDate = _startDate.add(const Duration(hours: 1));
       _reminderMinutes = AppConstants.defaultReminderMinutes;
+      if (widget.initialSource != null) {
+        _source = widget.initialSource!;
+      }
     }
   }
 
@@ -111,7 +121,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Titre *',
-                prefixIcon: Icon(Icons.title),
+                prefixIcon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedTask01,
+                    color: Color(0xFF787774),
+                    size: 18),
                 border: OutlineInputBorder(),
               ),
               textInputAction: TextInputAction.next,
@@ -137,7 +150,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               controller: _locationController,
               decoration: const InputDecoration(
                 labelText: 'Lieu',
-                prefixIcon: Icon(Icons.location_on_outlined),
+                prefixIcon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedLocation01,
+                    color: Color(0xFF787774),
+                    size: 18),
                 border: OutlineInputBorder(),
               ),
               textInputAction: TextInputAction.next,
@@ -149,7 +165,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               controller: _descriptionController,
               decoration: const InputDecoration(
                 labelText: 'Description',
-                prefixIcon: Icon(Icons.notes_outlined),
+                prefixIcon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedNote01,
+                    color: Color(0xFF787774),
+                    size: 18),
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
@@ -303,7 +322,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         // Date de début
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.calendar_today),
+          leading: const HugeIcon(
+              icon: HugeIcons.strokeRoundedCalendar01,
+              color: Color(0xFF007AFF),
+              size: 20),
           title: Text(
             _isAllDay
                 ? CalendarDateUtils.formatDisplayDate(_startDate)
@@ -314,7 +336,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.event),
+          leading: const HugeIcon(
+              icon: HugeIcons.strokeRoundedCalendar02,
+              color: Color(0xFF787774),
+              size: 20),
           title: Text(
             _isAllDay
                 ? CalendarDateUtils.formatDisplayDate(_endDate)
@@ -330,6 +355,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   Widget _buildTagsSection(List<TagModel> allTags) {
     final categories = allTags.where((t) => t.isCategory).toList();
     final priorities = allTags.where((t) => t.isPriority).toList();
+    final statuses = allTags.where((t) => t.isStatus).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -364,6 +390,21 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           runSpacing: 4,
           children: priorities.map((tag) => _buildTagChip(tag)).toList(),
         ),
+        if (statuses.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            'État',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: statuses.map((tag) => _buildTagChip(tag)).toList(),
+          ),
+        ],
       ],
     );
   }
@@ -380,6 +421,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           if (tag.isPriority) {
             // Une seule priorité à la fois
             _selectedTags.removeWhere((t) => t.isPriority);
+          }
+          if (tag.isStatus) {
+            // Un seul statut à la fois
+            _selectedTags.removeWhere((t) => t.isStatus);
           }
           if (selected) {
             _selectedTags.add(tag);
@@ -410,7 +455,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             const Spacer(),
             TextButton.icon(
               onPressed: _addParticipant,
-              icon: const Icon(Icons.add, size: 18),
+              icon: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedUserAdd01,
+                  color: Color(0xFF007AFF),
+                  size: 18),
               label: const Text('Ajouter'),
             ),
           ],
@@ -418,11 +466,17 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         ..._participants.map(
           (p) => ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.person_outline),
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedUser,
+                color: Color(0xFF787774),
+                size: 20),
             title: Text(p.name ?? p.email),
             subtitle: p.name != null ? Text(p.email) : null,
             trailing: IconButton(
-              icon: const Icon(Icons.close, size: 18),
+              icon: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedCancel01,
+                  color: Colors.grey,
+                  size: 18),
               onPressed: () {
                 setState(() => _participants.remove(p));
               },
@@ -438,7 +492,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       initialValue: _reminderMinutes,
       decoration: const InputDecoration(
         labelText: 'Rappel',
-        prefixIcon: Icon(Icons.notifications_outlined),
+        prefixIcon: HugeIcon(
+            icon: HugeIcons.strokeRoundedNotification01,
+            color: Color(0xFF787774),
+            size: 18),
         border: OutlineInputBorder(),
       ),
       items: const [
@@ -460,7 +517,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       initialValue: _rrule,
       decoration: const InputDecoration(
         labelText: 'Récurrence',
-        prefixIcon: Icon(Icons.repeat),
+        prefixIcon: HugeIcon(
+            icon: HugeIcons.strokeRoundedRepeat,
+            color: Color(0xFF787774),
+            size: 18),
         border: OutlineInputBorder(),
       ),
       items: const [

@@ -164,6 +164,18 @@ class DatabaseHelper {
         'ALTER TABLE ${AppConstants.tableEvents} ADD COLUMN status TEXT',
       );
     }
+    if (oldVersion < 5) {
+      // Ajouter les tags de statut par défaut
+      for (int i = 0; i < AppConstants.defaultStatuses.length; i++) {
+        final st = AppConstants.defaultStatuses[i];
+        await db.insert(AppConstants.tableTags, {
+          'type': AppConstants.tagTypeStatus,
+          'name': st['name'],
+          'color_hex': st['color'],
+          'sort_order': i,
+        });
+      }
+    }
   }
 
   Future<void> _insertDefaultTags(Database db) async {
@@ -186,6 +198,16 @@ class DatabaseHelper {
         'color_hex': pri['color'],
         'infomaniak_mapping': pri['level'].toString(),
         'sort_order': pri['level'] as int,
+      });
+    }
+
+    for (int i = 0; i < AppConstants.defaultStatuses.length; i++) {
+      final st = AppConstants.defaultStatuses[i];
+      await db.insert(AppConstants.tableTags, {
+        'type': AppConstants.tagTypeStatus,
+        'name': st['name'],
+        'color_hex': st['color'],
+        'sort_order': i,
       });
     }
   }
@@ -257,6 +279,15 @@ class DatabaseHelper {
       orderBy: 'start_date ASC',
     );
     return _mapToEventsWithTags(db, maps);
+  }
+
+  /// Retourne le nombre total d'événements non supprimés.
+  Future<int> getEventsCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM ${AppConstants.tableEvents} WHERE is_deleted = 0',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   Future<List<EventModel>> searchEvents({
@@ -490,6 +521,32 @@ class DatabaseHelper {
       AppConstants.tableSyncState,
       state.toMap()..remove('id'),
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Supprime physiquement tous les événements d'une source donnée.
+  Future<int> deleteEventsBySource(String source) async {
+    final db = await database;
+    // Supprimer les liens event_tags d'abord
+    await db.rawDelete(
+      'DELETE FROM ${AppConstants.tableEventTags} WHERE event_id IN '
+      '(SELECT id FROM ${AppConstants.tableEvents} WHERE source = ?)',
+      [source],
+    );
+    return db.delete(
+      AppConstants.tableEvents,
+      where: 'source = ?',
+      whereArgs: [source],
+    );
+  }
+
+  /// Supprime l'état de sync pour une source donnée.
+  Future<void> deleteSyncState(String source) async {
+    final db = await database;
+    await db.delete(
+      AppConstants.tableSyncState,
+      where: 'source = ?',
+      whereArgs: [source],
     );
   }
 

@@ -109,6 +109,24 @@ class SyncEngine {
   Future<void> _syncInfomaniak(DateTime start, DateTime end) async {
     final state = await _db.getSyncState(AppConstants.sourceInfomaniak);
 
+    // Extraire le calendarId depuis l'URL configurée
+    final calUrl = _infomaniak.calendarUrl ?? '';
+    final calendarId = calUrl.isNotEmpty
+        ? Uri.parse(calUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? 'default'
+        : 'default';
+
+    // Détecter un changement de calendrier
+    final previousCalId = state?.syncToken?.startsWith('cal:') == true
+        ? state!.syncToken!.substring(4).split('|').first
+        : null;
+    final calendarChanged = previousCalId != null && previousCalId != calendarId;
+
+    if (calendarChanged) {
+      // Purger les événements de l'ancien calendrier
+      await _db.deleteEventsBySource(AppConstants.sourceInfomaniak);
+      await _db.deleteSyncState(AppConstants.sourceInfomaniak);
+    }
+
     // Vérifier si le calendrier a changé via ctag
     String? currentToken;
     try {
@@ -117,12 +135,22 @@ class SyncEngine {
       // ctag non disponible, on force la sync
     }
 
-    if (currentToken != null &&
-        state?.syncToken == currentToken &&
-        state?.status == SyncStatus.success) {
-      // Pas de changement
+    // Composite token : calendarId + ctag pour détecter les changements
+    final compositeToken = 'cal:$calendarId|${currentToken ?? ''}';
+
+    // Vérifier si la DB a des événements Infomaniak
+    final eventsCount = await _db.getEventsCount();
+
+    if (!calendarChanged &&
+        currentToken != null &&
+        state?.syncToken == compositeToken &&
+        state?.status == SyncStatus.success &&
+        eventsCount > 0) {
       return;
     }
+
+    // Full sync : supprimer les anciens et ré-importer
+    await _db.deleteEventsBySource(AppConstants.sourceInfomaniak);
 
     final rawEvents = await _infomaniak.fetchEvents(
       start: start,
@@ -130,6 +158,8 @@ class SyncEngine {
     );
 
     final allTags = await _db.getAllTags();
+    int parsed = 0;
+    int inserted = 0;
 
     for (final raw in rawEvents) {
       final ical = raw['ical'] as String;
@@ -137,20 +167,22 @@ class SyncEngine {
 
       final event = InfomaniakService.parseICalEvent(
         ical,
-        calendarId: 'default',
+        calendarId: calendarId,
         etag: etag,
         allTags: allTags,
       );
 
       if (event != null) {
+        parsed++;
         await _upsertEvent(event);
+        inserted++;
       }
     }
 
     await _db.upsertSyncState(SyncStateModel(
       source: AppConstants.sourceInfomaniak,
       lastSyncedAt: DateTime.now(),
-      syncToken: currentToken,
+      syncToken: compositeToken,
       status: SyncStatus.success,
     ));
 

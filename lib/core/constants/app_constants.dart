@@ -19,7 +19,7 @@ class AppConstants {
 
   // Base de données locale
   static const String dbName = 'unified_calendar.db';
-  static const int dbVersion = 4;
+  static const int dbVersion = 5;
 
   // Tables SQLite
   static const String tableEvents = 'events';
@@ -37,6 +37,7 @@ class AppConstants {
   // Types de tags
   static const String tagTypeCategory = 'category';
   static const String tagTypePriority = 'priority';
+  static const String tagTypeStatus = 'status';
 
   // Délai de rappel par défaut (minutes)
   static const int defaultReminderMinutes = 15;
@@ -68,6 +69,13 @@ class AppConstants {
     {'name': 'Haute', 'color': '#FF9500', 'level': 2},
     {'name': 'Normale', 'color': '#34C759', 'level': 3},
     {'name': 'Basse', 'color': '#8E8E93', 'level': 4},
+  ];
+
+  static const List<Map<String, dynamic>> defaultStatuses = [
+    {'name': 'À faire', 'color': '#8ABBE6'},
+    {'name': 'En cours', 'color': '#EAE08C'},
+    {'name': 'Fait', 'color': '#82D2CC'},
+    {'name': 'Annulé', 'color': '#F2A5B8'},
   ];
 
   // Vues calendrier

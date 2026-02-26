@@ -74,7 +74,6 @@ dependencies:
 
   # Couleurs et thème
   flex_color_scheme: ^7.3.1
-  flutter_colorpicker: ^1.1.0
 
   # Mise en page
   sliver_tools: ^0.2.12
@@ -83,6 +82,7 @@ dependencies:
   sqflite_common_ffi: ^2.4.0+2
   sqlite3_flutter_libs: ^0.6.0+eol
   hugeicons: ^1.1.5
+  qr_flutter: ^4.1.0
 
 dependency_overrides:
   intl: ^0.20.0

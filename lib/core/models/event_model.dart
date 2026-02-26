@@ -104,6 +104,7 @@ class EventModel extends Equatable {
 
   TagModel? get priorityTag => tags.where((t) => t.isPriority).firstOrNull;
   List<TagModel> get categoryTags => tags.where((t) => t.isCategory).toList();
+  TagModel? get statusTag => tags.where((t) => t.isStatus).firstOrNull;
 
   EventModel copyWith({
     int? id,

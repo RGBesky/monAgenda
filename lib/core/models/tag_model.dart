@@ -22,6 +22,7 @@ class TagModel extends Equatable {
 
   bool get isCategory => type == AppConstants.tagTypeCategory;
   bool get isPriority => type == AppConstants.tagTypePriority;
+  bool get isStatus => type == AppConstants.tagTypeStatus;
 
   TagModel copyWith({
     int? id,

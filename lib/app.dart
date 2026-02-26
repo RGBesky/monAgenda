@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
+import 'features/calendar/screens/agenda_screen.dart';
 import 'features/calendar/screens/calendar_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
-import 'features/search/screens/search_screen.dart';
+import 'features/events/screens/event_form_screen.dart';
+import 'core/constants/app_colors.dart';
+import 'core/constants/app_constants.dart';
 
 class UnifiedCalendarApp extends ConsumerWidget {
   const UnifiedCalendarApp({super.key});
@@ -293,18 +297,17 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 0; // 0=To Do, 1=Calendrier, 2=Paramètres
 
   final _screens = const [
+    AgendaScreen(),
     CalendarScreen(),
-    SearchScreen(),
     SettingsScreen(),
   ];
 
   @override
   void initState() {
     super.initState();
-    // Sync automatique au lancement
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncNotifierProvider.notifier).syncAll();
     });
@@ -313,8 +316,30 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final isOffline = ref.watch(isOfflineProvider).value ?? false;
-    final syncState = ref.watch(syncNotifierProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
 
+    if (isDesktop) {
+      // ── Desktop : NavigationRail latéral (Design System §3.B) ──
+      return Scaffold(
+        body: Row(
+          children: [
+            _buildNavigationRail(isDark),
+            const VerticalDivider(width: 1, thickness: 0.5),
+            Expanded(
+              child: Column(
+                children: [
+                  if (isOffline) _buildOfflineBanner(),
+                  Expanded(child: _screens[_selectedIndex]),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Mobile : BottomNavigationBar (Design System §3.A) ──
     return Scaffold(
       body: Column(
         children: [
@@ -322,34 +347,235 @@ class _AppShellState extends ConsumerState<AppShell> {
           Expanded(child: _screens[_selectedIndex]),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        destinations: [
-          NavigationDestination(
-            icon: syncState.isSyncing
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.calendar_month_outlined),
-            selectedIcon: const Icon(Icons.calendar_month),
-            label: 'Calendrier',
+      bottomNavigationBar: _buildBottomNavBar(isDark),
+      floatingActionButton: _buildFab(context, isDark),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildNavigationRail(bool isDark) {
+    final selectedColor =
+        isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
+    final unselectedColor =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final bgColor = isDark ? AppColors.darkSurface : AppColors.lightSurface;
+
+    return NavigationRail(
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+      backgroundColor: bgColor,
+      indicatorColor: selectedColor.withValues(alpha: 0.12),
+      labelType: NavigationRailLabelType.all,
+      leading: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: FloatingActionButton.small(
+          heroTag: 'rail_fab',
+          onPressed: () => _showQuickAddSheet(context, isDark),
+          child: HugeIcon(
+            icon: HugeIcons.strokeRoundedAdd01,
+            color: Colors.white,
+            size: 20,
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.search_outlined),
-            selectedIcon: Icon(Icons.search),
-            label: 'Recherche',
+        ),
+      ),
+      destinations: [
+        NavigationRailDestination(
+          icon: HugeIcon(
+              icon: HugeIcons.strokeRoundedTask01,
+              color: unselectedColor,
+              size: 22),
+          selectedIcon: HugeIcon(
+              icon: HugeIcons.strokeRoundedTask01,
+              color: selectedColor,
+              size: 22),
+          label: Text('To Do',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: unselectedColor)),
+        ),
+        NavigationRailDestination(
+          icon: HugeIcon(
+              icon: HugeIcons.strokeRoundedCalendar01,
+              color: unselectedColor,
+              size: 22),
+          selectedIcon: HugeIcon(
+              icon: HugeIcons.strokeRoundedCalendar01,
+              color: selectedColor,
+              size: 22),
+          label: Text('Calendrier',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: unselectedColor)),
+        ),
+        NavigationRailDestination(
+          icon: HugeIcon(
+              icon: HugeIcons.strokeRoundedSettings02,
+              color: unselectedColor,
+              size: 22),
+          selectedIcon: HugeIcon(
+              icon: HugeIcons.strokeRoundedSettings02,
+              color: selectedColor,
+              size: 22),
+          label: Text('Paramètres',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: unselectedColor)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomNavBar(bool isDark) {
+    final selectedColor =
+        isDark ? AppColors.darkPrimary : AppColors.lightPrimary;
+    final unselectedColor =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+
+    return NavigationBar(
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+      destinations: [
+        NavigationDestination(
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedTask01,
+            color: unselectedColor,
+            size: 22,
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Paramètres',
+          selectedIcon: HugeIcon(
+            icon: HugeIcons.strokeRoundedTask01,
+            color: selectedColor,
+            size: 22,
           ),
-        ],
+          label: 'To Do',
+        ),
+        NavigationDestination(
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedCalendar01,
+            color: unselectedColor,
+            size: 22,
+          ),
+          selectedIcon: HugeIcon(
+            icon: HugeIcons.strokeRoundedCalendar01,
+            color: selectedColor,
+            size: 22,
+          ),
+          label: 'Calendrier',
+        ),
+        NavigationDestination(
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedSettings02,
+            color: unselectedColor,
+            size: 22,
+          ),
+          selectedIcon: HugeIcon(
+            icon: HugeIcons.strokeRoundedSettings02,
+            color: selectedColor,
+            size: 22,
+          ),
+          label: 'Paramètres',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFab(BuildContext context, bool isDark) {
+    return FloatingActionButton(
+      heroTag: 'main_fab',
+      onPressed: () => _showQuickAddSheet(context, isDark),
+      tooltip: 'Créer',
+      child: HugeIcon(
+        icon: HugeIcons.strokeRoundedAdd01,
+        color: Colors.white,
+        size: 26,
+      ),
+    );
+  }
+
+  void _showQuickAddSheet(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Pill
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: (isDark ? AppColors.darkText : AppColors.lightText)
+                      .withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Créer…',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppColors.darkText : AppColors.lightText,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  // ── Rendez-vous Infomaniak ──────────────
+                  Expanded(
+                    child: _QuickAddButton(
+                      icon: HugeIcons.strokeRoundedCalendar03,
+                      label: 'Rendez-vous',
+                      sublabel: 'Infomaniak',
+                      color: AppColors.stabiloBlue,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const EventFormScreen(
+                              initialSource: AppConstants.sourceInfomaniak,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // ── Tâche Notion ────────────────────────
+                  Expanded(
+                    child: _QuickAddButton(
+                      icon: HugeIcons.strokeRoundedTask01,
+                      label: 'Tâche',
+                      sublabel: 'Notion',
+                      color: AppColors.stabiloLilac,
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const EventFormScreen(
+                              initialSource: AppConstants.sourceNotion,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -357,21 +583,93 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget _buildOfflineBanner() {
     return Container(
       width: double.infinity,
-      color: const Color(0xFFFF6D00),
+      color: AppColors.offlineBanner,
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.wifi_off, color: Colors.white, size: 16),
-          SizedBox(width: 8),
-          Text(
-            'Mode hors ligne — Lecture seule',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedWifi02,
+            color: Colors.white,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Mode hors ligne — Lecture seule',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Bouton du Quick Add Sheet ─────────────────────────────────────────────
+class _QuickAddButton extends StatelessWidget {
+  final dynamic icon;
+  final String label;
+  final String sublabel;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickAddButton({
+    required this.icon,
+    required this.label,
+    required this.sublabel,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isDark
+              ? color.withValues(alpha: 0.12)
+              : color.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? color.withValues(alpha: 0.25) : color,
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            HugeIcon(
+              icon: icon,
+              color: isDark ? color : AppColors.textOnStabilo(color),
+              size: 32,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: isDark ? color : AppColors.textOnStabilo(color),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              sublabel,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: (isDark ? color : AppColors.textOnStabilo(color))
+                    .withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

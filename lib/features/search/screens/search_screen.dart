@@ -410,7 +410,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           if (firstCategory != null)
                             _buildTagChip(firstCategory),
                           // Status
-                          if (event.status != null && event.status!.isNotEmpty)
+                          if (event.statusTag != null)
                             _buildStatusChip(event, isDark),
                         ],
                       ),
@@ -445,7 +445,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildStatusChip(EventModel event, bool isDark) {
-    final statusColor = _getStatusColor(event.status!);
+    final stTag = event.statusTag!;
+    final statusColor = AppColors.fromHex(stTag.colorHex);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
@@ -465,7 +466,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
           const SizedBox(width: 3),
           Text(
-            event.status!,
+            stTag.name,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -475,23 +476,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ],
       ),
     );
-  }
-
-  Color _getStatusColor(String status) {
-    final s = status.toLowerCase();
-    if (s.contains('terminé') || s.contains('done') || s.contains('fini')) {
-      return const Color(0xFF34C759);
-    }
-    if (s.contains('cours') || s.contains('progress')) {
-      return const Color(0xFF007AFF);
-    }
-    if (s.contains('attente') || s.contains('wait') || s.contains('pause')) {
-      return const Color(0xFFFF9500);
-    }
-    if (s.contains('annulé') || s.contains('cancel')) {
-      return const Color(0xFFFF3B30);
-    }
-    return const Color(0xFF8E8E93);
   }
 
   Widget _buildSourceIcon(EventModel event, bool isDark) {

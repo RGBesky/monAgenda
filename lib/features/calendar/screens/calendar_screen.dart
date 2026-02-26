@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/event_model.dart';
+import '../../../core/models/notion_database_model.dart';
+import '../../../core/models/tag_model.dart';
 import '../../../core/models/weather_model.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../providers/events_provider.dart';
@@ -45,9 +48,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     if (_loadingWeather) return;
     _loadingWeather = true;
     try {
+      final settings = ref.read(settingsProvider).valueOrNull;
+      final lat = settings?.weatherLatitude ?? 46.2044;
+      final lon = settings?.weatherLongitude ?? 6.1432;
       final weatherService = WeatherService();
-      // TODO : récupérer la géolocalisation réelle
-      weatherService.setLocation(latitude: 46.2044, longitude: 6.1432);
+      weatherService.setLocation(latitude: lat, longitude: lon);
       final forecasts = await weatherService.fetchWeekForecast();
       if (mounted) setState(() => _forecasts = forecasts);
     } catch (_) {}
@@ -82,6 +87,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             WeatherHeader(
               forecasts: _forecasts,
               displayedDate: DateTime.now(),
+              cityName: settings?.weatherCity ?? 'Genève',
             ),
           Expanded(
             child: eventsAsync.when(
@@ -107,53 +113,118 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   AppBar _buildAppBar(BuildContext context, SyncState syncState) {
+    final now = DateTime.now();
+    final dayFormatter = DateFormat('EEEE d MMMM', 'fr_FR');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AppBar(
-      title: const Text(
-        'Calendrier',
-        style: TextStyle(fontWeight: FontWeight.w600),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Calendrier',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
+          Text(
+            _capitalize(dayFormatter.format(now)),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
       actions: [
         // Bouton aujourd'hui
-        TextButton(
+        IconButton(
           onPressed: () {
             _calendarController.displayDate = DateTime.now();
           },
-          child: const Text("Aujourd'hui"),
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedCalendar04,
+            color: Theme.of(context).colorScheme.primary,
+            size: 22,
+          ),
+          tooltip: "Aujourd'hui",
         ),
+        // Filtre des bases Notion
+        _buildFilterButton(context),
         // Sélecteur de vue
         PopupMenuButton<String>(
-          icon: const Icon(Icons.view_comfy_outlined),
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedDashboardSquare01,
+            color: Theme.of(context).colorScheme.onSurface,
+            size: 22,
+          ),
           onSelected: (view) {
             _calendarController.view = _getCalendarView(view);
             ref.read(settingsProvider.notifier).setDefaultView(view);
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: AppConstants.viewMonth,
-              child: ListTile(
-                leading: Icon(Icons.calendar_view_month),
-                title: Text('Mois'),
+              child: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedCalendar01,
+                    color: isDark ? AppColors.darkText : AppColors.lightText,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Mois',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: AppConstants.viewWeek,
-              child: ListTile(
-                leading: Icon(Icons.calendar_view_week),
-                title: Text('Semaine'),
+              child: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedCalendar03,
+                    color: isDark ? AppColors.darkText : AppColors.lightText,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Semaine',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: AppConstants.viewDay,
-              child: ListTile(
-                leading: Icon(Icons.calendar_view_day),
-                title: Text('Jour'),
+              child: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedCalendar02,
+                    color: isDark ? AppColors.darkText : AppColors.lightText,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Jour',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: AppConstants.viewAgenda,
-              child: ListTile(
-                leading: Icon(Icons.view_agenda),
-                title: Text('Agenda'),
+              child: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedMenu01,
+                    color: isDark ? AppColors.darkText : AppColors.lightText,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Agenda',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                ],
               ),
             ),
           ],
@@ -166,7 +237,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.sync),
+              : HugeIcon(
+                  icon: HugeIcons.strokeRoundedRefresh,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  size: 22,
+                ),
           onPressed: syncState.isSyncing
               ? null
               : () async {
@@ -199,6 +274,189 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
   }
 
+  Widget _buildFilterButton(BuildContext context) {
+    final notionDbsAsync = ref.watch(notionDatabasesProvider);
+    final hidden = ref.watch(hiddenSourcesProvider);
+
+    return notionDbsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (dbs) {
+        if (dbs.isEmpty) return const SizedBox.shrink();
+        final hasHidden = hidden.isNotEmpty;
+        return IconButton(
+          icon: HugeIcon(
+            icon: hasHidden
+                ? HugeIcons.strokeRoundedFilterHorizontal
+                : HugeIcons.strokeRoundedFilter,
+            color: hasHidden
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.onSurface,
+            size: 22,
+          ),
+          tooltip: 'Filtrer les calendriers',
+          onPressed: () => _showFilterPanel(context, dbs, hidden),
+        );
+      },
+    );
+  }
+
+  void _showFilterPanel(
+    BuildContext context,
+    List<NotionDatabaseModel> dbs,
+    Set<String> hidden,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedFilter,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('Calendriers'),
+                ],
+              ),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Infomaniak (toujours visible, non masquable) ──
+                    _buildSourceRow(
+                      icon: HugeIcons.strokeRoundedCloud,
+                      color: AppColors.sourceInfomaniak,
+                      label: 'Infomaniak',
+                      isVisible: true,
+                      enabled: false,
+                      onChanged: null,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 4),
+                    // ── Notion databases ──
+                    ...dbs.map((db) {
+                      final sourceId = db.effectiveSourceId;
+                      final isVisible = !hidden.contains(sourceId);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _buildSourceRow(
+                          icon: HugeIcons.strokeRoundedDatabase,
+                          color: AppColors.sourceNotion,
+                          label: db.name,
+                          isVisible: isVisible,
+                          enabled: true,
+                          onChanged: (visible) {
+                            final newHidden = Set<String>.from(
+                                ref.read(hiddenSourcesProvider));
+                            if (visible) {
+                              newHidden.remove(sourceId);
+                            } else {
+                              newHidden.add(sourceId);
+                            }
+                            ref.read(hiddenSourcesProvider.notifier).state =
+                                newHidden;
+                            setDialogState(() {});
+                          },
+                          isDark: isDark,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                if (hidden.isNotEmpty)
+                  TextButton(
+                    onPressed: () {
+                      ref.read(hiddenSourcesProvider.notifier).state = {};
+                      setDialogState(() {});
+                    },
+                    child: const Text('Tout afficher'),
+                  ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Fermer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSourceRow({
+    required List<List<dynamic>> icon,
+    required Color color,
+    required String label,
+    required bool isVisible,
+    required bool enabled,
+    required ValueChanged<bool>? onChanged,
+    required bool isDark,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap:
+            enabled && onChanged != null ? () => onChanged(!isVisible) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: isVisible ? color : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: color,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              HugeIcon(icon: icon, color: color, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isVisible
+                        ? (isDark ? AppColors.darkText : AppColors.lightText)
+                        : (isDark
+                            ? AppColors.darkTextTertiary
+                            : AppColors.lightTextTertiary),
+                    decoration: isVisible ? null : TextDecoration.lineThrough,
+                  ),
+                ),
+              ),
+              Switch(
+                value: isVisible,
+                onChanged: enabled ? onChanged : null,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCalendarWithEvents(
     BuildContext context,
     List<EventModel> events,
@@ -208,8 +466,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final dataSource = _CalendarDataSource(events);
     final firstDayOfWeek =
         settings?.firstDayOfWeek == AppConstants.firstDaySunday
-            ? 0
-            : 1; // 1 = lundi, 0 = dimanche
+            ? DateTime.sunday
+            : DateTime.monday; // DateTime.monday = 1, DateTime.sunday = 7
 
     return SfCalendar(
       controller: _calendarController,
@@ -224,12 +482,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       viewHeaderStyle: ViewHeaderStyle(
         dayTextStyle: TextStyle(
-          fontSize: 11,
+          fontSize: 11, // Tiny: 11px (Design System)
           fontWeight: FontWeight.w500,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         dateTextStyle: TextStyle(
-          fontSize: 14,
+          fontSize: 15, // Body: 15px (Design System)
           fontWeight: FontWeight.w600,
           color: Theme.of(context).colorScheme.onSurface,
         ),
@@ -237,7 +495,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       headerStyle: CalendarHeaderStyle(
         textAlign: TextAlign.start,
         textStyle: TextStyle(
-          fontSize: 16,
+          fontSize: 18, // H2: 18px SemiBold (Design System)
           fontWeight: FontWeight.w600,
           color: Theme.of(context).colorScheme.onSurface,
         ),
@@ -247,10 +505,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         endHour: 23,
         timeInterval: const Duration(minutes: 30),
         timeIntervalHeight: 52,
-        timelineAppointmentHeight: 60,
+        timelineAppointmentHeight: 68,
         timeTextStyle: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w400,
+          fontSize: 11, // Tiny: 11px (Design System)
+          fontWeight: FontWeight.w500,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         timeRulerSize: 52,
@@ -259,36 +517,36 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       monthViewSettings: MonthViewSettings(
         appointmentDisplayMode: MonthAppointmentDisplayMode.none,
         showAgenda: true,
-        agendaItemHeight: 68,
+        agendaItemHeight: 76,
         numberOfWeeksInView: 6,
         appointmentDisplayCount: 4,
         monthCellStyle: MonthCellStyle(
           textStyle: TextStyle(
-            fontSize: 12,
+            fontSize: 13, // Caption: 13px (Design System)
             color: Theme.of(context).colorScheme.onSurface,
           ),
           trailingDatesTextStyle: TextStyle(
-            fontSize: 12,
+            fontSize: 13,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           leadingDatesTextStyle: TextStyle(
-            fontSize: 12,
+            fontSize: 13,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         agendaStyle: AgendaStyle(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appointmentTextStyle: TextStyle(
-            fontSize: 14,
+            fontSize: 15, // Body: 15px (Design System)
             color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.w500,
           ),
           dateTextStyle: TextStyle(
-            fontSize: 13,
+            fontSize: 13, // Caption: 13px (Design System)
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           dayTextStyle: TextStyle(
-            fontSize: 22,
+            fontSize: 24, // Display: 24px Bold (Design System)
             fontWeight: FontWeight.w700,
             color: Theme.of(context).colorScheme.onSurface,
           ),
@@ -301,13 +559,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           dayFormat: 'EEE',
           width: 56,
           dayTextStyle: TextStyle(
-            fontSize: 12,
+            fontSize: 13, // Caption: 13px (Design System)
             fontWeight: FontWeight.w600,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           dateTextStyle: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
+            fontSize: 24, // Display: 24px Bold (Design System)
+            fontWeight: FontWeight.w700,
             color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
@@ -317,7 +575,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           height: 40,
           textAlign: TextAlign.start,
           weekTextStyle: TextStyle(
-            fontSize: 13,
+            fontSize: 13, // Caption: 13px (Design System)
             fontWeight: FontWeight.w700,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -329,8 +587,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           backgroundColor:
               Theme.of(context).colorScheme.surfaceContainerHighest,
           monthTextStyle: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontSize: 18, // H2: 18px SemiBold (Design System)
+            fontWeight: FontWeight.w600,
             color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
@@ -441,8 +699,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     );
                   }
                   // Fallback pour Appointment brut
-                  return Icon(Icons.circle,
-                      size: 6, color: Theme.of(context).colorScheme.primary);
+                  return Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  );
                 }).toList(),
               ),
             ),
@@ -469,74 +733,80 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     CalendarAppointmentDetails details,
   ) {
     final event = details.appointments.first as EventModel;
-    final accent = _getCategoryColor(event);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final h = details.bounds.height;
     final w = details.bounds.width;
 
-    // ── Style Apple Calendar — pastel/filled ──
-    final bool isFilled = h > 40;
-    final bg = isFilled
-        ? AppColors.filledBg(accent, isDark: isDark)
-        : AppColors.pastelBg(accent, isDark: isDark);
-    final titleColor = isFilled
-        ? AppColors.textOnFilled(accent, isDark: isDark)
-        : AppColors.textOnPastel(accent, isDark: isDark);
-    final iconColor = titleColor.withValues(alpha: 0.85);
+    // ── Couleurs conformes au Design System ──
+    // Fond : catégorie Stabilo pastel (comme UnifiedEventCard)
+    final accent = _getCategoryColor(event);
+    final bg = isDark
+        ? accent.withValues(alpha: 0.15)
+        : Color.lerp(accent, Colors.white, 0.78)!;
+    final titleColor = isDark ? AppColors.darkText : AppColors.lightText;
+    final subColor =
+        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
 
-    // Couleur du liseré priorité (côté droit)
-    final priorityColor = _getPriorityColor(event);
+    // Bordure gauche = PRIORITÉ (Design System §4.1 : 1/4 de la cellule)
+    // Pour les all-day (bandeau fin), on réduit la bordure
+    final priorityColor = _getPriorityColorForBorder(event);
+    final isEffectiveAllDay = event.isAllDay ||
+        event.endDate.difference(event.startDate).inHours > 23;
+    final borderW = isEffectiveAllDay
+        ? (h * 0.25).clamp(2.0, 6.0)
+        : (w * 0.25).clamp(4.0, 24.0);
+    final contentW = isEffectiveAllDay ? w - 2 : w - borderW;
 
-    // Largeurs des liserés (proportionnel à la hauteur, capé par la largeur)
-    final stripeW = (h * 0.25).clamp(4.0, (w * 0.15).clamp(4.0, 20.0));
-    final prioW = priorityColor != null
-        ? (h * 0.15).clamp(3.0, (w * 0.10).clamp(3.0, 12.0))
-        : 0.0;
-    // Largeur restante pour le contenu
-    final contentW = (w - stripeW - prioW - 10).clamp(0.0, double.infinity);
+    final radius = h < 16 ? 3.0 : (h < 28 ? 5.0 : 8.0);
 
-    // SizedBox force les contraintes exactes, ClipRRect clip visuellement,
-    // SingleChildScrollView élimine l'assertion RenderFlex overflow.
+    // Padding vertical = 2 px (sauf tiny = 1 px)
+    final vPad = h < 22 ? 1.0 : 2.0;
+    // Hauteur utile réellement disponible pour le contenu
+    final usableH = h - vPad * 2;
+
     return SizedBox(
       height: h,
       width: w,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(5),
-        child: ColoredBox(
-          color: bg,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Liseré gauche — couleur catégorie
-              Container(width: stripeW, color: accent),
-              // Contenu principal
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const NeverScrollableScrollPhysics(),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: w > 30 ? 5 : 2,
-                      vertical: h < 22 ? 1 : 2,
-                    ),
-                    child: _buildAppointmentContent(
-                        event, titleColor, iconColor, h, contentW, isDark),
-                  ),
-                ),
-              ),
-              // Liseré droit — priorité
-              if (priorityColor != null)
-                Container(width: prioW, color: priorityColor),
-            ],
+        borderRadius: BorderRadius.circular(radius),
+        child: Container(
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border(
+              left: BorderSide(color: priorityColor, width: borderW),
+            ),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: contentW > 30 ? 6 : 3,
+            vertical: vPad,
+          ),
+          // OverflowBox permet au contenu d'être layouté à sa taille
+          // intrinsèque puis clippé par le ClipRRect parent — aucun
+          // overflow warning ne sera émis.
+          child: OverflowBox(
+            alignment: Alignment.topLeft,
+            maxHeight: double.infinity,
+            child: _buildAppointmentContent(
+                event, titleColor, subColor, usableH, contentW, isDark),
           ),
         ),
       ),
     );
   }
 
+  /// Couleur de la bordure gauche priorité (Design System §4.1)
+  /// Utilise la couleur du tag (colorHex) pour être cohérent avec les chips.
+  Color _getPriorityColorForBorder(EventModel event) {
+    final pri = event.priorityTag;
+    if (pri == null) return AppColors.priorityNormalVivid;
+    return AppColors.fromHex(pri.colorHex);
+  }
+
   Widget _buildAppointmentContent(
     EventModel event,
     Color titleColor,
-    Color iconColor,
+    Color subColor,
     double h,
     double w,
     bool isDark,
@@ -544,14 +814,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     // Info multi-jours
     final multiDayInfo = _multiDayInfo(event);
 
-    // ── Tiny (< 22px) : titre seul ──
-    if (h < 22) {
+    // ── Tiny (< 18px) : titre seul, texte minimal ──
+    if (h < 18) {
       return Text(
         multiDayInfo != null ? '${event.title} $multiDayInfo' : event.title,
         style: TextStyle(
           color: titleColor,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
           height: 1.1,
         ),
         maxLines: 1,
@@ -559,13 +829,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       );
     }
 
-    // ── Compact (< 36px) : icône + titre + source + heure ──
-    if (h < 36) {
+    // ── Compact single-line (< 28px) : titre + source icon + heure ──
+    if (h < 28) {
       return Row(
         children: [
-          if (w > 30)
-            HugeIcon(icon: _categoryIcon(event), color: iconColor, size: 13),
-          if (w > 30) const SizedBox(width: 4),
           Expanded(
             child: Text(
               multiDayInfo != null
@@ -573,7 +840,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   : event.title,
               style: TextStyle(
                 color: titleColor,
-                fontSize: 11,
+                fontSize: h < 22 ? 11 : 13,
                 fontWeight: FontWeight.w600,
                 height: 1.2,
               ),
@@ -581,79 +848,207 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (!event.isAllDay && w > 120) ...[
+          const SizedBox(width: 4),
+          _sourceIcon(event, isDark, 12),
+          if (!event.isAllDay && w > 100) ...[
             const SizedBox(width: 4),
             Text(
               CalendarDateUtils.formatDisplayTime(event.startDate),
               style: TextStyle(
-                  color: iconColor, fontSize: 10, fontWeight: FontWeight.w500),
+                color: subColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ],
       );
     }
 
-    // ── Normal (< 62px) : titre + meta ──
-    if (h < 62) {
+    // ── Medium (< 40px) : titre + source, en dessous meta compacte ──
+    if (h < 40) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Ligne 1 : Titre + source icon
           Row(
             children: [
-              if (w > 30)
-                HugeIcon(
-                    icon: _categoryIcon(event), color: titleColor, size: 15),
-              if (w > 30) const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  event.title,
+                  multiDayInfo != null
+                      ? '${event.title} $multiDayInfo'
+                      : event.title,
                   style: TextStyle(
                     color: titleColor,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                     height: 1.2,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 4),
+              _sourceIcon(event, isDark, 12),
             ],
           ),
-          const SizedBox(height: 2),
-          _metaRow(event, iconColor, isDark, multiDayInfo),
+          const SizedBox(height: 1),
+          // Ligne 2 : mini meta (heure + catégorie, pas de source chip)
+          _metaRowCompact(event, subColor, isDark, multiDayInfo),
         ],
       );
     }
 
-    // ── Grand (>= 62px) : titre + meta + status ──
+    // ── Normal (< 62px) : titre + source + meta chips ──
+    if (h < 62) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Ligne 1 : Titre + source icon
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  event.title,
+                  style: TextStyle(
+                    color: titleColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 4),
+              _sourceIcon(event, isDark, 14),
+            ],
+          ),
+          const SizedBox(height: 2),
+          // Ligne 2 : heure + chips catégorie
+          Flexible(
+              child: _metaRow(event, subColor, isDark,
+                  multiDayInfo: multiDayInfo)),
+        ],
+      );
+    }
+
+    // ── Grand (>= 62px) : titre + source + chips + heure ──
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Ligne 1 : Titre + source icon
         Row(
           children: [
-            if (w > 30)
-              HugeIcon(icon: _categoryIcon(event), color: titleColor, size: 16),
-            if (w > 30) const SizedBox(width: 5),
             Expanded(
               child: Text(
                 event.title,
                 style: TextStyle(
                   color: titleColor,
-                  fontSize: 13,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  height: 1.2,
+                  height: 1.3,
                   letterSpacing: -0.1,
                 ),
                 maxLines: h > 80 ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            const SizedBox(width: 6),
+            _sourceIcon(event, isDark, 16),
           ],
         ),
+        // Ligne 2 : Chips catégorie + statut
+        if (h > 72 &&
+            (event.categoryTags.isNotEmpty || event.statusTag != null)) ...[
+          const SizedBox(height: 4),
+          _chipRow(event, isDark),
+        ],
+        // Ligne 3 : Heure (sans re-afficher catégories/statut déjà dans _chipRow)
         const SizedBox(height: 3),
-        _metaRow(event, iconColor, isDark, multiDayInfo),
+        Flexible(
+            child: _metaRow(event, subColor, isDark,
+                multiDayInfo: multiDayInfo, skipCategoryAndStatus: h > 72)),
+      ],
+    );
+  }
+
+  /// Icône source (Design System §4.1 : toujours visible, 16px)
+  Widget _sourceIcon(EventModel event, bool isDark, double size) {
+    dynamic icon;
+    Color color;
+    if (event.isFromNotion) {
+      icon = HugeIcons.strokeRoundedTask01;
+      color = isDark
+          ? Colors.white.withValues(alpha: 0.6)
+          : const Color(0xFF37352F).withValues(alpha: 0.5);
+    } else if (event.isFromInfomaniak) {
+      icon = HugeIcons.strokeRoundedCalendar03;
+      color = AppColors.sourceInfomaniak.withValues(alpha: 0.8);
+    } else {
+      icon = HugeIcons.strokeRoundedCalendar01;
+      color = AppColors.sourceIcs.withValues(alpha: 0.8);
+    }
+    return HugeIcon(icon: icon, color: color, size: size);
+  }
+
+  /// Chips catégorie + statut (Design System §4.1)
+  Widget _chipRow(EventModel event, bool isDark) {
+    return Wrap(
+      spacing: 4,
+      runSpacing: 2,
+      children: [
+        // Catégorie chips
+        ...event.categoryTags.take(2).map((tag) {
+          final tagColor = AppColors.fromHex(tag.colorHex);
+          final hsl = HSLColor.fromColor(tagColor);
+          final stabilo = hsl.lightness > 0.4
+              ? tagColor
+              : HSLColor.fromAHSL(1.0, hsl.hue,
+                      (hsl.saturation * 0.5).clamp(0.2, 0.6), 0.85)
+                  .toColor();
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? stabilo.withValues(alpha: 0.2)
+                  : stabilo.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              tag.name,
+              style: TextStyle(
+                fontSize: 11, // Tiny: 11px (Design System)
+                fontWeight: FontWeight.w600,
+                color: isDark ? stabilo : AppColors.textOnStabilo(stabilo),
+              ),
+            ),
+          );
+        }),
+        // Statut chip
+        if (event.statusTag != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color: AppColors.fromHex(event.statusTag!.colorHex)
+                  .withValues(alpha: isDark ? 0.2 : 0.15),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              event.statusTag!.name,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isDark
+                    ? AppColors.fromHex(event.statusTag!.colorHex)
+                    : AppColors.textOnStabilo(
+                        AppColors.fromHex(event.statusTag!.colorHex)),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -673,14 +1068,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   /// Couleur du liseré priorité (côté droit). null si pas de priorité notable.
-  Color? _getPriorityColor(EventModel event) {
-    final pri = event.priorityTag;
-    if (pri == null) return null;
-    final n = pri.name.toLowerCase();
-    if (n.contains('normale') || n.contains('normal'))
-      return null; // pas de liseré pour "Normale"
-    return AppColors.fromHex(pri.colorHex);
-  }
+  // Gardé pour compatibilité mais non utilisé — priorité gérée par _getPriorityColorForBorder
 
   // ── Icône de catégorie HugeIcons ─────────────────────────────────
   List<List<dynamic>> _categoryIcon(EventModel event) {
@@ -767,9 +1155,86 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     return HugeIcons.strokeRoundedTag01;
   }
 
+  // ── Ligne méta compacte (pour barre all-day ~30px) : heure + 1 catégorie + statut ──
+  Widget _metaRowCompact(
+    EventModel event,
+    Color fallbackColor,
+    bool isDark, [
+    String? multiDayInfo,
+  ]) {
+    final items = <Widget>[];
+
+    if (multiDayInfo != null) {
+      items.add(Text(
+        multiDayInfo,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: fallbackColor,
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          height: 1.1,
+        ),
+      ));
+    }
+
+    if (!event.isAllDay) {
+      items.add(Text(
+        CalendarDateUtils.formatDisplayTime(event.startDate),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: fallbackColor,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+          height: 1.1,
+        ),
+      ));
+    }
+
+    final cat = event.categoryTags.firstOrNull;
+    if (cat != null) {
+      items.add(Text(
+        cat.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: AppColors.fromHex(cat.colorHex),
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          height: 1.1,
+        ),
+      ));
+    }
+
+    if (event.statusTag != null) {
+      items.add(Text(
+        event.statusTag!.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: AppColors.fromHex(event.statusTag!.colorHex),
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          height: 1.1,
+        ),
+      ));
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
+    return ClipRect(
+      child: Row(
+        children: items
+            .expand((w) => [Flexible(child: w), const SizedBox(width: 6)])
+            .toList()
+          ..removeLast(),
+      ),
+    );
+  }
+
   // ── Ligne méta : heure + tag chips + multi-day info ──────────────
   Widget _metaRow(EventModel event, Color fallbackColor, bool isDark,
-      [String? multiDayInfo]) {
+      {String? multiDayInfo, bool skipCategoryAndStatus = false}) {
     final items = <Widget>[];
 
     // Multi-day badge — petit chip coloré "J3/40"
@@ -816,38 +1281,43 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       ));
     }
 
-    // Catégorie(s) — chips fond blanc, texte coloré
-    for (final cat in event.categoryTags.take(2)) {
-      final catColor = AppColors.fromHex(cat.colorHex);
-      items.add(_tagChip(
-        icon: _tagNameToIcon(cat.name),
-        text: cat.name,
-        color: catColor,
-        isDark: isDark,
-      ));
-    }
-
-    // Priorité — chip avec nom + couleur (seulement si non "Normale")
-    final pri = event.priorityTag;
-    if (pri != null) {
-      final pn = pri.name.toLowerCase();
-      if (!pn.contains('normale') && !pn.contains('normal')) {
-        final priColor = AppColors.fromHex(pri.colorHex);
+    // Catégorie(s) — chips fond blanc, texte coloré (sauf si déjà dans _chipRow)
+    if (!skipCategoryAndStatus) {
+      for (final cat in event.categoryTags.take(2)) {
+        final catColor = AppColors.fromHex(cat.colorHex);
         items.add(_tagChip(
-          icon: HugeIcons.strokeRoundedAlert02,
-          text: pri.name,
-          color: priColor,
+          icon: _tagNameToIcon(cat.name),
+          text: cat.name,
+          color: catColor,
           isDark: isDark,
         ));
       }
     }
 
+    // Priorité — chip avec nom + couleur (seulement si non "Normale")
+    if (!skipCategoryAndStatus) {
+      final pri = event.priorityTag;
+      if (pri != null) {
+        final pn = pri.name.toLowerCase();
+        if (!pn.contains('normale') && !pn.contains('normal')) {
+          final priColor = AppColors.fromHex(pri.colorHex);
+          items.add(_tagChip(
+            icon: HugeIcons.strokeRoundedAlert02,
+            text: pri.name,
+            color: priColor,
+            isDark: isDark,
+          ));
+        }
+      }
+    }
+
     // Status d'avancement — chip dans le même Wrap
-    if (event.status != null && event.status!.isNotEmpty) {
-      final statusColor = _statusColor(event.status!, isDark);
+    if (!skipCategoryAndStatus && event.statusTag != null) {
+      final stTag = event.statusTag!;
+      final statusColor = AppColors.fromHex(stTag.colorHex);
       items.add(_tagChip(
-        icon: _statusIcon(event.status!),
-        text: event.status!,
+        icon: _statusIconFromTag(stTag),
+        text: stTag.name,
         color: statusColor,
         isDark: isDark,
       ));
@@ -874,35 +1344,17 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     return Wrap(spacing: 5, runSpacing: 2, children: items);
   }
 
-  /// Couleur sémantique pour un status
-  Color _statusColor(String status, bool isDark) {
-    final s = status.toLowerCase();
-    if (s.contains('terminé') || s.contains('done') || s.contains('fini')) {
-      return const Color(0xFF34C759); // vert
-    }
-    if (s.contains('cours') || s.contains('progress')) {
-      return const Color(0xFF007AFF); // bleu
-    }
-    if (s.contains('attente') || s.contains('wait') || s.contains('pause')) {
-      return const Color(0xFFFF9500); // orange
-    }
-    if (s.contains('annulé') || s.contains('cancel')) {
-      return const Color(0xFFFF3B30); // rouge
-    }
-    return const Color(0xFF8E8E93); // gris
-  }
-
-  /// Icône de status selon le texte
-  static List<List<dynamic>> _statusIcon(String status) {
-    final s = status.toLowerCase();
-    if (s.contains('terminé') || s.contains('done') || s.contains('fini')) {
+  /// Icône de status à partir d'un TagModel
+  static List<List<dynamic>> _statusIconFromTag(TagModel tag) {
+    final s = tag.name.toLowerCase();
+    if (s.contains('fait') || s.contains('terminé') || s.contains('done')) {
       return HugeIcons.strokeRoundedCheckmarkCircle01;
     }
     if (s.contains('cours') || s.contains('progress')) {
       return HugeIcons.strokeRoundedLoading03;
     }
-    if (s.contains('attente') || s.contains('wait') || s.contains('pause')) {
-      return HugeIcons.strokeRoundedPauseCircle;
+    if (s.contains('faire') || s.contains('todo')) {
+      return HugeIcons.strokeRoundedStopCircle;
     }
     if (s.contains('annulé') || s.contains('cancel')) {
       return HugeIcons.strokeRoundedCancelCircle;
@@ -1170,11 +1622,19 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
   Widget _buildFab(BuildContext context) {
     return FloatingActionButton(
+      heroTag: 'calendar_fab',
       onPressed: () => _showCreateEventSheet(DateTime.now()),
       tooltip: 'Nouvel événement',
-      child: const Icon(Icons.add_rounded, size: 26),
+      child: HugeIcon(
+        icon: HugeIcons.strokeRoundedAdd01,
+        color: Colors.white,
+        size: 26,
+      ),
     );
   }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 // ============================================================
@@ -1198,7 +1658,15 @@ class _CalendarDataSource extends CalendarDataSource<EventModel> {
   String getSubject(int index) => (appointments![index] as EventModel).title;
 
   @override
-  bool isAllDay(int index) => (appointments![index] as EventModel).isAllDay;
+  bool isAllDay(int index) {
+    final event = appointments![index] as EventModel;
+    // Safety net : un événement > 23 h est traité comme all-day
+    if (!event.isAllDay &&
+        event.endDate.difference(event.startDate).inHours > 23) {
+      return true;
+    }
+    return event.isAllDay;
+  }
 
   @override
   Color getColor(int index) => Colors.blue; // Remplacé par appointmentBuilder

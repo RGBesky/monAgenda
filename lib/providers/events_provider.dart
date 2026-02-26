@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
+import '../core/models/notion_database_model.dart';
+import '../core/constants/app_constants.dart';
 
 /// Plage de dates pour le chargement des événements.
 class DateRange {
@@ -28,18 +30,46 @@ final displayedDateRangeProvider = StateProvider<DateRange>((ref) {
 /// Provider de la date sélectionnée.
 final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 
-/// Provider des événements pour la plage affichée.
-final eventsInRangeProvider = FutureProvider<List<EventModel>>((ref) async {
-  final range = ref.watch(displayedDateRangeProvider);
-  return DatabaseHelper.instance.getEventsByDateRange(range.start, range.end);
+/// Sources masquées (calendarId des BDD Notion / ICS désactivées).
+/// Set<String> contenant les effectiveSourceId des BDD à masquer.
+final hiddenSourcesProvider = StateProvider<Set<String>>((ref) => {});
+
+/// Provider des bases de données Notion.
+final notionDatabasesProvider =
+    FutureProvider<List<NotionDatabaseModel>>((ref) async {
+  return DatabaseHelper.instance.getNotionDatabases();
 });
 
-/// Provider des événements pour un jour donné.
+/// Provider des événements pour la plage affichée (avec filtrage sources).
+final eventsInRangeProvider = FutureProvider<List<EventModel>>((ref) async {
+  final range = ref.watch(displayedDateRangeProvider);
+  final hidden = ref.watch(hiddenSourcesProvider);
+  final events = await DatabaseHelper.instance
+      .getEventsByDateRange(range.start, range.end);
+  if (hidden.isEmpty) return events;
+  return events.where((e) {
+    // Pour les événements Notion, filtrer par calendarId (= effectiveSourceId)
+    if (e.source == AppConstants.sourceNotion && e.calendarId != null) {
+      return !hidden.contains(e.calendarId);
+    }
+    return true;
+  }).toList();
+});
+
+/// Provider des événements pour un jour donné (avec filtrage sources).
 final eventsForDayProvider =
     FutureProvider.family<List<EventModel>, DateTime>((ref, date) async {
   final start = DateTime(date.year, date.month, date.day);
   final end = DateTime(date.year, date.month, date.day, 23, 59, 59);
-  return DatabaseHelper.instance.getEventsByDateRange(start, end);
+  final hidden = ref.watch(hiddenSourcesProvider);
+  final events = await DatabaseHelper.instance.getEventsByDateRange(start, end);
+  if (hidden.isEmpty) return events;
+  return events.where((e) {
+    if (e.source == AppConstants.sourceNotion && e.calendarId != null) {
+      return !hidden.contains(e.calendarId);
+    }
+    return true;
+  }).toList();
 });
 
 class EventsNotifier extends AsyncNotifier<List<EventModel>> {

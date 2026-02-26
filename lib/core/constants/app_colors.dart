@@ -1,8 +1,41 @@
 import 'package:flutter/material.dart';
 
-/// Palette vivante Apple Calendar / TeamUp — couleurs vives, lisibles, joyeuses.
+/// Palette "Stabilo Boss" — highlighters doux et vibrants pour les tags/catégories.
+/// Inspiré du design system "Organic & Unified".
 class AppColors {
-  // ── Palette vivante (Apple Calendar) ──────────────────────
+  // ── Palette Stabilo Boss v2 (Tags & Catégories) ───────────
+  // Teintes redistribuées tous les ~37° pour un contraste optimal
+  static const Color stabiloBeige =
+      Color(0xFFE6D2A8); // 40° Sable chaud – Admin / Autre
+  static const Color stabiloLilac =
+      Color(0xFFCCA0DC); // 285° Orchidée – Famille
+  static const Color stabiloBlue =
+      Color(0xFF8ABBE6); // 212° Ciel d'été – Travail
+  static const Color stabiloMint =
+      Color(0xFF82D2CC); // 172° Menthe glacée – Sport
+  static const Color stabiloGreen =
+      Color(0xFF9CD8A8); // 130° Sauge fraîche – Santé
+  static const Color stabiloLime = Color(0xFFC2DC8C); // 82° Tilleul – Projets
+  static const Color stabiloYellow =
+      Color(0xFFEAE08C); // 55° Citron doux – Loisirs
+  static const Color stabiloOrange =
+      Color(0xFFFFBD98); // 22° Pêche douce – Important
+  static const Color stabiloPink =
+      Color(0xFFF2A5B8); // 350° Rose poudré – Urgent
+
+  // ── Aliases catégories (Stabilo) ──────────────────────────
+  static const Color categoryWork = stabiloBlue;
+  static const Color categoryPersonal = stabiloGreen;
+  static const Color categoryHealth = stabiloGreen;
+  static const Color categoryFamily = stabiloLilac;
+  static const Color categorySport = stabiloMint;
+  static const Color categorySocial = stabiloPink;
+  static const Color categoryTraining = stabiloYellow;
+  static const Color categoryAdmin = stabiloBeige;
+  static const Color categoryProjects = stabiloLime;
+  static const Color categoryLeisure = stabiloYellow;
+
+  // Palette vivante conservée pour les blocs calendrier (SfCalendar)
   static const Color categoryRed = Color(0xFFFF3B30);
   static const Color categoryOrange = Color(0xFFFF9500);
   static const Color categoryYellow = Color(0xFFFFCC00);
@@ -16,21 +49,17 @@ class AppColors {
   static const Color categoryBrown = Color(0xFFA2845E);
   static const Color categoryGray = Color(0xFF8E8E93);
 
-  // Aliases sémantiques (pour compat)
-  static const Color categoryWork = categoryBlue;
-  static const Color categoryPersonal = categoryGreen;
-  static const Color categoryHealth = categoryRed;
-  static const Color categoryFamily = categoryOrange;
-  static const Color categorySport = categoryTeal;
-  static const Color categorySocial = categoryPurple;
-  static const Color categoryTraining = categoryYellow;
-  static const Color categoryAdmin = categoryGray;
+  // ── Priorités (bordure gauche carte événement) ────────────
+  static const Color priorityUrgent = stabiloPink; // Rose vif
+  static const Color priorityHigh = stabiloOrange; // Orange
+  static const Color priorityNormal = stabiloBlue; // Bleu doux
+  static const Color priorityLow = stabiloMint; // Vert menthe
 
-  // ── Priorités ─────────────────────────────────────────────
-  static const Color priorityUrgent = Color(0xFFFF3B30);
-  static const Color priorityHigh = Color(0xFFFF9500);
-  static const Color priorityNormal = Color(0xFF34C759);
-  static const Color priorityLow = Color(0xFF8E8E93);
+  // Priorités vives pour les blocs calendrier
+  static const Color priorityUrgentVivid = Color(0xFFFF3B30);
+  static const Color priorityHighVivid = Color(0xFFFF9500);
+  static const Color priorityNormalVivid = Color(0xFF34C759);
+  static const Color priorityLowVivid = Color(0xFF8E8E93);
 
   // ── Sources ───────────────────────────────────────────────
   static const Color sourceInfomaniak = Color(0xFF0098FF);
@@ -65,24 +94,50 @@ class AppColors {
   static const Color darkTextSecondary = Color(0xFF9B9A97);
   static const Color darkTextTertiary = Color(0xFF6B6B6B);
 
-  // ── Mapping couleurs Notion → palette vivante ─────────────
+  // ── Mapping couleurs Notion → palette Stabilo ────────────
   static const Map<String, Color> notionColorMap = {
-    'default': categoryBlue,
-    'gray': categoryGray,
-    'brown': categoryBrown,
-    'orange': categoryOrange,
-    'yellow': categoryYellow,
-    'green': categoryGreen,
-    'blue': categoryBlue,
-    'purple': categoryPurple,
-    'pink': categoryPink,
-    'red': categoryRed,
-    'light gray': Color(0xFFC7C7CC),
+    'default': stabiloBlue,
+    'gray': stabiloBeige,
+    'brown': stabiloBeige,
+    'orange': stabiloOrange,
+    'yellow': stabiloYellow,
+    'green': stabiloGreen,
+    'blue': stabiloBlue,
+    'purple': stabiloLilac,
+    'pink': stabiloPink,
+    'red': stabiloPink,
+    'light gray': Color(0xFFE4E4E4),
   };
 
-  /// Convertit un nom de couleur Notion en Color vivante.
+  /// Convertit un nom de couleur Notion en couleur Stabilo.
   static Color fromNotionColor(String notionColor) {
-    return notionColorMap[notionColor.toLowerCase()] ?? categoryBlue;
+    return notionColorMap[notionColor.toLowerCase()] ?? stabiloBlue;
+  }
+
+  /// Couleur Stabilo pour un nom de tag.
+  static Color stabiloForTag(String tagName) {
+    final name = tagName.toLowerCase();
+    if (name.contains('travail') ||
+        name.contains('work') ||
+        name.contains('pro')) return stabiloBlue;
+    if (name.contains('famille') || name.contains('family'))
+      return stabiloLilac;
+    if (name.contains('sport')) return stabiloMint;
+    if (name.contains('santé') || name.contains('health')) return stabiloGreen;
+    if (name.contains('loisir') || name.contains('perso')) return stabiloYellow;
+    if (name.contains('projet') || name.contains('dev')) return stabiloLime;
+    if (name.contains('urgent')) return stabiloPink;
+    if (name.contains('important')) return stabiloOrange;
+    if (name.contains('admin')) return stabiloBeige;
+    return stabiloBlue;
+  }
+
+  /// Texte foncé sur fond Stabilo (les couleurs Stabilo sont claires).
+  static Color textOnStabilo(Color stabilo) {
+    final luminance = stabilo.computeLuminance();
+    return luminance > 0.3
+        ? const Color(0xFF37352F) // Texte sombre
+        : const Color(0xFF37352F); // Stabilo toujours clair => texte sombre
   }
 
   /// Fond pastel Apple Calendar — doux mais coloré.

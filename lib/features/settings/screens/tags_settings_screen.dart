@@ -1,10 +1,52 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/tag_model.dart';
 import '../../../providers/tags_provider.dart';
+
+/// Palette organisée en 5 rangées de 6 — couleurs vives, modernes, lisibles.
+const List<Color> _paletteColors = [
+  // ─ Row 1 : Rouges → Violets
+  Color(0xFFFF3B30), // Rouge vif
+  Color(0xFFFF6B6B), // Corail
+  Color(0xFFE84393), // Rose fuchsia
+  Color(0xFFAF52DE), // Violet
+  Color(0xFF6C5CE7), // Indigo
+  Color(0xFF5856D6), // Bleu indigo
+
+  // ─ Row 2 : Bleus → Turquoises
+  Color(0xFF007AFF), // Bleu Apple
+  Color(0xFF0984E3), // Bleu océan
+  Color(0xFF00B4D8), // Cyan
+  Color(0xFF00C7BE), // Turquoise
+  Color(0xFF30B0C7), // Sarcelle
+  Color(0xFF0077B6), // Bleu marine
+
+  // ─ Row 3 : Verts
+  Color(0xFF34C759), // Vert Apple
+  Color(0xFF00B894), // Émeraude
+  Color(0xFF2ECC71), // Vert prairie
+  Color(0xFF55A630), // Vert olive
+  Color(0xFF8AC926), // Lime
+  Color(0xFF7CB342), // Vert sauge
+
+  // ─ Row 4 : Jaunes → Oranges
+  Color(0xFFFFCC00), // Jaune soleil
+  Color(0xFFFFC43D), // Ambre
+  Color(0xFFFF9500), // Orange Apple
+  Color(0xFFFF7043), // Tangerine
+  Color(0xFFE17055), // Terre cuite
+  Color(0xFFA2845E), // Marron chaud
+
+  // ─ Row 5 : Neutres + Pastels
+  Color(0xFF8E8E93), // Gris Apple
+  Color(0xFFB0BEC5), // Gris bleuté
+  Color(0xFF636E72), // Ardoise
+  Color(0xFF2D3436), // Charbon
+  Color(0xFF8ABBE6), // Pastel bleu
+  Color(0xFFF2A5B8), // Pastel rose
+];
 
 class TagsSettingsScreen extends ConsumerWidget {
   const TagsSettingsScreen({super.key});
@@ -198,27 +240,83 @@ class TagsSettingsScreen extends ConsumerWidget {
                     onTap: () async {
                       await showDialog(
                         context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Choisir une couleur'),
-                          content: SingleChildScrollView(
-                            child: BlockPicker(
-                              pickerColor: currentColor,
-                              onColorChanged: (c) {
-                                setDialogState(() {
-                                  currentColor = c;
-                                  colorHex =
-                                      '#${c.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
-                                });
-                              },
+                        builder: (_) {
+                          Color tempColor = currentColor;
+                          return StatefulBuilder(
+                            builder: (ctx, setPickerState) => AlertDialog(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              title: const Text('Choisir une couleur'),
+                              content: SizedBox(
+                                width: 280,
+                                child: Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: _paletteColors.map((c) {
+                                    final isSelected =
+                                        c.toARGB32() == tempColor.toARGB32();
+                                    return GestureDetector(
+                                      onTap: () {
+                                        setPickerState(() => tempColor = c);
+                                      },
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 150),
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: c,
+                                          shape: BoxShape.circle,
+                                          border: isSelected
+                                              ? Border.all(
+                                                  color: Colors.white,
+                                                  width: 3,
+                                                )
+                                              : null,
+                                          boxShadow: isSelected
+                                              ? [
+                                                  BoxShadow(
+                                                    color: c.withValues(
+                                                        alpha: 0.5),
+                                                    blurRadius: 8,
+                                                    spreadRadius: 1,
+                                                  ),
+                                                ]
+                                              : null,
+                                        ),
+                                        child: isSelected
+                                            ? const Icon(
+                                                Icons.check_rounded,
+                                                color: Colors.white,
+                                                size: 20,
+                                              )
+                                            : null,
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Annuler'),
+                                ),
+                                FilledButton(
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      currentColor = tempColor;
+                                      colorHex =
+                                          '#${tempColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+                                    });
+                                    Navigator.pop(ctx);
+                                  },
+                                  child: const Text('OK'),
+                                ),
+                              ],
                             ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       );
                     },
                     child: Container(

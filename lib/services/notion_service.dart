@@ -161,7 +161,8 @@ class NotionService {
     await _dio.patch('/pages/$pageId', data: {'archived': true});
   }
 
-  /// Extrait les options de catégorie depuis le schéma d'une BDD Notion.
+  /// Extrait les options de catégorie, priorité et statut depuis le schéma
+  /// d'une BDD Notion.
   /// Retourne les TagModels pour les options qui n'existent pas encore localement.
   List<TagModel> extractMissingCategoryTags({
     required Map<String, dynamic> schema,
@@ -169,62 +170,60 @@ class NotionService {
     required List<TagModel> allTags,
   }) {
     final missingTags = <TagModel>[];
-    final propName = dbModel.categoryProperty;
-    if (propName == null) return missingTags;
-
     final props = schema['properties'] as Map<String, dynamic>? ?? {};
-    final prop = props[propName] as Map<String, dynamic>?;
-    if (prop == null) return missingTags;
 
-    final type = prop['type'] as String?;
-    List<Map<String, dynamic>> options = [];
+    // ── Helper : extraire les options d'une propriété Notion ──
+    List<Map<String, dynamic>> extractOptions(String? propName) {
+      if (propName == null) return [];
+      final prop = props[propName] as Map<String, dynamic>?;
+      if (prop == null) return [];
+      final type = prop['type'] as String?;
+      List<Map<String, dynamic>> options = [];
 
-    if (type == 'multi_select') {
-      final ms = prop['multi_select'] as Map<String, dynamic>?;
-      options = (ms?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    } else if (type == 'select') {
-      final sel = prop['select'] as Map<String, dynamic>?;
-      options = (sel?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    } else if (type == 'status') {
-      final st = prop['status'] as Map<String, dynamic>?;
-      final groups =
-          (st?['groups'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      for (final g in groups) {
-        final groupOptions = (g['option_ids'] as List?)?.cast<String>() ?? [];
-        // Status options are flat in the 'options' list
-        final statusOptions =
-            (st?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-        for (final so in statusOptions) {
-          if (!options.any((o) => o['id'] == so['id'])) {
-            options.add(so);
-          }
-        }
-        if (groupOptions.isNotEmpty) break; // just to trigger reading options
-      }
-      // Fallback: read options directly
-      if (options.isEmpty) {
+      if (type == 'multi_select') {
+        final ms = prop['multi_select'] as Map<String, dynamic>?;
+        options = (ms?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      } else if (type == 'select') {
+        final sel = prop['select'] as Map<String, dynamic>?;
+        options =
+            (sel?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      } else if (type == 'status') {
+        final st = prop['status'] as Map<String, dynamic>?;
         options = (st?['options'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       }
+      return options;
     }
 
-    final existingCount = allTags.where((t) => t.isCategory).length;
+    // ── Helper : ajouter les tags manquants pour un type donné ──
+    void addMissing(String? propName, String tagType) {
+      final options = extractOptions(propName);
+      final existingCount = allTags.where((t) => t.type == tagType).length;
 
-    for (int i = 0; i < options.length; i++) {
-      final name = options[i]['name'] as String?;
-      final color = options[i]['color'] as String? ?? 'default';
-      if (name == null || name.isEmpty) continue;
+      for (int i = 0; i < options.length; i++) {
+        final name = options[i]['name'] as String?;
+        final color = options[i]['color'] as String? ?? 'default';
+        if (name == null || name.isEmpty) continue;
 
-      final exists = allTags.any((t) => t.isCategory && t.name == name);
-      if (!exists) {
-        missingTags.add(TagModel(
-          type: AppConstants.tagTypeCategory,
-          name: name,
-          colorHex: AppColors.toHex(AppColors.fromNotionColor(color)),
-          notionMapping: name,
-          sortOrder: existingCount + i,
-        ));
+        final exists = allTags.any((t) => t.type == tagType && t.name == name);
+        // Vérifier aussi dans missingTags déjà ajoutés
+        final alreadyAdded =
+            missingTags.any((t) => t.type == tagType && t.name == name);
+        if (!exists && !alreadyAdded) {
+          missingTags.add(TagModel(
+            type: tagType,
+            name: name,
+            colorHex: AppColors.toHex(AppColors.fromNotionColor(color)),
+            notionMapping: name,
+            sortOrder: existingCount + i,
+          ));
+        }
       }
     }
+
+    // ── Créer les tags manquants pour chaque mapping ──
+    addMissing(dbModel.categoryProperty, AppConstants.tagTypeCategory);
+    addMissing(dbModel.priorityProperty, AppConstants.tagTypePriority);
+    addMissing(dbModel.statusProperty, AppConstants.tagTypeStatus);
 
     return missingTags;
   }
@@ -325,13 +324,26 @@ class NotionService {
         }
       }
 
-      // Priorité
+      // Priorité — support select, multi_select, status
       if (dbModel.priorityProperty != null) {
         final priProp = props[dbModel.priorityProperty];
         if (priProp != null) {
-          final selected = priProp['select'] as Map<String, dynamic>?;
-          if (selected != null) {
-            final name = selected['name'] as String?;
+          final priType = priProp['type'] as String?;
+          List<Map<String, dynamic>> priOptions = [];
+
+          if (priType == 'select') {
+            final sel = priProp['select'] as Map<String, dynamic>?;
+            if (sel != null) priOptions = [sel];
+          } else if (priType == 'multi_select') {
+            priOptions = ((priProp['multi_select'] as List?) ?? [])
+                .cast<Map<String, dynamic>>();
+          } else if (priType == 'status') {
+            final st = priProp['status'] as Map<String, dynamic>?;
+            if (st != null) priOptions = [st];
+          }
+
+          for (final opt in priOptions) {
+            final name = opt['name'] as String?;
             if (name != null) {
               final tag = allTags.firstWhereOrNull(
                 (t) => t.isPriority && t.name == name,
@@ -384,7 +396,7 @@ class NotionService {
         }
       }
 
-      // 5. État d'avancement
+      // 5. État d'avancement — mapper vers un tag de statut
       String? statusValue;
       if (dbModel.statusProperty != null) {
         final statusProp = props[dbModel.statusProperty];
@@ -400,8 +412,20 @@ class NotionService {
             final rt = _extractRichText(statusProp);
             if (rt.isNotEmpty) statusValue = rt;
           }
-          if (statusValue != null && statusValue.isNotEmpty) {
-            descParts.add('📊 État : $statusValue');
+        }
+      }
+
+      // Mapper le statut Notion vers un tag de statut local
+      if (statusValue != null && statusValue.isNotEmpty) {
+        final statusTags =
+            allTags.where((t) => t.type == AppConstants.tagTypeStatus).toList();
+        final matchedStatus = statusTags
+            .where((t) => t.name.toLowerCase() == statusValue!.toLowerCase())
+            .firstOrNull;
+        if (matchedStatus != null && matchedStatus.id != null) {
+          if (!matchedTags.any((t) => t.id == matchedStatus.id)) {
+            matchedTags.add(matchedStatus);
+            tagIdsList.add(matchedStatus.id!);
           }
         }
       }
@@ -418,6 +442,7 @@ class NotionService {
       return EventModel(
         remoteId: id,
         source: AppConstants.sourceNotion,
+        calendarId: dbModel.effectiveSourceId,
         type: type,
         title: title,
         startDate: startDate,
@@ -552,11 +577,15 @@ class NotionService {
       };
     }
 
-    // État d'avancement
-    if (dbModel.statusProperty != null && event.status != null) {
-      properties[dbModel.statusProperty!] = {
-        'status': {'name': event.status!},
-      };
+    // État d'avancement — pousser depuis statusTag si disponible
+    if (dbModel.statusProperty != null) {
+      final stTag = event.statusTag;
+      final stName = stTag?.name ?? event.status;
+      if (stName != null) {
+        properties[dbModel.statusProperty!] = {
+          'status': {'name': stName},
+        };
+      }
     }
 
     return properties;
