@@ -92,4 +92,8 @@ class AppConstants {
   // Premier jour de la semaine
   static const String firstDayMonday = 'monday';
   static const String firstDaySunday = 'sunday';
+
+  // Tri des événements
+  static const String sortChronological = 'chronological';
+  static const String sortByCalendar = 'by_calendar';
 }

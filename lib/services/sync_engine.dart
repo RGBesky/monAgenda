@@ -158,8 +158,6 @@ class SyncEngine {
     );
 
     final allTags = await _db.getAllTags();
-    int parsed = 0;
-    int inserted = 0;
 
     for (final raw in rawEvents) {
       final ical = raw['ical'] as String;
@@ -173,9 +171,7 @@ class SyncEngine {
       );
 
       if (event != null) {
-        parsed++;
         await _upsertEvent(event);
-        inserted++;
       }
     }
 
@@ -323,6 +319,19 @@ class SyncEngine {
           id: existing.id,
           syncedAt: DateTime.now(),
         ));
+      } else if (existing.id != null) {
+        // Toujours rafraîchir les tags même si le contenu n'a pas changé
+        // (les tags dépendent du mapping courant, pas des données de l'event)
+        await _db.updateEventTags(existing.id!, event.tagIds);
+
+        // Backfill calendar_id si vide (events créés avant ce champ)
+        if ((existing.calendarId == null || existing.calendarId!.isEmpty) &&
+            event.calendarId != null &&
+            event.calendarId!.isNotEmpty) {
+          await _db.updateEvent(existing.copyWith(
+            calendarId: event.calendarId,
+          ));
+        }
       }
     }
   }

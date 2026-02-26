@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../constants/app_constants.dart';
@@ -255,6 +257,18 @@ class DatabaseHelper {
         'tag_id': tagId,
       });
     }
+  }
+
+  /// Met à jour les tags d'un événement + la colonne JSON tag_ids.
+  Future<void> updateEventTags(int eventId, List<int> tagIds) async {
+    await _updateEventTags(eventId, tagIds);
+    final db = await database;
+    await db.update(
+      AppConstants.tableEvents,
+      {'tag_ids': jsonEncode(tagIds)},
+      where: 'id = ?',
+      whereArgs: [eventId],
+    );
   }
 
   Future<void> deleteEvent(int id) async {

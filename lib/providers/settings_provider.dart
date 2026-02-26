@@ -28,6 +28,9 @@ class AppSettings {
   final String weatherCity;
   final double weatherLatitude;
   final double weatherLongitude;
+  // Tri
+  final String eventSortMode;
+  final List<String> calendarOrder;
 
   const AppSettings({
     this.infomaniakUsername,
@@ -49,6 +52,8 @@ class AppSettings {
     this.weatherCity = 'Genève',
     this.weatherLatitude = 46.2044,
     this.weatherLongitude = 6.1432,
+    this.eventSortMode = AppConstants.sortChronological,
+    this.calendarOrder = const [],
   });
 
   AppSettings copyWith({
@@ -71,6 +76,8 @@ class AppSettings {
     String? weatherCity,
     double? weatherLatitude,
     double? weatherLongitude,
+    String? eventSortMode,
+    List<String>? calendarOrder,
   }) {
     return AppSettings(
       infomaniakUsername: infomaniakUsername ?? this.infomaniakUsername,
@@ -96,6 +103,8 @@ class AppSettings {
       weatherCity: weatherCity ?? this.weatherCity,
       weatherLatitude: weatherLatitude ?? this.weatherLatitude,
       weatherLongitude: weatherLongitude ?? this.weatherLongitude,
+      eventSortMode: eventSortMode ?? this.eventSortMode,
+      calendarOrder: calendarOrder ?? this.calendarOrder,
     );
   }
 
@@ -134,6 +143,8 @@ class AppSettings {
       'weather_city': weatherCity,
       'weather_lat': weatherLatitude,
       'weather_lon': weatherLongitude,
+      'event_sort': eventSortMode,
+      'cal_order': calendarOrder,
     };
     // Ajouter seulement les valeurs non-null
     if (infomaniakUsername != null) map['ik_user'] = infomaniakUsername;
@@ -181,6 +192,9 @@ class AppSettings {
       weatherCity: json['weather_city'] as String? ?? 'Genève',
       weatherLatitude: (json['weather_lat'] as num?)?.toDouble() ?? 46.2044,
       weatherLongitude: (json['weather_lon'] as num?)?.toDouble() ?? 6.1432,
+      eventSortMode: json['event_sort'] as String? ??
+          AppConstants.sortChronological,
+      calendarOrder: (json['cal_order'] as List?)?.cast<String>() ?? [],
       kDriveId: json['kdrive'] as String?,
     );
   }
@@ -235,7 +249,20 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       weatherCity: prefs.getString('weather_city') ?? 'Genève',
       weatherLatitude: prefs.getDouble('weather_latitude') ?? 46.2044,
       weatherLongitude: prefs.getDouble('weather_longitude') ?? 6.1432,
+      eventSortMode: prefs.getString('event_sort_mode') ??
+          AppConstants.sortChronological,
+      calendarOrder: _decodeCalendarOrder(
+          prefs.getString('calendar_order')),
     );
+  }
+
+  static List<String> _decodeCalendarOrder(String? json) {
+    if (json == null || json.isEmpty) return [];
+    try {
+      return (jsonDecode(json) as List).cast<String>();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<void> updateInfomaniakCredentials({
@@ -310,6 +337,17 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await updatePreference('first_day', day);
   }
 
+  Future<void> setEventSortMode(String mode) async {
+    await updatePreference('event_sort_mode', mode);
+  }
+
+  Future<void> setCalendarOrder(List<String> order) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('calendar_order', jsonEncode(order));
+    final current = state.valueOrNull ?? const AppSettings();
+    state = AsyncData(current.copyWith(calendarOrder: order));
+  }
+
   Future<void> updateWeatherLocation({
     required String city,
     required double latitude,
@@ -368,6 +406,9 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setString('weather_city', imported.weatherCity);
     await prefs.setDouble('weather_latitude', imported.weatherLatitude);
     await prefs.setDouble('weather_longitude', imported.weatherLongitude);
+    await prefs.setString('event_sort_mode', imported.eventSortMode);
+    await prefs.setString(
+        'calendar_order', jsonEncode(imported.calendarOrder));
     if (imported.kDriveId != null) {
       await prefs.setString('kdrive_id', imported.kDriveId!);
     }

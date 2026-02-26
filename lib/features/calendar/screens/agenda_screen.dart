@@ -4,7 +4,9 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/models/event_model.dart';
+import '../../../core/models/notion_database_model.dart';
 import '../../../core/models/weather_model.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../providers/events_provider.dart';
@@ -194,6 +196,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         ],
       ),
       actions: [
+        // Bouton filtre
+        _buildFilterButton(context),
         // Bouton recherche
         IconButton(
           icon: HugeIcon(
@@ -249,6 +253,187 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     );
   }
 
+  // ── Filtre des calendriers ──────────────────────────────────────────
+
+  Widget _buildFilterButton(BuildContext context) {
+    final hidden = ref.watch(hiddenSourcesProvider);
+    final notionDbsAsync = ref.watch(notionDatabasesProvider);
+
+    return notionDbsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (dbs) => IconButton(
+        icon: HugeIcon(
+          icon: hidden.isNotEmpty
+              ? HugeIcons.strokeRoundedFilterHorizontal
+              : HugeIcons.strokeRoundedFilter,
+          color: hidden.isNotEmpty
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurface,
+          size: 22,
+        ),
+        tooltip: 'Filtrer les calendriers',
+        onPressed: () => _showFilterPanel(context, dbs, hidden),
+      ),
+    );
+  }
+
+  void _showFilterPanel(
+    BuildContext context,
+    List<NotionDatabaseModel> dbs,
+    Set<String> hidden,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedFilter,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('Calendriers'),
+                ],
+              ),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Infomaniak ──
+                    _buildSourceRow(
+                      icon: HugeIcons.strokeRoundedCloud,
+                      color: AppColors.sourceInfomaniak,
+                      label: 'Infomaniak',
+                      isVisible: true,
+                      enabled: false,
+                      onChanged: null,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 4),
+                    // ── Notion databases ──
+                    ...dbs.map((db) {
+                      final sourceId = db.effectiveSourceId;
+                      final isVisible = !hidden.contains(sourceId);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _buildSourceRow(
+                          icon: HugeIcons.strokeRoundedDatabase,
+                          color: AppColors.sourceNotion,
+                          label: db.name,
+                          isVisible: isVisible,
+                          enabled: true,
+                          onChanged: (visible) {
+                            final newHidden = Set<String>.from(
+                                ref.read(hiddenSourcesProvider));
+                            if (visible) {
+                              newHidden.remove(sourceId);
+                            } else {
+                              newHidden.add(sourceId);
+                            }
+                            ref.read(hiddenSourcesProvider.notifier).state =
+                                newHidden;
+                            setDialogState(() {});
+                          },
+                          isDark: isDark,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              actions: [
+                if (hidden.isNotEmpty)
+                  TextButton(
+                    onPressed: () {
+                      ref.read(hiddenSourcesProvider.notifier).state = {};
+                      setDialogState(() {});
+                    },
+                    child: const Text('Tout afficher'),
+                  ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Fermer'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSourceRow({
+    required List<List<dynamic>> icon,
+    required Color color,
+    required String label,
+    required bool isVisible,
+    required bool enabled,
+    required ValueChanged<bool>? onChanged,
+    required bool isDark,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap:
+            enabled && onChanged != null ? () => onChanged(!isVisible) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: isVisible ? color : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: color,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              HugeIcon(icon: icon, color: color, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isVisible
+                        ? (isDark ? AppColors.darkText : AppColors.lightText)
+                        : (isDark
+                            ? AppColors.darkTextTertiary
+                            : AppColors.lightTextTertiary),
+                    decoration: isVisible ? null : TextDecoration.lineThrough,
+                  ),
+                ),
+              ),
+              Switch(
+                value: isVisible,
+                onChanged: enabled ? onChanged : null,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Regroupe les événements par jour sur une fenêtre de 7 jours.
   /// Les événements multi-jours apparaissent sur chaque jour qu'ils couvrent.
   Map<DateTime, List<EventModel>> _groupEventsByDay(List<EventModel> events) {
@@ -280,14 +465,80 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       }
     }
     // Trier chaque jour : toute la journée en premier, puis par heure
+    // ou par calendrier source si l'utilisateur a choisi ce tri
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final sortMode =
+        settings?.eventSortMode ?? AppConstants.sortChronological;
+    final calendarOrder = settings?.calendarOrder ?? [];
+
     for (final key in map.keys) {
       map[key]!.sort((a, b) {
+        // Toujours : all-day en premier
         if (a.isAllDay && !b.isAllDay) return -1;
         if (!a.isAllDay && b.isAllDay) return 1;
+
+        // Si tri par calendrier activé : calendrier d'abord, puis heure
+        if (sortMode == AppConstants.sortByCalendar) {
+          final calDiff = _calendarIndex(a, calendarOrder) -
+              _calendarIndex(b, calendarOrder);
+          if (calDiff != 0) return calDiff;
+        }
+
+        // Puis chronologique (heure)
         return a.startDate.compareTo(b.startDate);
       });
     }
     return map;
+  }
+
+  /// Calcule l'index de tri d'un événement dans l'ordre des calendriers.
+  /// Si l'événement n'est pas dans la liste, fallback sur l'ordre par source.
+  static int _calendarIndex(EventModel event, List<String> order) {
+    if (order.isNotEmpty) {
+      // Pour Infomaniak : un seul calendrier → clé "infomaniak:"
+      if (event.source == AppConstants.sourceInfomaniak) {
+        final idx = order.indexOf('infomaniak:');
+        if (idx != -1) return idx;
+      }
+      // Pour Notion : clé "notion:{effectiveSourceId}" via calendarId
+      // calendarId contient le notion_database_id (= effectiveSourceId)
+      if (event.source == AppConstants.sourceNotion) {
+        final cid = event.calendarId ?? '';
+        if (cid.isNotEmpty) {
+          final idx = order.indexOf('notion:$cid');
+          if (idx != -1) return idx;
+        }
+        // Si calendarId vide, chercher par préfixe "notion:"
+        final notionEntries = order.where((k) => k.startsWith('notion:'));
+        if (notionEntries.length == 1) {
+          return order.indexOf(notionEntries.first);
+        }
+      }
+      // Pour ICS : clé "ics:{subscriptionId}"
+      if (event.source == AppConstants.sourceIcs) {
+        final subId = event.icsSubscriptionId ?? '';
+        if (subId.isNotEmpty) {
+          final idx = order.indexOf('ics:$subId');
+          if (idx != -1) return idx;
+        }
+      }
+    }
+    // Fallback par source
+    return 100 + _sourceOrder(event.source);
+  }
+
+  /// Ordre de tri par source : Infomaniak → Notion → ICS → local
+  static int _sourceOrder(String source) {
+    switch (source) {
+      case AppConstants.sourceInfomaniak:
+        return 0;
+      case AppConstants.sourceNotion:
+        return 1;
+      case AppConstants.sourceIcs:
+        return 2;
+      default:
+        return 3;
+    }
   }
 
   List<Widget> _buildDaySliver(

@@ -221,9 +221,22 @@ class NotionService {
     }
 
     // ── Créer les tags manquants pour chaque mapping ──
-    addMissing(dbModel.categoryProperty, AppConstants.tagTypeCategory);
-    addMissing(dbModel.priorityProperty, AppConstants.tagTypePriority);
-    addMissing(dbModel.statusProperty, AppConstants.tagTypeStatus);
+    // Éviter de traiter la même propriété Notion sous plusieurs types
+    final processedProps = <String>{};
+
+    if (dbModel.categoryProperty != null) {
+      processedProps.add(dbModel.categoryProperty!);
+      addMissing(dbModel.categoryProperty, AppConstants.tagTypeCategory);
+    }
+    if (dbModel.priorityProperty != null &&
+        !processedProps.contains(dbModel.priorityProperty)) {
+      processedProps.add(dbModel.priorityProperty!);
+      addMissing(dbModel.priorityProperty, AppConstants.tagTypePriority);
+    }
+    if (dbModel.statusProperty != null &&
+        !processedProps.contains(dbModel.statusProperty)) {
+      addMissing(dbModel.statusProperty, AppConstants.tagTypeStatus);
+    }
 
     return missingTags;
   }
@@ -325,7 +338,9 @@ class NotionService {
       }
 
       // Priorité — support select, multi_select, status
-      if (dbModel.priorityProperty != null) {
+      // Skip si même propriété que catégorie (évite les doublons)
+      if (dbModel.priorityProperty != null &&
+          dbModel.priorityProperty != dbModel.categoryProperty) {
         final priProp = props[dbModel.priorityProperty];
         if (priProp != null) {
           final priType = priProp['type'] as String?;
@@ -397,8 +412,11 @@ class NotionService {
       }
 
       // 5. État d'avancement — mapper vers un tag de statut
+      // Skip si même propriété que catégorie ou priorité
       String? statusValue;
-      if (dbModel.statusProperty != null) {
+      if (dbModel.statusProperty != null &&
+          dbModel.statusProperty != dbModel.categoryProperty &&
+          dbModel.statusProperty != dbModel.priorityProperty) {
         final statusProp = props[dbModel.statusProperty];
         if (statusProp != null) {
           // Notion status peut être 'status', 'select' ou 'rich_text'

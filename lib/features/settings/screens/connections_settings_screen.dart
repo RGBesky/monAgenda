@@ -630,15 +630,50 @@ class _ConnectionsSettingsScreenState
         participantsProperty: participantsProp,
       );
       await DatabaseHelper.instance.updateNotionDatabase(updated);
-      setState(() {});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mappings enregistrés'),
-            backgroundColor: Colors.green,
-          ),
+
+      // ── Auto-générer les tags manquants depuis le schéma Notion ──
+      try {
+        final notion = NotionService();
+        final allTags = await DatabaseHelper.instance.getAllTags();
+        final schema =
+            await notion.getDatabaseSchema(updated.effectiveSourceId);
+        final missingTags = notion.extractMissingCategoryTags(
+          schema: schema,
+          dbModel: updated,
+          allTags: allTags,
         );
+        for (final tag in missingTags) {
+          await DatabaseHelper.instance.insertTag(tag);
+        }
+        if (missingTags.isNotEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Mappings enregistrés — ${missingTags.length} tag(s) créé(s)',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mappings enregistrés'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (_) {
+        // Schema fetch failed — juste confirmer la sauvegarde
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mappings enregistrés'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       }
+      setState(() {});
     }
   }
 
