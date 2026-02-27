@@ -6,7 +6,7 @@ import '../../../core/models/event_model.dart';
 import '../../../core/models/tag_model.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../providers/tags_provider.dart';
-import '../../events/screens/event_detail_screen.dart';
+import '../../events/widgets/event_detail_popup.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -334,12 +334,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       color: bg,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EventDetailScreen(event: event),
-          ),
-        ),
+        onTap: () => openEventDetail(context, event),
         child: IntrinsicHeight(
           child: Row(
             children: [
@@ -428,6 +423,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget _buildTagChip(TagModel tag) {
     final color = AppColors.fromHex(tag.colorHex);
     return Container(
+      constraints: const BoxConstraints(maxWidth: 140),
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -440,6 +436,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -465,12 +463,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ),
           const SizedBox(width: 3),
-          Text(
-            stTag.name,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: statusColor,
+          Flexible(
+            child: Text(
+              stTag.name,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

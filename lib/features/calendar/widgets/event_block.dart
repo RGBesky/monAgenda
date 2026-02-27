@@ -3,6 +3,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/source_logos.dart';
 
 /// Bloc visuel d'un événement dans le calendrier.
 /// Structure :
@@ -14,6 +15,7 @@ class EventBlock extends StatelessWidget {
   final bool isCompact;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final String? notionDbName;
 
   const EventBlock({
     super.key,
@@ -21,6 +23,7 @@ class EventBlock extends StatelessWidget {
     this.isCompact = false,
     this.onTap,
     this.onLongPress,
+    this.notionDbName,
   });
 
   @override
@@ -44,18 +47,18 @@ class EventBlock extends StatelessWidget {
           border: Border(
             left: BorderSide(
               color: priorityColor,
-              width: 4,
+              width: 6,
             ),
           ),
         ),
         child: isCompact
-            ? _buildCompactContent(textColor)
-            : _buildFullContent(textColor),
+            ? _buildCompactContent(textColor, context: context)
+            : _buildFullContent(textColor, context: context),
       ),
     );
   }
 
-  Widget _buildCompactContent(Color textColor) {
+  Widget _buildCompactContent(Color textColor, {BuildContext? context}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       child: Row(
@@ -72,13 +75,13 @@ class EventBlock extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          _buildSourceLogo(),
+          _buildSourceLogo(context: context),
         ],
       ),
     );
   }
 
-  Widget _buildFullContent(Color textColor) {
+  Widget _buildFullContent(Color textColor, {BuildContext? context}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Column(
@@ -99,7 +102,7 @@ class EventBlock extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              _buildSourceLogo(),
+              _buildSourceLogo(context: context),
             ],
           ),
           if (!event.isAllDay) ...[
@@ -115,31 +118,35 @@ class EventBlock extends StatelessWidget {
           ],
           if (event.categoryTags.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Wrap(
-              spacing: 2,
-              children: event.categoryTags
-                  .take(2)
-                  .map(
-                    (tag) => Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: textColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        tag.name,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
+            ClipRect(
+              child: Wrap(
+                spacing: 2,
+                children: event.categoryTags
+                    .take(2)
+                    .map(
+                      (tag) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: textColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          tag.name,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  )
-                  .toList(),
+                    )
+                    .toList(),
+              ),
             ),
           ],
         ],
@@ -147,55 +154,36 @@ class EventBlock extends StatelessWidget {
     );
   }
 
-  Widget _buildSourceLogo() {
+  Widget _buildSourceLogo({BuildContext? context}) {
     if (event.isFromIcs) return const SizedBox.shrink();
 
-    return SizedBox(
+    final logo = SizedBox(
       width: AppConstants.sourceLogoSize,
       height: AppConstants.sourceLogoSize,
-      child:
-          event.isFromInfomaniak ? _buildInfomaniakLogo() : _buildNotionLogo(),
+      child: event.isFromInfomaniak
+          ? _buildInfomaniakLogo()
+          : _buildNotionLogo(context),
     );
+
+    if (notionDbName != null && event.isFromNotion) {
+      return Tooltip(
+        message: notionDbName!,
+        child: logo,
+      );
+    }
+    return logo;
   }
 
   Widget _buildInfomaniakLogo() {
-    // Logo Infomaniak : cercle bleu avec "ik"
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-      ),
-      child: const Center(
-        child: Text(
-          'ik',
-          style: TextStyle(
-            color: Color(0xFF0D6EFD),
-            fontSize: 7,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+    return SourceLogos.infomaniak(size: AppConstants.sourceLogoSize);
   }
 
-  Widget _buildNotionLogo() {
-    // Logo Notion : carré blanc avec "N"
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(2),
-      ),
-      child: const Center(
-        child: Text(
-          'N',
-          style: TextStyle(
-            color: Colors.black87,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+  Widget _buildNotionLogo(BuildContext? context) {
+    final isDark = context != null
+        ? Theme.of(context).brightness == Brightness.dark
+        : false;
+    return SourceLogos.notion(
+        size: AppConstants.sourceLogoSize, isDark: isDark);
   }
 
   Widget _buildTaskBadge(BuildContext context, Color categoryColor) {
@@ -254,6 +242,7 @@ class MultiDayEventBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final priorityColor = _getPriorityColor();
     final categoryColor = _getCategoryColor();
     final textColor =
@@ -293,14 +282,14 @@ class MultiDayEventBar extends StatelessWidget {
                   height: 12,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: isDark ? const Color(0xFF2F3437) : Colors.white,
                       borderRadius: BorderRadius.circular(2),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         'N',
                         style: TextStyle(
-                          color: Colors.black87,
+                          color: isDark ? Colors.white : Colors.black87,
                           fontSize: 7,
                           fontWeight: FontWeight.bold,
                         ),

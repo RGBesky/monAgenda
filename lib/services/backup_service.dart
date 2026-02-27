@@ -11,98 +11,156 @@ import '../core/models/notion_database_model.dart';
 import '../core/models/ics_subscription_model.dart';
 import '../core/models/event_model.dart';
 
-/// Service de sauvegarde/restauration sur kDrive (Infomaniak).
-/// Configuration chiffrée AES-256.
+/// Service de sauvegarde/restauration via lien de dépôt kDrive (Infomaniak).
+/// Configuration chiffrée AES-256. Pas besoin de token OAuth2.
 class BackupService {
   final Dio _dio;
   final DatabaseHelper _db;
-  String? _bearerToken;
-  String? _driveId;
 
   BackupService({required DatabaseHelper db})
       : _db = db,
         _dio = Dio(BaseOptions(
-          baseUrl: AppConstants.kDriveApiBase,
-          connectTimeout: const Duration(seconds: 15),
+          connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 60),
+          sendTimeout: const Duration(seconds: 60),
         ));
 
-  void setCredentials({required String token, required String driveId}) {
-    _bearerToken = token;
-    _driveId = driveId;
-    _dio.options.headers['Authorization'] = 'Bearer $token';
+  // ───────────────────────── Deposit link helpers ──────────────────────────
+
+  /// Extrait l'UUID du lien de dépôt kDrive.
+  /// Accepte :
+  ///   • https://kdrive.infomaniak.com/app/share/{uuid}/files
+  ///   • https://kdrive.infomaniak.com/app/share/{uuid}
+  ///   • Juste l'UUID brut
+  static String? extractShareUuid(String depositLink) {
+    final trimmed = depositLink.trim();
+    if (trimmed.isEmpty) return null;
+
+    // Cas 1 : /app/collaborate/{driveId}/{uuid}
+    final collab = RegExp(r'/collaborate/\d+/([a-zA-Z0-9\-]+)');
+    final collabMatch = collab.firstMatch(trimmed);
+    if (collabMatch != null) return collabMatch.group(1);
+
+    // Cas 2 : /app/share/{uuid}
+    final share = RegExp(r'/share/([a-zA-Z0-9\-]+)');
+    final shareMatch = share.firstMatch(trimmed);
+    if (shareMatch != null) return shareMatch.group(1);
+
+    // Cas 3 : UUID brut (alphanumérique + tirets, ≥ 8 chars)
+    if (RegExp(r'^[a-zA-Z0-9\-]{8,}$').hasMatch(trimmed)) return trimmed;
+
+    return null;
   }
 
-  bool get isConfigured => _bearerToken != null && _driveId != null;
+  // ─────────────────────── Upload via lien de dépôt ────────────────────────
 
-  /// Sauvegarde la configuration sur kDrive.
-  Future<void> backup({required String encryptionPassword}) async {
+  /// Sauvegarde la configuration sur kDrive via lien de dépôt + copie locale.
+  Future<void> backup({
+    required String encryptionPassword,
+    required String depositLink,
+  }) async {
+    final uuid = extractShareUuid(depositLink);
+    if (uuid == null) {
+      throw Exception(
+        'Lien de dépôt invalide. Collez l\'URL depuis kDrive '
+        '(ex: https://kdrive.infomaniak.com/app/share/xxxxx/files)',
+      );
+    }
+
     final config = await _buildBackupConfig();
     final encrypted = _encrypt(jsonEncode(config), encryptionPassword);
 
-    final tempDir = await getTemporaryDirectory();
-    final tempFile = File(
-      '${tempDir.path}/${AppConstants.kDriveBackupFileName}',
-    );
-    await tempFile.writeAsBytes(encrypted);
+    // 1. Sauvegarder localement
+    final localFile = await _localBackupFile();
+    await localFile.parent.create(recursive: true);
+    await localFile.writeAsBytes(encrypted);
 
-    // Créer le dossier si nécessaire
-    await _ensureBackupFolder();
+    // 2. Upload via le lien de dépôt kDrive (pas d'auth nécessaire)
+    FormData makeFormData() => FormData.fromMap({
+          'file': MultipartFile.fromBytes(
+            encrypted,
+            filename: AppConstants.kDriveBackupFileName,
+          ),
+        });
 
-    // Upload via API kDrive
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        tempFile.path,
-        filename: AppConstants.kDriveBackupFileName,
-      ),
-    });
+    final uploadUrl = '${AppConstants.kDriveDepositApiBase}/$uuid/file';
 
-    await _dio.post(
-      '/$_driveId/files/upload',
-      data: formData,
-      queryParameters: {
-        'directory_path': AppConstants.kDriveBackupFolder,
-        'conflict': 'replace',
-      },
-    );
-
-    await tempFile.delete();
+    try {
+      await _dio.post(uploadUrl, data: makeFormData());
+    } on DioException catch (e) {
+      // Si l'endpoint /file ne fonctionne pas, essayer /upload
+      if (e.response?.statusCode == 404) {
+        final altUrl = '${AppConstants.kDriveDepositApiBase}/$uuid/upload';
+        await _dio.post(altUrl, data: makeFormData());
+      } else {
+        rethrow;
+      }
+    }
   }
 
-  /// Restaure la configuration depuis kDrive.
-  Future<bool> restore({required String encryptionPassword}) async {
+  // ──────────────────────── Sauvegarde locale seule ────────────────────────
+
+  /// Sauvegarde uniquement en local (sans kDrive).
+  Future<File> backupLocally({required String encryptionPassword}) async {
+    final config = await _buildBackupConfig();
+    final encrypted = _encrypt(jsonEncode(config), encryptionPassword);
+
+    final localFile = await _localBackupFile();
+    await localFile.parent.create(recursive: true);
+    await localFile.writeAsBytes(encrypted);
+    return localFile;
+  }
+
+  // ──────────────────────────── Restauration ───────────────────────────────
+
+  /// Restaure depuis la sauvegarde locale.
+  Future<bool> restoreFromLocal({required String encryptionPassword}) async {
+    final localFile = await _localBackupFile();
+    if (!await localFile.exists()) return false;
+
+    final bytes = await localFile.readAsBytes();
+    return _restoreFromBytes(bytes, encryptionPassword);
+  }
+
+  /// Restaure depuis un fichier .enc quelconque (file picker).
+  Future<bool> restoreFromFile({
+    required String filePath,
+    required String encryptionPassword,
+  }) async {
+    final file = File(filePath);
+    if (!await file.exists()) return false;
+
+    final bytes = await file.readAsBytes();
+    return _restoreFromBytes(bytes, encryptionPassword);
+  }
+
+  /// Vérifie si une sauvegarde locale existe et retourne sa date.
+  Future<DateTime?> lastLocalBackupDate() async {
+    final file = await _localBackupFile();
+    if (!await file.exists()) return null;
+    return file.lastModified();
+  }
+
+  /// Chemin du fichier de sauvegarde local.
+  Future<File> _localBackupFile() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return File(
+      '${appDir.path}/${AppConstants.kDriveLocalBackupDir}/'
+      '${AppConstants.kDriveBackupFileName}',
+    );
+  }
+
+  Future<bool> _restoreFromBytes(
+    Uint8List bytes,
+    String encryptionPassword,
+  ) async {
     try {
-      // Chercher le fichier de sauvegarde
-      final response = await _dio.get(
-        '/$_driveId/files',
-        queryParameters: {
-          'path':
-              '${AppConstants.kDriveBackupFolder}/${AppConstants.kDriveBackupFileName}',
-        },
-      );
-
-      final data = response.data as Map<String, dynamic>;
-      final fileId = data['data']?['id']?.toString();
-      if (fileId == null) return false;
-
-      // Télécharger
-      final downloadResponse = await _dio.get<List<int>>(
-        '/$_driveId/files/$fileId/download',
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      if (downloadResponse.data == null) return false;
-
-      final decrypted = _decrypt(
-        Uint8List.fromList(downloadResponse.data!),
-        encryptionPassword,
-      );
-
+      final decrypted = _decrypt(bytes, encryptionPassword);
       final config = jsonDecode(decrypted) as Map<String, dynamic>;
       await _restoreFromConfig(config);
       return true;
     } catch (e) {
-      return false;
+      rethrow;
     }
   }
 
@@ -155,20 +213,6 @@ class BackupService {
     for (final subMap in icsSubscriptions) {
       final sub = IcsSubscriptionModel.fromMap(subMap as Map<String, dynamic>);
       await _db.insertIcsSubscription(sub);
-    }
-  }
-
-  Future<void> _ensureBackupFolder() async {
-    try {
-      await _dio.post(
-        '/$_driveId/files/folder',
-        data: {
-          'name': 'unified_calendar',
-          'parent_path': '/',
-        },
-      );
-    } catch (_) {
-      // Dossier probablement déjà existant
     }
   }
 

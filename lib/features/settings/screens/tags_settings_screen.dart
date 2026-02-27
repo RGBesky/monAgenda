@@ -270,7 +270,10 @@ class TagsSettingsScreen extends ConsumerWidget {
                                           shape: BoxShape.circle,
                                           border: isSelected
                                               ? Border.all(
-                                                  color: Colors.white,
+                                                  color:
+                                                      c.computeLuminance() > 0.5
+                                                          ? Colors.black54
+                                                          : Colors.white,
                                                   width: 3,
                                                 )
                                               : null,
@@ -286,9 +289,12 @@ class TagsSettingsScreen extends ConsumerWidget {
                                               : null,
                                         ),
                                         child: isSelected
-                                            ? const Icon(
+                                            ? Icon(
                                                 Icons.check_rounded,
-                                                color: Colors.white,
+                                                color:
+                                                    c.computeLuminance() > 0.5
+                                                        ? Colors.black87
+                                                        : Colors.white,
                                                 size: 20,
                                               )
                                             : null,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:equatable/equatable.dart';
 
 class NotionDatabaseModel extends Equatable {
@@ -10,7 +11,10 @@ class NotionDatabaseModel extends Equatable {
   final String? endDateProperty;
   final String? categoryProperty;
   final String? priorityProperty;
-  final String? descriptionProperty;
+
+  /// Liste de propriétés Notion à concaténer dans la description.
+  /// Rétro-compatible : une seule valeur est possible (migration transparente).
+  final List<String> descriptionProperties;
   final String? participantsProperty;
   final String? statusProperty;
   final String? locationProperty; // Où ?
@@ -29,7 +33,7 @@ class NotionDatabaseModel extends Equatable {
     this.endDateProperty,
     this.categoryProperty,
     this.priorityProperty,
-    this.descriptionProperty,
+    this.descriptionProperties = const [],
     this.participantsProperty,
     this.statusProperty,
     this.locationProperty,
@@ -38,6 +42,10 @@ class NotionDatabaseModel extends Equatable {
     this.isEnabled = true,
     this.lastSyncedAt,
   });
+
+  /// Getter rétro-compatible : renvoie la première propriété ou null.
+  String? get descriptionProperty =>
+      descriptionProperties.isNotEmpty ? descriptionProperties.first : null;
 
   /// L'identifiant effectif pour les opérations API (data_source_id ou fallback notionId).
   String get effectiveSourceId => dataSourceId ?? notionId;
@@ -52,7 +60,7 @@ class NotionDatabaseModel extends Equatable {
     String? endDateProperty,
     String? categoryProperty,
     String? priorityProperty,
-    String? descriptionProperty,
+    List<String>? descriptionProperties,
     String? participantsProperty,
     String? statusProperty,
     String? locationProperty,
@@ -71,7 +79,8 @@ class NotionDatabaseModel extends Equatable {
       endDateProperty: endDateProperty ?? this.endDateProperty,
       categoryProperty: categoryProperty ?? this.categoryProperty,
       priorityProperty: priorityProperty ?? this.priorityProperty,
-      descriptionProperty: descriptionProperty ?? this.descriptionProperty,
+      descriptionProperties:
+          descriptionProperties ?? this.descriptionProperties,
       participantsProperty: participantsProperty ?? this.participantsProperty,
       statusProperty: statusProperty ?? this.statusProperty,
       locationProperty: locationProperty ?? this.locationProperty,
@@ -93,7 +102,10 @@ class NotionDatabaseModel extends Equatable {
       'end_date_property': endDateProperty,
       'category_property': categoryProperty,
       'priority_property': priorityProperty,
-      'description_property': descriptionProperty,
+      // Stocké en JSON array pour multi-select, rétro-compatible
+      'description_property': descriptionProperties.isEmpty
+          ? null
+          : jsonEncode(descriptionProperties),
       'participants_property': participantsProperty,
       'status_property': statusProperty,
       'location_property': locationProperty,
@@ -105,6 +117,18 @@ class NotionDatabaseModel extends Equatable {
   }
 
   factory NotionDatabaseModel.fromMap(Map<String, dynamic> map) {
+    // Rétro-compatibilité : description_property peut être un JSON array
+    // ou une simple string (ancienne version).
+    final rawDesc = map['description_property'] as String?;
+    List<String> descProps = [];
+    if (rawDesc != null && rawDesc.isNotEmpty) {
+      if (rawDesc.startsWith('[')) {
+        descProps = (jsonDecode(rawDesc) as List).cast<String>();
+      } else {
+        descProps = [rawDesc];
+      }
+    }
+
     return NotionDatabaseModel(
       id: map['id'] as int?,
       notionId: map['notion_id'] as String,
@@ -115,7 +139,7 @@ class NotionDatabaseModel extends Equatable {
       endDateProperty: map['end_date_property'] as String?,
       categoryProperty: map['category_property'] as String?,
       priorityProperty: map['priority_property'] as String?,
-      descriptionProperty: map['description_property'] as String?,
+      descriptionProperties: descProps,
       participantsProperty: map['participants_property'] as String?,
       statusProperty: map['status_property'] as String?,
       locationProperty: map['location_property'] as String?,

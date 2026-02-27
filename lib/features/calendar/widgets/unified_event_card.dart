@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/models/tag_model.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/source_logos.dart';
 
 /// La "Unified Event Card" — l'atome de l'application.
 ///
@@ -20,6 +21,7 @@ class UnifiedEventCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final ValueChanged<bool>? onTaskToggle; // Checkbox tâches Notion
   final bool isCompleted;
+  final String? notionDbName; // Nom de la BDD Notion
 
   const UnifiedEventCard({
     super.key,
@@ -28,6 +30,7 @@ class UnifiedEventCard extends StatelessWidget {
     this.onLongPress,
     this.onTaskToggle,
     this.isCompleted = false,
+    this.notionDbName,
   });
 
   // ── Couleur priorité (bordure gauche) ─────────────────────
@@ -84,7 +87,7 @@ class UnifiedEventCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: cardBg,
               border: Border(
-                left: BorderSide(color: priorityColor, width: 4),
+                left: BorderSide(color: priorityColor, width: 6),
                 top: BorderSide(color: borderColor, width: 0.5),
                 right: BorderSide(color: borderColor, width: 0.5),
                 bottom: BorderSide(color: borderColor, width: 0.5),
@@ -175,27 +178,40 @@ class UnifiedEventCard extends StatelessWidget {
   }
 
   Widget _buildSourceIcon(bool isDark) {
-    dynamic icon;
-    final Color color;
-
     if (event.isFromNotion) {
-      icon = HugeIcons.strokeRoundedTask01;
-      color = isDark
-          ? Colors.white.withValues(alpha: 0.7)
-          : const Color(0xFF37352F).withValues(alpha: 0.5);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SourceLogos.notion(size: 16, isDark: isDark),
+          if (notionDbName != null) ...[
+            const SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                notionDbName!,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: isDark
+                      ? const Color(0xFF9B9A97)
+                      : const Color(0xFF37352F).withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      );
     } else if (event.isFromInfomaniak) {
-      icon = HugeIcons.strokeRoundedCalendar03;
-      color = AppColors.sourceInfomaniak.withValues(alpha: 0.8);
+      return SourceLogos.infomaniak(size: 16);
     } else {
-      icon = HugeIcons.strokeRoundedCalendar01;
-      color = AppColors.sourceIcs.withValues(alpha: 0.8);
+      final color = AppColors.sourceIcs.withValues(alpha: 0.8);
+      return HugeIcon(
+        icon: HugeIcons.strokeRoundedCalendar01,
+        color: color,
+        size: 16,
+      );
     }
-
-    return HugeIcon(
-      icon: icon,
-      color: color,
-      size: 16,
-    );
   }
 
   bool _hasStatus() {
@@ -203,17 +219,30 @@ class UnifiedEventCard extends StatelessWidget {
   }
 
   Widget _buildChipsRow(bool isDark, Color subColor) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      children: [
-        // Chips catégories
-        ...event.categoryTags
-            .take(2)
-            .map((tag) => _buildCategoryChip(tag, isDark)),
-        // Chip statut
-        if (_hasStatus()) _buildStatusChipFromTag(event.statusTag!, isDark),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ClipRect(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              // Chips catégories
+              ...event.categoryTags.take(2).map((tag) => ConstrainedBox(
+                    constraints:
+                        BoxConstraints(maxWidth: constraints.maxWidth * 0.45),
+                    child: _buildCategoryChip(tag, isDark),
+                  )),
+              // Chip statut
+              if (_hasStatus())
+                ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxWidth: constraints.maxWidth * 0.45),
+                  child: _buildStatusChipFromTag(event.statusTag!, isDark),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 

@@ -4,13 +4,36 @@ import 'package:hugeicons/hugeicons.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../core/widgets/source_logos.dart';
 import '../../../providers/sync_provider.dart';
 import 'event_form_screen.dart';
+
+import '../../../providers/events_provider.dart';
 
 class EventDetailScreen extends ConsumerWidget {
   final EventModel event;
 
-  const EventDetailScreen({super.key, required this.event});
+  /// Si true, n'affiche pas le Scaffold/AppBar (pour usage dans un Dialog).
+  final bool asDialogBody;
+
+  /// Callback appelé quand l'utilisateur navigue vers l'éditeur.
+  final VoidCallback? onNavigatedToEdit;
+
+  /// Callback pour éditer l'événement en place (dans la popup), au lieu de
+  /// naviguer vers un plein écran.
+  final VoidCallback? onEditInPlace;
+
+  /// Nom de la base Notion (affiché dans le badge source).
+  final String? notionDbName;
+
+  const EventDetailScreen({
+    super.key,
+    required this.event,
+    this.asDialogBody = false,
+    this.onNavigatedToEdit,
+    this.onEditInPlace,
+    this.notionDbName,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,6 +42,150 @@ class EventDetailScreen extends ConsumerWidget {
     final bg = AppColors.pastelBg(accent, isDark: isDark);
     final textColor = AppColors.textOnPastel(accent, isDark: isDark);
     final subColor = textColor.withValues(alpha: 0.7);
+
+    final body = SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header card ─────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border(
+                left: BorderSide(color: accent, width: 6),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        event.title,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                          letterSpacing: -0.3,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildSourceBadge(context, isDark, ref),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _buildDateRow(context, subColor),
+                if (event.statusTag != null) ...[
+                  const SizedBox(height: 10),
+                  _buildStatusBadge(context, isDark),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          if (event.tags.isNotEmpty) ...[
+            _buildTagsSection(context),
+            const SizedBox(height: 20),
+          ],
+
+          if (event.location != null) ...[
+            _buildInfoRow(context,
+                hugeIcon: HugeIcons.strokeRoundedLocation01,
+                label: 'Lieu',
+                text: event.location!,
+                subColor: subColor,
+                textColor: textColor),
+            const SizedBox(height: 14),
+          ],
+
+          if (event.description != null) ...[
+            _buildInfoRow(context,
+                hugeIcon: HugeIcons.strokeRoundedNote01,
+                label: 'Description',
+                text: event.description!,
+                subColor: subColor,
+                textColor: textColor,
+                isMultiline: true),
+            const SizedBox(height: 14),
+          ],
+
+          if (event.participants.isNotEmpty) ...[
+            _buildParticipantsSection(context, subColor, textColor),
+            const SizedBox(height: 14),
+          ],
+
+          if (event.reminderMinutes != null) ...[
+            _buildInfoRow(context,
+                hugeIcon: HugeIcons.strokeRoundedNotification01,
+                label: 'Rappel',
+                text:
+                    '${event.reminderMinutes} minute${event.reminderMinutes! > 1 ? 's' : ''} avant',
+                subColor: subColor,
+                textColor: textColor),
+            const SizedBox(height: 14),
+          ],
+
+          if (event.rrule != null) ...[
+            _buildInfoRow(context,
+                hugeIcon: HugeIcons.strokeRoundedRepeat,
+                label: 'Récurrence',
+                text: _formatRRule(event.rrule!),
+                subColor: subColor,
+                textColor: textColor),
+            const SizedBox(height: 14),
+          ],
+
+          Divider(color: Theme.of(context).colorScheme.outline, height: 32),
+          _buildMetadata(context, subColor),
+
+          // En mode dialog : boutons d'action en bas
+          if (asDialogBody && !event.isFromIcs) ...[
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _confirmDelete(context, ref),
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: Color(0xFFFF3B30)),
+                  label: const Text('Supprimer',
+                      style: TextStyle(color: Color(0xFFFF3B30))),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    if (onEditInPlace != null) {
+                      onEditInPlace!();
+                    } else {
+                      onNavigatedToEdit?.call();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EventFormScreen(event: event),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Modifier'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (asDialogBody) return body;
 
     return Scaffold(
       appBar: AppBar(
@@ -53,118 +220,7 @@ class EventDetailScreen extends ConsumerWidget {
           ],
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header card ─────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border(
-                  left: BorderSide(color: accent, width: 4),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title + source
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          event.title,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: textColor,
-                            letterSpacing: -0.3,
-                            height: 1.25,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      _buildSourceBadge(context, isDark),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Date
-                  _buildDateRow(context, subColor),
-                  // Status
-                  if (event.statusTag != null) ...[
-                    const SizedBox(height: 10),
-                    _buildStatusBadge(context, isDark),
-                  ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Tags ────────────────────────────────────────
-            if (event.tags.isNotEmpty) ...[
-              _buildTagsSection(context),
-              const SizedBox(height: 20),
-            ],
-
-            // ── Details ─────────────────────────────────────
-            if (event.location != null) ...[
-              _buildInfoRow(context,
-                  hugeIcon: HugeIcons.strokeRoundedLocation01,
-                  label: 'Lieu',
-                  text: event.location!,
-                  subColor: subColor,
-                  textColor: textColor),
-              const SizedBox(height: 14),
-            ],
-
-            if (event.description != null) ...[
-              _buildInfoRow(context,
-                  hugeIcon: HugeIcons.strokeRoundedNote01,
-                  label: 'Description',
-                  text: event.description!,
-                  subColor: subColor,
-                  textColor: textColor,
-                  isMultiline: true),
-              const SizedBox(height: 14),
-            ],
-
-            if (event.participants.isNotEmpty) ...[
-              _buildParticipantsSection(context, subColor, textColor),
-              const SizedBox(height: 14),
-            ],
-
-            if (event.reminderMinutes != null) ...[
-              _buildInfoRow(context,
-                  hugeIcon: HugeIcons.strokeRoundedNotification01,
-                  label: 'Rappel',
-                  text:
-                      '${event.reminderMinutes} minute${event.reminderMinutes! > 1 ? 's' : ''} avant',
-                  subColor: subColor,
-                  textColor: textColor),
-              const SizedBox(height: 14),
-            ],
-
-            if (event.rrule != null) ...[
-              _buildInfoRow(context,
-                  hugeIcon: HugeIcons.strokeRoundedRepeat,
-                  label: 'Récurrence',
-                  text: _formatRRule(event.rrule!),
-                  subColor: subColor,
-                  textColor: textColor),
-              const SizedBox(height: 14),
-            ],
-
-            // ── Footer metadata ─────────────────────────────
-            Divider(color: Theme.of(context).colorScheme.outline, height: 32),
-            _buildMetadata(context, subColor),
-          ],
-        ),
-      ),
+      body: body,
     );
   }
 
@@ -209,46 +265,16 @@ class EventDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSourceBadge(BuildContext context, bool isDark) {
-    String label;
-    Color color;
-    dynamic hugeIcon;
-    if (event.isFromInfomaniak) {
-      label = 'Infomaniak';
-      color = const Color(0xFF0098FF);
-      hugeIcon = HugeIcons.strokeRoundedCalendar03;
-    } else if (event.isFromNotion) {
-      label = 'Notion';
-      color = isDark ? const Color(0xFF9B9A97) : const Color(0xFF37352F);
-      hugeIcon = HugeIcons.strokeRoundedTask01;
-    } else {
-      label = '.ics';
-      color = const Color(0xFF787774);
-      hugeIcon = HugeIcons.strokeRoundedCalendar01;
+  Widget _buildSourceBadge(BuildContext context, bool isDark, WidgetRef ref) {
+    String? dbName = notionDbName;
+    if (dbName == null && event.isFromNotion) {
+      final dbNames = ref.watch(notionDbNamesMapProvider).value ?? {};
+      dbName = dbNames[event.calendarId];
     }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.15 : 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.5),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          HugeIcon(icon: hugeIcon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+    return SourceLogos.badge(
+      source: event.source,
+      isDark: isDark,
+      subtitle: dbName,
     );
   }
 
@@ -287,11 +313,16 @@ class EventDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildTagsSection(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: event.tags.map((tag) {
-        final color = AppColors.fromHex(tag.colorHex);
+        final rawColor = AppColors.fromHex(tag.colorHex);
+        // En dark mode, assurer un contraste minimal pour les couleurs sombres
+        final color = isDark && rawColor.computeLuminance() < 0.3
+            ? Color.lerp(rawColor, Colors.white, 0.4)!
+            : rawColor;
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(

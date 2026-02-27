@@ -140,6 +140,40 @@ class DatabaseHelper {
       'CREATE INDEX idx_events_deleted ON ${AppConstants.tableEvents}(is_deleted)',
     );
 
+    // ── V2 : Table sync_queue (offline-first) ──
+    await db.execute('''
+      CREATE TABLE ${AppConstants.tableSyncQueue} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        source TEXT NOT NULL,
+        event_id INTEGER,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        retry_count INTEGER DEFAULT 0,
+        last_error TEXT,
+        status TEXT DEFAULT 'pending'
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_sync_queue_status ON ${AppConstants.tableSyncQueue}(status)',
+    );
+
+    // ── V2 : Table system_logs (gestion erreurs silencieuses) ──
+    await db.execute('''
+      CREATE TABLE ${AppConstants.tableSystemLogs} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        level TEXT NOT NULL,
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL,
+        is_read INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_system_logs_level ON ${AppConstants.tableSystemLogs}(level)',
+    );
+
     // Tags par défaut
     await _insertDefaultTags(db);
   }
@@ -177,6 +211,40 @@ class DatabaseHelper {
           'sort_order': i,
         });
       }
+    }
+    if (oldVersion < 6) {
+      // V2 : sync_queue pour offline-first
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS ${AppConstants.tableSyncQueue} (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action TEXT NOT NULL,
+          source TEXT NOT NULL,
+          event_id INTEGER,
+          payload TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          retry_count INTEGER DEFAULT 0,
+          last_error TEXT,
+          status TEXT DEFAULT 'pending'
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON ${AppConstants.tableSyncQueue}(status)',
+      );
+      // V2 : system_logs pour gestion erreurs silencieuses
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS ${AppConstants.tableSystemLogs} (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          level TEXT NOT NULL,
+          source TEXT NOT NULL,
+          message TEXT NOT NULL,
+          details TEXT,
+          created_at TEXT NOT NULL,
+          is_read INTEGER DEFAULT 0
+        )
+      ''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_system_logs_level ON ${AppConstants.tableSystemLogs}(level)',
+      );
     }
   }
 
@@ -290,6 +358,18 @@ class DatabaseHelper {
       AppConstants.tableEvents,
       where: 'is_deleted = 0 AND start_date <= ? AND end_date >= ?',
       whereArgs: [end.toIso8601String(), start.toIso8601String()],
+      orderBy: 'start_date ASC',
+    );
+    return _mapToEventsWithTags(db, maps);
+  }
+
+  /// Retourne les événements pour un calendarId (ex: Notion database).
+  Future<List<EventModel>> getEventsByCalendarId(String calendarId) async {
+    final db = await database;
+    final maps = await db.query(
+      AppConstants.tableEvents,
+      where: 'is_deleted = 0 AND calendar_id = ?',
+      whereArgs: [calendarId],
       orderBy: 'start_date ASC',
     );
     return _mapToEventsWithTags(db, maps);
@@ -561,6 +641,171 @@ class DatabaseHelper {
       AppConstants.tableSyncState,
       where: 'source = ?',
       whereArgs: [source],
+    );
+  }
+
+  // ============================================================
+  // SYNC QUEUE (V2 - Offline-first)
+  // ============================================================
+
+  /// Ajoute une action à la queue de synchronisation.
+  Future<int> enqueueSyncAction({
+    required String action,
+    required String source,
+    int? eventId,
+    required String payload,
+  }) async {
+    final db = await database;
+    return db.insert(AppConstants.tableSyncQueue, {
+      'action': action,
+      'source': source,
+      'event_id': eventId,
+      'payload': payload,
+      'created_at': DateTime.now().toIso8601String(),
+      'status': 'pending',
+      'retry_count': 0,
+    });
+  }
+
+  /// Récupère toutes les actions en attente, triées par ancienneté.
+  Future<List<Map<String, dynamic>>> getPendingSyncActions() async {
+    final db = await database;
+    return db.query(
+      AppConstants.tableSyncQueue,
+      where: 'status = ?',
+      whereArgs: ['pending'],
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  /// Marque une action comme réussie et la supprime.
+  Future<void> completeSyncAction(int id) async {
+    final db = await database;
+    await db.delete(
+      AppConstants.tableSyncQueue,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Marque une action en erreur (incrémente retry_count).
+  Future<void> failSyncAction(int id, String errorMessage) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE ${AppConstants.tableSyncQueue} SET retry_count = retry_count + 1, '
+      'last_error = ?, status = CASE WHEN retry_count >= 5 THEN \'failed\' ELSE \'pending\' END '
+      'WHERE id = ?',
+      [errorMessage, id],
+    );
+  }
+
+  /// Nombre d'actions en attente dans la queue.
+  Future<int> getPendingSyncCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM ${AppConstants.tableSyncQueue} WHERE status = ?',
+      ['pending'],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  /// Supprime les actions terminées en erreur (après trop de retries).
+  Future<void> clearFailedSyncActions() async {
+    final db = await database;
+    await db.delete(
+      AppConstants.tableSyncQueue,
+      where: 'status = ?',
+      whereArgs: ['failed'],
+    );
+  }
+
+  /// Supprime toutes les actions pending pour un événement donné.
+  /// Utilisé après un push direct réussi pour éviter les doublons.
+  Future<void> completePendingSyncActionsForEvent(int eventId) async {
+    final db = await database;
+    await db.delete(
+      AppConstants.tableSyncQueue,
+      where: 'event_id = ? AND status = ?',
+      whereArgs: [eventId, 'pending'],
+    );
+  }
+
+  // ============================================================
+  // SYSTEM LOGS (V2 - Gestion erreurs silencieuses)
+  // ============================================================
+
+  /// Ajoute un log système.
+  Future<int> insertSystemLog({
+    required String level,
+    required String source,
+    required String message,
+    String? details,
+  }) async {
+    final db = await database;
+    return db.insert(AppConstants.tableSystemLogs, {
+      'level': level,
+      'source': source,
+      'message': message,
+      'details': details,
+      'created_at': DateTime.now().toIso8601String(),
+      'is_read': 0,
+    });
+  }
+
+  /// Récupère les logs non lus.
+  Future<List<Map<String, dynamic>>> getUnreadLogs() async {
+    final db = await database;
+    return db.query(
+      AppConstants.tableSystemLogs,
+      where: 'is_read = 0',
+      orderBy: 'created_at DESC',
+      limit: 50,
+    );
+  }
+
+  /// Récupère tous les logs récents (dernières 24h).
+  Future<List<Map<String, dynamic>>> getRecentLogs() async {
+    final db = await database;
+    final cutoff =
+        DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
+    return db.query(
+      AppConstants.tableSystemLogs,
+      where: 'created_at >= ?',
+      whereArgs: [cutoff],
+      orderBy: 'created_at DESC',
+    );
+  }
+
+  /// Marque tous les logs comme lus.
+  Future<void> markAllLogsAsRead() async {
+    final db = await database;
+    await db.update(
+      AppConstants.tableSystemLogs,
+      {'is_read': 1},
+      where: 'is_read = 0',
+    );
+  }
+
+  /// Nombre de logs d'erreur non lus.
+  Future<int> getUnreadErrorCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM ${AppConstants.tableSystemLogs} '
+      'WHERE is_read = 0 AND level = ?',
+      ['error'],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  /// Nettoie les logs de plus de 7 jours.
+  Future<void> cleanOldLogs() async {
+    final db = await database;
+    final cutoff =
+        DateTime.now().subtract(const Duration(days: 7)).toIso8601String();
+    await db.delete(
+      AppConstants.tableSystemLogs,
+      where: 'created_at < ?',
+      whereArgs: [cutoff],
     );
   }
 

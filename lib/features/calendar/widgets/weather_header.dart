@@ -33,16 +33,20 @@ class WeatherHeader extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+          width: 0.5,
+        ),
       ),
       child: Row(
         children: [
-          // Icône météo
-          _weatherIcon(today.weatherCode, isDark),
-          const SizedBox(width: 10),
+          // Icône météo (plus grande)
+          weatherIcon(today.weatherCode, isDark, size: 28),
+          const SizedBox(width: 12),
           // Températures
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,8 +55,8 @@ class WeatherHeader extends StatelessWidget {
               Text(
                 '${today.temperatureMax.round()}° / ${today.temperatureMin.round()}°',
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                   color: textColor,
                   height: 1.2,
                 ),
@@ -60,7 +64,7 @@ class WeatherHeader extends StatelessWidget {
               Text(
                 today.description,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: subColor,
                   height: 1.2,
                 ),
@@ -88,8 +92,8 @@ class WeatherHeader extends StatelessWidget {
     );
   }
 
-  /// Icône matérielle pour le code météo WMO
-  static Widget _weatherIcon(int code, bool isDark) {
+  /// Icône matérielle pour le code météo WMO — accessible de l'extérieur.
+  static Widget weatherIcon(int code, bool isDark, {double size = 22}) {
     List<List<dynamic>> icon;
     Color color;
     if (code == 0) {
@@ -114,7 +118,7 @@ class WeatherHeader extends StatelessWidget {
       icon = HugeIcons.strokeRoundedCloudAngledRainZap;
       color = const Color(0xFFFF9800);
     }
-    return HugeIcon(icon: icon, color: color, size: 22);
+    return HugeIcon(icon: icon, color: color, size: size);
   }
 
   /// Prévision pour une semaine (vue semaine).
@@ -141,7 +145,7 @@ class WeatherHeader extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _weatherIcon(forecast.weatherCode, isDark),
+                weatherIcon(forecast.weatherCode, isDark),
                 const SizedBox(height: 2),
                 Text(
                   '${forecast.temperatureMax.round()}°',

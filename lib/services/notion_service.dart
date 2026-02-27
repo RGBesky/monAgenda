@@ -372,22 +372,45 @@ class NotionService {
         }
       }
 
-      // Description — enrichie avec Où / Pourquoi / Quoi
+      // Description — enrichie avec Markdown + toutes les propriétés non-mappées
       final descParts = <String>[];
 
-      // 1. Texte principal (Comment ?)
-      if (dbModel.descriptionProperty != null) {
-        final descProp = props[dbModel.descriptionProperty];
-        final mainDesc = _extractRichText(descProp);
+      // Propriétés déjà consommées par un mapping dédié (titre, date, catégorie, etc.)
+      final mappedProps = <String?>{
+        dbModel.titleProperty,
+        dbModel.startDateProperty,
+        dbModel.endDateProperty,
+        dbModel.categoryProperty,
+        dbModel.priorityProperty,
+        dbModel.statusProperty,
+        ...dbModel.descriptionProperties,
+        dbModel.locationProperty,
+        dbModel.objectiveProperty,
+        dbModel.materialProperty,
+        dbModel.participantsProperty,
+      };
+
+      // 1. Texte principal — concaténation de toutes les propriétés description mappées
+      for (final descPropName in dbModel.descriptionProperties) {
+        final descProp = props[descPropName];
+        if (descProp == null) continue;
+        // Essayer d'abord le rich_text/markdown, sinon la valeur générique
+        final mainDesc = _extractRichTextAsMarkdown(descProp);
         if (mainDesc.isNotEmpty) {
           descParts.add(mainDesc);
+        } else {
+          final fallback =
+              _extractPropertyValue(descProp as Map<String, dynamic>);
+          if (fallback.isNotEmpty) {
+            descParts.add(fallback);
+          }
         }
       }
 
       // 2. Où ?
       if (dbModel.locationProperty != null) {
         final locProp = props[dbModel.locationProperty];
-        final locText = _extractRichText(locProp);
+        final locText = _extractRichTextAsMarkdown(locProp);
         if (locText.isNotEmpty) {
           descParts.add('📍 Où : $locText');
         }
@@ -396,7 +419,7 @@ class NotionService {
       // 3. Pourquoi ?
       if (dbModel.objectiveProperty != null) {
         final objProp = props[dbModel.objectiveProperty];
-        final objText = _extractRichText(objProp);
+        final objText = _extractRichTextAsMarkdown(objProp);
         if (objText.isNotEmpty) {
           descParts.add('🎯 Pourquoi : $objText');
         }
@@ -405,10 +428,40 @@ class NotionService {
       // 4. Quoi ?
       if (dbModel.materialProperty != null) {
         final matProp = props[dbModel.materialProperty];
-        final matText = _extractRichText(matProp);
+        final matText = _extractRichTextAsMarkdown(matProp);
         if (matText.isNotEmpty) {
           descParts.add('🧰 Quoi : $matText');
         }
+      }
+
+      // 5. Auto-inclusion de TOUTES les propriétés non-mappées
+      //    (comme dans Make/Integromat : toutes les données sont accessibles)
+      for (final entry in props.entries) {
+        if (mappedProps.contains(entry.key)) continue;
+        final val = entry.value;
+        if (val is! Map<String, dynamic>) continue;
+        final propType = val['type'] as String?;
+        // Inclure tous les types exploitables (texte, choix, nombre, formule…)
+        const includedTypes = {
+          'rich_text',
+          'url',
+          'email',
+          'phone_number',
+          'number',
+          'checkbox',
+          'formula',
+          'rollup',
+          'select',
+          'multi_select',
+          'status',
+          'date',
+          'people',
+          'files',
+        };
+        if (propType == null || !includedTypes.contains(propType)) continue;
+        final value = _extractPropertyValue(val);
+        if (value.isEmpty) continue;
+        descParts.add('📎 ${entry.key} : $value');
       }
 
       // 5. État d'avancement — mapper vers un tag de statut
@@ -567,12 +620,12 @@ class NotionService {
       }
     }
 
-    // Description — on écrit uniquement le texte principal (sans les sections enrichies)
-    if (dbModel.descriptionProperty != null && event.description != null) {
+    // Description — on écrit uniquement dans la première propriété description mappée
+    if (dbModel.descriptionProperties.isNotEmpty && event.description != null) {
       // Extraire le texte avant les sections emoji ajoutées
       final cleanDesc = _extractMainDescription(event.description!);
       if (cleanDesc.isNotEmpty) {
-        properties[dbModel.descriptionProperty!] = {
+        properties[dbModel.descriptionProperties.first] = {
           'rich_text': [
             {
               'type': 'text',
@@ -609,7 +662,7 @@ class NotionService {
     return properties;
   }
 
-  /// Extrait le texte principal de la description, avant les sections enrichies (📍/🎯/🧰/📊).
+  /// Extrait le texte principal de la description, avant les sections enrichies (📍/🎯/🧰/📊/📎).
   String _extractMainDescription(String description) {
     final lines = description.split('\n');
     final buffer = StringBuffer();
@@ -617,7 +670,8 @@ class NotionService {
       if (line.startsWith('📍') ||
           line.startsWith('🎯') ||
           line.startsWith('🧰') ||
-          line.startsWith('📊')) {
+          line.startsWith('📊') ||
+          line.startsWith('📎')) {
         break;
       }
       buffer.writeln(line);
@@ -631,6 +685,7 @@ class NotionService {
     return (title.first as Map)['plain_text'] as String? ?? 'Sans titre';
   }
 
+  /// Extrait le texte brut (plain_text) d'une propriété Notion.
   String _extractRichText(dynamic prop) {
     if (prop == null) return '';
     final list = (prop['rich_text'] ?? prop['title']) as List?;
@@ -638,5 +693,128 @@ class NotionService {
     return list
         .map((item) => (item as Map)['plain_text'] as String? ?? '')
         .join();
+  }
+
+  /// Extrait le contenu d'une propriété Notion en préservant le formatage
+  /// Markdown (gras, italique, code, barré, liens) et les emojis.
+  String _extractRichTextAsMarkdown(dynamic prop) {
+    if (prop == null) return '';
+    final list = (prop['rich_text'] ?? prop['title']) as List?;
+    if (list == null || list.isEmpty) return '';
+
+    return list.map((item) {
+      final map = item as Map<String, dynamic>;
+      String text = map['plain_text'] as String? ?? '';
+      if (text.isEmpty) return '';
+
+      // Annotations Notion → Markdown
+      final annotations = map['annotations'] as Map<String, dynamic>?;
+      if (annotations != null) {
+        final bold = annotations['bold'] == true;
+        final italic = annotations['italic'] == true;
+        final strikethrough = annotations['strikethrough'] == true;
+        final code = annotations['code'] == true;
+
+        if (code) text = '`$text`';
+        if (bold && italic) {
+          text = '***$text***';
+        } else if (bold) {
+          text = '**$text**';
+        } else if (italic) {
+          text = '*$text*';
+        }
+        if (strikethrough) text = '~~$text~~';
+      }
+
+      // Liens
+      final href = map['href'] as String?;
+      if (href != null && href.isNotEmpty) {
+        text = '[$text]($href)';
+      }
+
+      return text;
+    }).join();
+  }
+
+  /// Extrait la valeur "affichable" d'une propriété Notion de n'importe quel type.
+  String _extractPropertyValue(Map<String, dynamic> prop) {
+    final type = prop['type'] as String?;
+    switch (type) {
+      case 'rich_text':
+      case 'title':
+        return _extractRichTextAsMarkdown(prop);
+      case 'url':
+        return (prop['url'] as String?) ?? '';
+      case 'email':
+        return (prop['email'] as String?) ?? '';
+      case 'phone_number':
+        return (prop['phone_number'] as String?) ?? '';
+      case 'number':
+        final num = prop['number'];
+        return num != null ? num.toString() : '';
+      case 'checkbox':
+        return (prop['checkbox'] == true) ? '✅' : '☐';
+      case 'select':
+        final sel = prop['select'] as Map<String, dynamic>?;
+        return sel?['name'] as String? ?? '';
+      case 'multi_select':
+        final ms = (prop['multi_select'] as List?) ?? [];
+        return ms.map((e) => (e as Map)['name'] as String? ?? '').join(', ');
+      case 'status':
+        final st = prop['status'] as Map<String, dynamic>?;
+        return st?['name'] as String? ?? '';
+      case 'formula':
+        final formula = prop['formula'] as Map<String, dynamic>?;
+        if (formula == null) return '';
+        final fType = formula['type'] as String?;
+        if (fType == 'string') return formula['string'] as String? ?? '';
+        if (fType == 'number') return formula['number']?.toString() ?? '';
+        if (fType == 'boolean') return formula['boolean'] == true ? '✅' : '☐';
+        return '';
+      case 'rollup':
+        final rollup = prop['rollup'] as Map<String, dynamic>?;
+        if (rollup == null) return '';
+        final rType = rollup['type'] as String?;
+        if (rType == 'number') return rollup['number']?.toString() ?? '';
+        if (rType == 'array') {
+          final arr = (rollup['array'] as List?) ?? [];
+          return arr
+              .map((e) {
+                if (e is Map<String, dynamic>) return _extractPropertyValue(e);
+                return e.toString();
+              })
+              .where((s) => s.isNotEmpty)
+              .join(', ');
+        }
+        return '';
+      case 'date':
+        final date = prop['date'] as Map<String, dynamic>?;
+        if (date == null) return '';
+        final start = date['start'] as String? ?? '';
+        final end = date['end'] as String?;
+        return end != null ? '$start → $end' : start;
+      case 'people':
+        final people = (prop['people'] as List?) ?? [];
+        return people
+            .map((p) => (p as Map)['name'] as String? ?? '')
+            .where((n) => n.isNotEmpty)
+            .join(', ');
+      case 'files':
+        final files = (prop['files'] as List?) ?? [];
+        return files
+            .map((f) {
+              final fMap = f as Map<String, dynamic>;
+              final name = fMap['name'] as String? ?? '';
+              final fileObj = fMap['file'] as Map<String, dynamic>?;
+              final extObj = fMap['external'] as Map<String, dynamic>?;
+              final url =
+                  fileObj?['url'] as String? ?? extObj?['url'] as String? ?? '';
+              return name.isNotEmpty ? '[$name]($url)' : url;
+            })
+            .where((s) => s.isNotEmpty)
+            .join(', ');
+      default:
+        return '';
+    }
   }
 }

@@ -5,9 +5,11 @@ import '../core/models/event_model.dart';
 import '../core/models/sync_state_model.dart';
 import 'infomaniak_service.dart';
 import 'notion_service.dart';
+import 'notion_schema_validator.dart';
 import 'ics_service.dart';
 import 'notification_service.dart';
 import 'widget_service.dart';
+import 'logger_service.dart';
 
 enum SyncResult { success, partialSuccess, failure, offline }
 
@@ -71,9 +73,25 @@ class SyncEngine {
       }
     }
 
-    // Sync Notion
+    // Validation schéma Notion + Sync
     if (_notion.isConfigured) {
       try {
+        // Valider le schéma avant la sync
+        final notionDbs = await _db.getNotionDatabases();
+        final validator = NotionSchemaValidator(notion: _notion);
+        final validationResults = await validator.validateAll(notionDbs);
+        final invalidDbs = validationResults.where((r) => !r.isValid).toList();
+        if (invalidDbs.isNotEmpty) {
+          for (final r in invalidDbs) {
+            errors['Notion:${r.databaseName}'] =
+                'Schéma invalide — ${r.missingProperties.join(", ")}';
+          }
+          AppLogger.instance.warning(
+            'SyncEngine',
+            '${invalidDbs.length} base(s) Notion avec schéma invalide',
+          );
+        }
+
         await _syncNotion(start, end);
       } catch (e) {
         success = false;
@@ -112,14 +130,19 @@ class SyncEngine {
     // Extraire le calendarId depuis l'URL configurée
     final calUrl = _infomaniak.calendarUrl ?? '';
     final calendarId = calUrl.isNotEmpty
-        ? Uri.parse(calUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? 'default'
+        ? Uri.parse(calUrl)
+                .pathSegments
+                .where((s) => s.isNotEmpty)
+                .lastOrNull ??
+            'default'
         : 'default';
 
     // Détecter un changement de calendrier
     final previousCalId = state?.syncToken?.startsWith('cal:') == true
         ? state!.syncToken!.substring(4).split('|').first
         : null;
-    final calendarChanged = previousCalId != null && previousCalId != calendarId;
+    final calendarChanged =
+        previousCalId != null && previousCalId != calendarId;
 
     if (calendarChanged) {
       // Purger les événements de l'ancien calendrier
@@ -310,11 +333,17 @@ class SyncEngine {
         syncedAt: DateTime.now(),
       ));
     } else {
-      // Last-write-wins : si la version distante est plus récente
+      // Pour les sources distantes (Notion, ICS), toujours écraser avec les
+      // données fraîches : l'enrichissement local (description multi-propriétés,
+      // tags…) peut changer même si la page Notion n'a pas été modifiée.
+      // On conserve l'ID local et le createdAt.
+      final isRemoteSource = event.source == AppConstants.sourceNotion ||
+          event.source == AppConstants.sourceIcs;
+
       final remoteUpdated = event.updatedAt ?? DateTime.now();
       final localUpdated = existing.updatedAt ?? DateTime(2000);
 
-      if (remoteUpdated.isAfter(localUpdated)) {
+      if (isRemoteSource || remoteUpdated.isAfter(localUpdated)) {
         await _db.updateEvent(event.copyWith(
           id: existing.id,
           syncedAt: DateTime.now(),
@@ -351,29 +380,73 @@ class SyncEngine {
 
   /// Pousse un événement local vers Infomaniak.
   Future<void> pushEventToInfomaniak(EventModel event) async {
-    if (!_infomaniak.isConfigured) return;
-    if (event.id == null) return;
+    if (!_infomaniak.isConfigured) {
+      AppLogger.instance.error(
+        'SyncEngine',
+        'pushEventToInfomaniak: service NON configuré (username/password manquants)',
+      );
+      throw Exception(
+          'Infomaniak n\'est pas configuré. Vérifiez vos paramètres.');
+    }
+    if (event.id == null) {
+      AppLogger.instance
+          .error('SyncEngine', 'pushEventToInfomaniak: event.id est null');
+      throw Exception('Impossible de pousser un événement sans ID local.');
+    }
+
+    AppLogger.instance.info(
+      'SyncEngine',
+      'pushEventToInfomaniak: PUT event "${event.title}" (remoteId=${event.remoteId}, calUrl=${_infomaniak.calendarUrl})',
+    );
 
     final etag = await _infomaniak.putEvent(event);
     await _db.updateEvent(event.copyWith(
       syncedAt: DateTime.now(),
       etag: etag.isNotEmpty ? etag : null,
     ));
+
+    // Nettoyer la queue offline pour cet événement (push direct réussi)
+    await _db.completePendingSyncActionsForEvent(event.id!);
+
+    AppLogger.instance.info(
+      'SyncEngine',
+      'pushEventToInfomaniak: succès pour "${event.title}" (etag=$etag)',
+    );
   }
 
   /// Pousse un événement/tâche vers Notion.
   Future<void> pushEventToNotion(EventModel event) async {
     if (!_notion.isConfigured) {
+      AppLogger.instance.error(
+        'SyncEngine',
+        'pushEventToNotion: service NON configuré (API key manquante)',
+      );
       throw Exception('Notion n\'est pas configuré. Vérifiez vos paramètres.');
     }
 
     final notionDbs = await _db.getNotionDatabases();
     if (notionDbs.isEmpty) {
+      AppLogger.instance.error(
+        'SyncEngine',
+        'pushEventToNotion: aucune base de données Notion configurée',
+      );
       throw Exception('Aucune base de données Notion configurée.');
     }
 
     final allTags = await _db.getAllTags();
-    final db = notionDbs.first; // V1 : première BDD par défaut
+
+    // Déterminer la BDD cible : celle du calendarId de l'événement, ou la première
+    final db = (event.calendarId != null
+            ? notionDbs
+                .where((d) => d.effectiveSourceId == event.calendarId)
+                .firstOrNull
+            : null) ??
+        notionDbs.first;
+
+    AppLogger.instance.info(
+      'SyncEngine',
+      'pushEventToNotion: push "${event.title}" vers BDD "${db.name}" (pageId=${event.notionPageId})',
+    );
 
     // Récupérer le schéma pour détecter les types de propriétés
     Map<String, dynamic>? schema;
@@ -399,26 +472,46 @@ class SyncEngine {
       await _db.updateEvent(event.copyWith(
         notionPageId: page['id'] as String?,
         remoteId: page['id'] as String?,
+        calendarId: db.effectiveSourceId,
         syncedAt: DateTime.now(),
       ));
     }
+
+    // Nettoyer la queue offline pour cet événement (push direct réussi)
+    if (event.id != null) {
+      await _db.completePendingSyncActionsForEvent(event.id!);
+    }
+
+    AppLogger.instance.info(
+      'SyncEngine',
+      'pushEventToNotion: succès pour "${event.title}"',
+    );
   }
 
   /// Supprime un événement et propage la suppression vers la source.
   Future<void> deleteEvent(EventModel event) async {
     await _db.deleteEvent(event.id!);
 
-    if (event.isFromInfomaniak && _infomaniak.isConfigured) {
-      if (event.remoteId != null) {
-        await _infomaniak.deleteEvent(
-          event.remoteId!,
-          etag: event.etag,
-        );
+    try {
+      if (event.isFromInfomaniak && _infomaniak.isConfigured) {
+        if (event.remoteId != null) {
+          await _infomaniak.deleteEvent(
+            event.remoteId!,
+            etag: event.etag,
+          );
+        }
+      } else if (event.isFromNotion && _notion.isConfigured) {
+        if (event.notionPageId != null) {
+          await _notion.archivePage(event.notionPageId!);
+        }
       }
-    } else if (event.isFromNotion && _notion.isConfigured) {
-      if (event.notionPageId != null) {
-        await _notion.archivePage(event.notionPageId!);
-      }
+    } catch (e) {
+      // La suppression locale est déjà faite.
+      // Si le serveur échoue (404, réseau…), on logue sans propager.
+      AppLogger.instance.warning(
+        'SyncEngine',
+        'Suppression distante échouée : $e',
+      );
     }
 
     if (event.id != null) {

@@ -14,9 +14,10 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/tags_provider.dart';
 import '../../../services/weather_service.dart';
-import '../../events/screens/event_detail_screen.dart';
+import '../../events/widgets/event_detail_popup.dart';
 import '../../events/screens/event_form_screen.dart';
 import '../widgets/unified_event_card.dart';
+import '../widgets/weather_header.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
@@ -92,6 +93,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(eventsInRangeProvider);
     final syncState = ref.watch(syncNotifierProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: _buildAppBar(context, syncState),
@@ -124,40 +126,53 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 ],
               ),
             ),
-          // Bandeau d'erreur sync
-          if (!syncState.isSyncing && syncState.errorMessage != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              color: const Color(0xFFFF3B30).withValues(alpha: 0.1),
-              child: Row(
-                children: [
-                  const HugeIcon(
-                    icon: HugeIcons.strokeRoundedAlert02,
-                    color: Color(0xFFFF3B30),
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      syncState.errorMessage!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFFF3B30),
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        ref.read(syncNotifierProvider.notifier).syncAll(),
-                    child:
-                        const Text('Réessayer', style: TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
+          // Bandeau d'erreur sync (auto-dismiss après 5 s via SyncNotifier)
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            transitionBuilder: (child, anim) => SizeTransition(
+              sizeFactor: anim,
+              axisAlignment: -1,
+              child: child,
             ),
+            child: (!syncState.isSyncing && syncState.errorMessage != null)
+                ? Container(
+                    key: const ValueKey('syncError'),
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    color: isDark
+                        ? const Color(0xFFFF3B30).withValues(alpha: 0.2)
+                        : const Color(0xFFFF3B30).withValues(alpha: 0.1),
+                    child: Row(
+                      children: [
+                        const HugeIcon(
+                          icon: HugeIcons.strokeRoundedAlert02,
+                          color: Color(0xFFFF3B30),
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            syncState.errorMessage!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFFF3B30),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              ref.read(syncNotifierProvider.notifier).syncAll(),
+                          child: const Text('Réessayer',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('noError')),
+          ),
           Expanded(
             child: eventsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -208,27 +223,77 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           onPressed: () {},
           tooltip: 'Rechercher',
         ),
-        // Bouton sync
-        IconButton(
-          icon: syncState.isSyncing
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Theme.of(context).colorScheme.primary,
+        // Bouton sync — couleur selon l'état de connexion
+        Consumer(builder: (context, ref, _) {
+          final forceOffline = ref.watch(forceOfflineProvider);
+          final networkOffline =
+              ref.watch(connectivityStreamProvider).valueOrNull ?? false;
+
+          // Couleur : vert=connecté, orange=pas de réseau, rouge=mode hors-ligne forcé
+          Color dotColor;
+          String tooltip;
+          if (forceOffline) {
+            dotColor = const Color(0xFFFF3B30); // rouge
+            tooltip = 'Mode hors-ligne (cliquer pour reconnecter)';
+          } else if (networkOffline) {
+            dotColor = const Color(0xFFFF9500); // orange
+            tooltip = 'Pas de réseau';
+          } else {
+            dotColor = const Color(0xFF34C759); // vert
+            tooltip = 'Connecté — cliquer pour synchroniser';
+          }
+
+          return Stack(
+            children: [
+              IconButton(
+                icon: syncState.isSyncing
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      )
+                    : HugeIcon(
+                        icon: forceOffline
+                            ? HugeIcons.strokeRoundedWifiDisconnected04
+                            : HugeIcons.strokeRoundedRefresh,
+                        color: dotColor,
+                        size: 22,
+                      ),
+                onPressed: syncState.isSyncing
+                    ? null
+                    : () {
+                        if (forceOffline) {
+                          // Quitter le mode hors-ligne : push queue + sync complète
+                          ref.read(syncNotifierProvider.notifier).pushAndSync();
+                        } else {
+                          ref.read(syncNotifierProvider.notifier).syncAll();
+                        }
+                      },
+                tooltip: tooltip,
+              ),
+              // Pastille indicatrice de couleur
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      width: 1.5,
+                    ),
                   ),
-                )
-              : HugeIcon(
-                  icon: HugeIcons.strokeRoundedRefresh,
-                  color: Theme.of(context).colorScheme.onSurface,
-                  size: 22,
                 ),
-          onPressed: syncState.isSyncing
-              ? null
-              : () => ref.read(syncNotifierProvider.notifier).syncAll(),
-          tooltip: 'Synchroniser',
-        ),
+              ),
+            ],
+          );
+        }),
       ],
     );
   }
@@ -281,15 +346,18 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   void _showFilterPanel(
     BuildContext context,
     List<NotionDatabaseModel> dbs,
-    Set<String> hidden,
+    Set<String> initialHidden,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    const infomaniakSourceId = 'infomaniak';
 
     showDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            // Relire le provider à chaque rebuild pour avoir l'état à jour
+            final hidden = ref.read(hiddenSourcesProvider);
             return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -310,14 +378,25 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ── Infomaniak ──
+                    // ── Infomaniak (togglable) ──
                     _buildSourceRow(
                       icon: HugeIcons.strokeRoundedCloud,
                       color: AppColors.sourceInfomaniak,
                       label: 'Infomaniak',
-                      isVisible: true,
-                      enabled: false,
-                      onChanged: null,
+                      isVisible: !hidden.contains(infomaniakSourceId),
+                      enabled: true,
+                      onChanged: (visible) {
+                        final newHidden =
+                            Set<String>.from(ref.read(hiddenSourcesProvider));
+                        if (visible) {
+                          newHidden.remove(infomaniakSourceId);
+                        } else {
+                          newHidden.add(infomaniakSourceId);
+                        }
+                        ref.read(hiddenSourcesProvider.notifier).state =
+                            newHidden;
+                        setDialogState(() {});
+                      },
                       isDark: isDark,
                     ),
                     const SizedBox(height: 4),
@@ -329,7 +408,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: _buildSourceRow(
                           icon: HugeIcons.strokeRoundedDatabase,
-                          color: AppColors.sourceNotion,
+                          color: isDark
+                              ? const Color(0xFF9B9A97)
+                              : AppColors.sourceNotion,
                           label: db.name,
                           isVisible: isVisible,
                           enabled: true,
@@ -467,8 +548,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     // Trier chaque jour : toute la journée en premier, puis par heure
     // ou par calendrier source si l'utilisateur a choisi ce tri
     final settings = ref.read(settingsProvider).valueOrNull;
-    final sortMode =
-        settings?.eventSortMode ?? AppConstants.sortChronological;
+    final sortMode = settings?.eventSortMode ?? AppConstants.sortChronological;
     final calendarOrder = settings?.calendarOrder ?? [];
 
     for (final key in map.keys) {
@@ -646,19 +726,17 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }
 
   Widget _buildEventCard(BuildContext context, EventModel event) {
+    final dbNames = ref.watch(notionDbNamesMapProvider).value ?? {};
+    final notionDbName = event.isFromNotion ? dbNames[event.calendarId] : null;
     return UnifiedEventCard(
       event: event,
+      notionDbName: notionDbName,
       isCompleted: event.statusTag?.name.toLowerCase() == 'done' ||
           event.statusTag?.name.toLowerCase() == 'fait' ||
           event.statusTag?.name.toLowerCase() == 'terminé',
       onTaskToggle:
           event.isTask ? (done) => _toggleTaskDone(event, done) : null,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EventDetailScreen(event: event),
-        ),
-      ),
+      onTap: () => openEventDetail(context, event),
       onLongPress: () => _showQuickActions(context, event),
     );
   }
@@ -920,8 +998,11 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                 ),
               ],
               const Spacer(),
-              // Widget météo
+              // Widget météo — icône + description + températures
               if (weather != null) ...[
+                WeatherHeader.weatherIcon(weather!.weatherCode, isDark,
+                    size: 20),
+                const SizedBox(width: 6),
                 Text(
                   weather!.description,
                   style: TextStyle(
@@ -929,13 +1010,22 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                     color: subColor,
                   ),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '${weather!.temperatureMax.round()}°/${weather!.temperatureMin.round()}°',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: subColor,
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (isDark ? Colors.white : Colors.black)
+                        .withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${weather!.temperatureMax.round()}° / ${weather!.temperatureMin.round()}°',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
                   ),
                 ),
               ],

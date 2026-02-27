@@ -57,3 +57,4 @@ lib/core/config/secrets.dart
 coverage/
 android/.gradle/
 android/local.properties
+assets/calendar_export/.venv/

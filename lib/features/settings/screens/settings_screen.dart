@@ -1,3 +1,4 @@
+import '../../../app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
@@ -10,6 +11,7 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../services/ics_service.dart';
 import '../../../services/sync_engine.dart';
+import '../../../services/notion_service.dart';
 import '../../../core/database/database_helper.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +21,8 @@ import 'tags_settings_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'appearance_settings_screen.dart';
 import 'backup_settings_screen.dart';
+import 'import_config_screen.dart';
+import 'system_logs_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -28,12 +32,17 @@ class SettingsScreen extends ConsumerWidget {
     final settings = ref.watch(settingsProvider).valueOrNull;
     final syncState = ref.watch(syncNotifierProvider);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paramètres'),
       ),
       body: ListView(
         children: [
+          // Logo de l'application
+          _buildAppLogoHeader(isDark),
+
           // État de synchronisation
           if (syncState.lastSyncedAt != null)
             _buildSyncBanner(context, syncState),
@@ -78,10 +87,11 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
               ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedTask01,
-                    color: Color(0xFF37352F),
-                    size: 22),
+                leading: Image.asset(
+                  'assets/logos/notion_32x32.png',
+                  width: 22,
+                  height: 22,
+                ),
                 title: const Text('Notion'),
                 subtitle: Text(
                   settings?.isNotionConfigured == true
@@ -304,8 +314,23 @@ class SettingsScreen extends ConsumerWidget {
                     color: Color(0xFF5856D6),
                     size: 22),
                 title: const Text('QR Code → Téléphone'),
-                subtitle: const Text('Transférer la config vers l\'app mobile'),
+                subtitle: const Text('Transférer la config (chiffré AES-256)'),
                 onTap: () => _showQrExport(context, ref, settings),
+              ),
+              ListTile(
+                leading: const HugeIcon(
+                    icon: HugeIcons.strokeRoundedSmartPhone01,
+                    color: Color(0xFFFF9500),
+                    size: 22),
+                title: const Text('Scanner / Importer config'),
+                subtitle:
+                    const Text('Importer via QR code ou données chiffrées'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ImportConfigScreen(),
+                  ),
+                ),
               ),
               ListTile(
                 leading: const HugeIcon(
@@ -354,6 +379,70 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
 
+          // Section Logs système
+          _buildSection(
+            context,
+            title: 'Diagnostic',
+            hugeIcon: HugeIcons.strokeRoundedAlert02,
+            children: [
+              Consumer(
+                builder: (context, ref, _) {
+                  final errorCount =
+                      ref.watch(unreadErrorCountProvider).valueOrNull ?? 0;
+                  return ListTile(
+                    leading: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const HugeIcon(
+                          icon: HugeIcons.strokeRoundedAlert02,
+                          color: Color(0xFF8E8E93),
+                          size: 22,
+                        ),
+                        if (errorCount > 0)
+                          Positioned(
+                            right: -6,
+                            top: -4,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF3B30),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                errorCount > 9 ? '9+' : '$errorCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    title: const Text('Logs système'),
+                    subtitle: Text(
+                      errorCount > 0
+                          ? '$errorCount erreur${errorCount > 1 ? 's' : ''} non lue${errorCount > 1 ? 's' : ''}'
+                          : 'Aucune erreur',
+                    ),
+                    trailing: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedArrowRight01,
+                      color: Colors.grey,
+                      size: 18,
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SystemLogsScreen(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+
           // Section Linux
           if (PlatformUtils.isLinux)
             _buildSection(
@@ -368,36 +457,213 @@ class SettingsScreen extends ConsumerWidget {
                       size: 22),
                   title: const Text('Script Python PPT'),
                   subtitle: Text(
-                    settings?.pythonScriptPath ?? 'Non configuré',
+                    settings?.pythonScriptPath ?? 'Auto-détecté (bundlé)',
                     overflow: TextOverflow.ellipsis,
                   ),
+                  trailing: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedArrowRight01,
+                      color: Colors.grey,
+                      size: 18),
                   onTap: () => _pickPythonScript(context, ref),
                 ),
               ],
             ),
 
-          // Synchronisation manuelle
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: OutlinedButton.icon(
-              onPressed: syncState.isSyncing
-                  ? null
-                  : () => ref.read(syncNotifierProvider.notifier).syncAll(),
-              icon: syncState.isSyncing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const HugeIcon(
-                      icon: HugeIcons.strokeRoundedRefresh,
-                      color: Color(0xFF007AFF),
-                      size: 18),
-              label: const Text('Synchroniser maintenant'),
-            ),
+          // Section Mode hors-ligne & Synchronisation
+          _buildSection(
+            context,
+            title: 'Synchronisation',
+            hugeIcon: HugeIcons.strokeRoundedRefresh,
+            children: [
+              Consumer(
+                builder: (context, ref, _) {
+                  final forceOffline = ref.watch(forceOfflineProvider);
+                  final pendingCount =
+                      ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
+
+                  return Column(
+                    children: [
+                      SwitchListTile(
+                        secondary: HugeIcon(
+                          icon: HugeIcons.strokeRoundedWifiDisconnected04,
+                          color: forceOffline
+                              ? const Color(0xFFFF9500)
+                              : const Color(0xFF8E8E93),
+                          size: 22,
+                        ),
+                        title: const Text('Mode hors-ligne'),
+                        subtitle: Text(
+                          forceOffline
+                              ? 'Actif — les modifications sont empilées localement'
+                              : 'Désactivé — sync automatique',
+                        ),
+                        value: forceOffline,
+                        onChanged: (_) =>
+                            ref.read(forceOfflineProvider.notifier).toggle(),
+                      ),
+                      if (forceOffline && pendingCount > 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: Builder(
+                            builder: (context) {
+                              final isDarkBanner =
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark;
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isDarkBanner
+                                      ? const Color(0xFF3D2200)
+                                      : const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    HugeIcon(
+                                      icon: HugeIcons.strokeRoundedCloudUpload,
+                                      color: isDarkBanner
+                                          ? const Color(0xFFFFB74D)
+                                          : const Color(0xFFFF9500),
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '$pendingCount modification${pendingCount > 1 ? 's' : ''} en attente',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isDarkBanner
+                                              ? const Color(0xFFFFB74D)
+                                              : const Color(0xFFE65100),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      if (forceOffline && pendingCount > 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: syncState.isSyncing
+                                  ? null
+                                  : () => ref
+                                      .read(syncNotifierProvider.notifier)
+                                      .pushAndSync(),
+                              icon: syncState.isSyncing
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.cloud_upload),
+                              label: Text(
+                                syncState.isSyncing
+                                    ? 'Envoi en cours…'
+                                    : 'Pousser les modifications',
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!forceOffline)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: OutlinedButton.icon(
+                            onPressed: syncState.isSyncing
+                                ? null
+                                : () => ref
+                                    .read(syncNotifierProvider.notifier)
+                                    .syncAll(),
+                            icon: syncState.isSyncing
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const HugeIcon(
+                                    icon: HugeIcons.strokeRoundedRefresh,
+                                    color: Color(0xFF007AFF),
+                                    size: 18),
+                            label: const Text('Synchroniser maintenant'),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
 
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppLogoHeader(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: (isDark ? Colors.black : Colors.grey)
+                      .withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                isDark
+                    ? 'logo_pack/logo_color_64x64.png'
+                    : 'logo_pack/logo_color_64x64.png',
+                width: 48,
+                height: 48,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'monAgenda',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Calendrier personnel unifié',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -494,7 +760,7 @@ class SettingsScreen extends ConsumerWidget {
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text('${events.length} événement(s) importé(s)'),
         ),
@@ -516,7 +782,7 @@ class SettingsScreen extends ConsumerWidget {
     await file.writeAsString(icsContent);
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text('Exporté : ${file.path}'),
         ),
@@ -544,10 +810,98 @@ class SettingsScreen extends ConsumerWidget {
     await file.writeAsString(csv);
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(content: Text('Exporté : ${file.path}')),
       );
     }
+  }
+
+  /// Extrait la valeur textuelle d'une propriété Notion brute (depuis l'API).
+  /// Supporte : select, multi_select, status, rich_text, title, formula,
+  /// number, checkbox, url, email, phone_number, rollup.
+  String _extractNotionPropertyValue(Map<String, dynamic> prop) {
+    final type = prop['type'] as String?;
+    switch (type) {
+      case 'select':
+        return (prop['select'] as Map<String, dynamic>?)?['name'] as String? ??
+            '';
+      case 'multi_select':
+        final ms = (prop['multi_select'] as List?) ?? [];
+        return ms.map((e) => (e as Map)['name'] as String? ?? '').join(', ');
+      case 'status':
+        return (prop['status'] as Map<String, dynamic>?)?['name'] as String? ??
+            '';
+      case 'rich_text':
+      case 'title':
+        final list = (prop['rich_text'] ?? prop['title']) as List?;
+        if (list == null || list.isEmpty) return '';
+        return list
+            .map((item) => (item as Map)['plain_text'] as String? ?? '')
+            .join();
+      case 'formula':
+        final f = prop['formula'] as Map<String, dynamic>?;
+        if (f == null) return '';
+        final fType = f['type'] as String?;
+        if (fType == 'string') return f['string'] as String? ?? '';
+        if (fType == 'number') return f['number']?.toString() ?? '';
+        return '';
+      case 'number':
+        return prop['number']?.toString() ?? '';
+      case 'checkbox':
+        return prop['checkbox'] == true ? 'true' : 'false';
+      case 'url':
+        return prop['url'] as String? ?? '';
+      case 'email':
+        return prop['email'] as String? ?? '';
+      case 'phone_number':
+        return prop['phone_number'] as String? ?? '';
+      case 'rollup':
+        final r = prop['rollup'] as Map<String, dynamic>?;
+        if (r == null) return '';
+        if (r['type'] == 'number') return r['number']?.toString() ?? '';
+        if (r['type'] == 'array') {
+          return ((r['array'] as List?) ?? [])
+              .map((e) => e is Map<String, dynamic>
+                  ? _extractNotionPropertyValue(e)
+                  : e.toString())
+              .where((s) => s.isNotEmpty)
+              .join(', ');
+        }
+        return '';
+      default:
+        return '';
+    }
+  }
+
+  /// Résout le chemin du script Python bundlé dans le projet.
+  String _resolveScriptPath() {
+    // En dev : chemin relatif au workspace
+    final candidates = [
+      // Dev (lancé via flutter run depuis le project root)
+      '${Directory.current.path}/assets/calendar_export/generate_calendar_ppt.py',
+      // Installé à côté du binaire
+      '${Platform.resolvedExecutable.replaceAll(RegExp(r'/[^/]+$'), '')}/data/flutter_assets/assets/calendar_export/generate_calendar_ppt.py',
+      // Fallback : home dir
+      '${Platform.environment['HOME']}/VSCode/monAgenda/assets/calendar_export/generate_calendar_ppt.py',
+    ];
+    for (final path in candidates) {
+      if (File(path).existsSync()) return path;
+    }
+    return candidates
+        .first; // on retourne le premier quand même (l'erreur viendra de Python)
+  }
+
+  String _resolveAssetsDir() {
+    final script = _resolveScriptPath();
+    return File(script).parent.path;
+  }
+
+  /// Résout le chemin de l'interpréteur Python (venv d'abord, puis système).
+  String _resolvePythonPath() {
+    final assetsDir = _resolveAssetsDir();
+    final venvPython = '$assetsDir/.venv/bin/python3';
+    if (File(venvPython).existsSync()) return venvPython;
+    return 'python3'; // fallback système
   }
 
   Future<void> _exportPpt(
@@ -555,41 +909,414 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     AppSettings? settings,
   ) async {
-    if (settings?.pythonScriptPath == null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Configurez le chemin du script Python dans les paramètres Linux',
+    final pythonPath = _resolvePythonPath();
+
+    // 1. Vérifier que python3 est disponible
+    try {
+      final pythonCheck = await Process.run(pythonPath, ['--version']);
+      if (pythonCheck.exitCode != 0) {
+        if (context.mounted) {
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Python 3 non trouvé. Installez-le avec : sudo apt install python3'),
             ),
+          );
+        }
+        return;
+      }
+    } catch (_) {
+      if (context.mounted) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('Python 3 non trouvé'),
           ),
         );
       }
       return;
     }
 
+    // 2. Vérifier les dépendances Python
+    final depCheck = await Process.run(
+      pythonPath,
+      ['-c', 'import pptx, pandas'],
+    );
+    if (depCheck.exitCode != 0) {
+      if (context.mounted) {
+        final install = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Dépendances manquantes'),
+            content: const Text(
+              'Les packages python-pptx et pandas sont requis.\n\n'
+              'Installer maintenant ?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Installer'),
+              ),
+            ],
+          ),
+        );
+
+        if (install == true) {
+          if (context.mounted) {
+            UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+              const SnackBar(
+                content: Text('Installation en cours…'),
+                duration: Duration(seconds: 10),
+              ),
+            );
+          }
+          final pipResult = await Process.run(
+            pythonPath,
+            ['-m', 'pip', 'install', 'python-pptx', 'pandas'],
+          );
+          if (pipResult.exitCode != 0) {
+            if (context.mounted) {
+              UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                  ?.hideCurrentSnackBar();
+              UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                  ?.showSnackBar(
+                SnackBar(
+                  content: Text('Échec pip : ${pipResult.stderr}'),
+                ),
+              );
+            }
+            return;
+          }
+          if (context.mounted) {
+            UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                ?.hideCurrentSnackBar();
+          }
+        } else {
+          return;
+        }
+      }
+    }
+
+    // 3. Extraire automatiquement les événements "garde" depuis Notion (API directe)
+    // Chercher la base Notion dont le nom contient "garde"
+    final notionDbs = await DatabaseHelper.instance.getNotionDatabases();
+    final gardeDb = notionDbs.cast<dynamic>().firstWhere(
+          (db) => db.name.toLowerCase().contains('garde'),
+          orElse: () => null,
+        );
+
+    String csvPath;
+    if (gardeDb != null) {
+      // ── Requêter l'API Notion directement pour avoir TOUTES les propriétés ──
+      // (les événements locaux perdent les propriétés non-mappées comme "Parent")
+      final csvLines = <String>['Date début,Parent,Type de garde'];
+      bool apiSuccess = false;
+
+      try {
+        final apiKey = settings?.notionApiKey ?? '';
+        if (apiKey.isNotEmpty) {
+          final notion = NotionService();
+          notion.setCredentials(apiKey: apiKey);
+
+          final pages = await notion.queryDatabase(
+            databaseId: gardeDb.effectiveSourceId,
+            dateProperty: gardeDb.startDateProperty,
+          );
+
+          for (final page in pages) {
+            final props = page['properties'] as Map<String, dynamic>? ?? {};
+
+            // Extraire la date (chercher la propriété date configurée)
+            DateTime? date;
+            if (gardeDb.startDateProperty != null) {
+              final dateProp = props[gardeDb.startDateProperty];
+              if (dateProp != null) {
+                final dateObj = dateProp['date'] as Map<String, dynamic>?;
+                final startStr = dateObj?['start'] as String?;
+                if (startStr != null) {
+                  date = DateTime.tryParse(startStr);
+                }
+              }
+            }
+            // Fallback : chercher la première propriété date
+            if (date == null) {
+              for (final entry in props.entries) {
+                final val = entry.value;
+                if (val is Map<String, dynamic> &&
+                    val['type'] == 'date' &&
+                    val['date'] != null) {
+                  final startStr = (val['date'] as Map)['start'] as String?;
+                  if (startStr != null) date = DateTime.tryParse(startStr);
+                  break;
+                }
+              }
+            }
+            if (date == null) continue;
+
+            final dateStr = '${date.day.toString().padLeft(2, '0')}/'
+                '${date.month.toString().padLeft(2, '0')}/'
+                '${date.year}';
+
+            // Extraire "Parent" : chercher une propriété nommée "Parent"
+            // (select, multi_select, rich_text, formula, etc.)
+            String parent = '';
+            for (final key in ['Parent', 'parent', 'PARENT']) {
+              final parentProp = props[key];
+              if (parentProp != null && parentProp is Map<String, dynamic>) {
+                parent = _extractNotionPropertyValue(parentProp);
+                if (parent.isNotEmpty) break;
+              }
+            }
+
+            // Extraire "Type de garde" : en priorité la propriété statusProperty,
+            // sinon chercher "Type de garde", "Type", etc.
+            String type = '';
+            if (gardeDb.statusProperty != null) {
+              final statusProp = props[gardeDb.statusProperty];
+              if (statusProp != null && statusProp is Map<String, dynamic>) {
+                type = _extractNotionPropertyValue(statusProp);
+              }
+            }
+            if (type.isEmpty) {
+              for (final key in [
+                'Type de garde',
+                'Type',
+                'type de garde',
+                'Garde'
+              ]) {
+                final typeProp = props[key];
+                if (typeProp != null && typeProp is Map<String, dynamic>) {
+                  type = _extractNotionPropertyValue(typeProp);
+                  if (type.isNotEmpty) break;
+                }
+              }
+            }
+
+            final parentCsv = parent.replaceAll('"', '""');
+            final typeCsv = type.replaceAll('"', '""');
+            csvLines.add('$dateStr,"$parentCsv","$typeCsv"');
+          }
+
+          apiSuccess = csvLines.length > 1; // au moins 1 ligne de données
+        }
+      } catch (_) {
+        // Si l'API échoue, on tente le fallback local
+        apiSuccess = false;
+      }
+
+      // ── Fallback : extraction depuis les événements locaux ──
+      if (!apiSuccess) {
+        csvLines.clear();
+        csvLines.add('Date début,Parent,Type de garde');
+
+        final gardeEvents = await DatabaseHelper.instance
+            .getEventsByCalendarId(gardeDb.effectiveSourceId);
+
+        if (gardeEvents.isEmpty) {
+          if (context.mounted) {
+            UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+              const SnackBar(
+                content:
+                    Text('Aucun événement trouvé dans le calendrier de garde'),
+              ),
+            );
+          }
+          return;
+        }
+
+        for (final e in gardeEvents) {
+          final dateStr = '${e.startDate.day.toString().padLeft(2, '0')}/'
+              '${e.startDate.month.toString().padLeft(2, '0')}/'
+              '${e.startDate.year}';
+
+          // 1. Chercher le parent dans les tags
+          String parent = e.tags
+                  .map((t) => t.name)
+                  .where((n) =>
+                      n.toLowerCase() == 'robert' ||
+                      n.toLowerCase() == 'justine')
+                  .firstOrNull ??
+              '';
+          // 2. Si pas dans les tags, chercher dans le titre
+          if (parent.isEmpty) {
+            final titleLow = e.title.toLowerCase();
+            if (titleLow.contains('robert')) {
+              parent = 'Robert';
+            } else if (titleLow.contains('justine')) {
+              parent = 'Justine';
+            }
+          }
+          // 3. Si pas dans le titre, chercher dans la description (📎 Parent : …)
+          if (parent.isEmpty && e.description != null) {
+            final match =
+                RegExp(r'📎\s*Parent\s*:\s*(.+)', caseSensitive: false)
+                    .firstMatch(e.description!);
+            if (match != null) parent = match.group(1)!.trim();
+          }
+
+          // Type de garde
+          final typeFromStatus = (e.status ?? '').trim();
+          final type = typeFromStatus.isNotEmpty
+              ? typeFromStatus
+              : (e.tags
+                      .map((t) => t.name)
+                      .where((n) =>
+                          n.toLowerCase() != 'robert' &&
+                          n.toLowerCase() != 'justine')
+                      .firstOrNull ??
+                  '');
+
+          final parentCsv = parent.replaceAll('"', '""');
+          final typeCsv = type.replaceAll('"', '""');
+          csvLines.add('$dateStr,"$parentCsv","$typeCsv"');
+        }
+      }
+
+      if (csvLines.length <= 1) {
+        if (context.mounted) {
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(
+              content: Text('Aucune donnée de garde trouvée'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final tmpDir = await getApplicationCacheDirectory();
+      final csvFile = File('${tmpDir.path}/garde_auto_export.csv');
+      await csvFile.writeAsString(csvLines.join('\n'));
+      csvPath = csvFile.path;
+    } else {
+      // Fallback : demander le fichier CSV manuellement
+      final csvResult = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        dialogTitle: 'Choisir le fichier planning CSV',
+      );
+      if (csvResult == null || csvResult.files.isEmpty) return;
+      csvPath = csvResult.files.first.path!;
+    }
+
+    // 4. Demander la date de début (défaut : 1er du mois courant)
+    if (!context.mounted) return;
+    final now = DateTime.now();
+    final defaultStart =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
+    final startDate = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final controller = TextEditingController(text: defaultStart);
+        return AlertDialog(
+          title: const Text('Date de début'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'AAAA-MM-JJ',
+              helperText:
+                  'Seuls les jours à partir de cette date seront générés',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Générer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (startDate == null) return;
+
+    // 5. Déterminer les chemins
+    final scriptPath = settings?.pythonScriptPath ?? _resolveScriptPath();
+    final assetsDir = _resolveAssetsDir();
+    final dir = await getDownloadsDirectory() ??
+        await getApplicationDocumentsDirectory();
+    final outputPath = '${dir.path}/Calendrier_Garde.pptx';
+
+    // 6. Afficher le chargement
+    if (context.mounted) {
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 12),
+              Text('Génération du planning…'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+    }
+
+    // 7. Exécuter le script
     try {
       final result = await Process.run(
-        'python3',
-        [settings!.pythonScriptPath!],
-        runInShell: true,
+        pythonPath,
+        [
+          scriptPath,
+          '--csv',
+          csvPath,
+          '--output',
+          outputPath,
+          '--assets',
+          assetsDir,
+          '--start-from',
+          startDate,
+        ],
       );
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (!context.mounted) return;
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState
+          ?.hideCurrentSnackBar();
+
+      if (result.exitCode == 0) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
-            content: Text(
-              result.exitCode == 0
-                  ? 'Planning PPT généré'
-                  : 'Erreur : ${result.stderr}',
+            content: Text('✅ Planning généré : $outputPath'),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Ouvrir',
+              textColor: Colors.white,
+              onPressed: () {
+                Process.run('xdg-open', [outputPath]);
+              },
             ),
+          ),
+        );
+      } else {
+        final stderr = result.stderr.toString().trim();
+        final stdout = result.stdout.toString().trim();
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur : ${stderr.isNotEmpty ? stderr : stdout}'),
+            duration: const Duration(seconds: 6),
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur : $e')),
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState
+            ?.hideCurrentSnackBar();
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur : $e'),
+          ),
         );
       }
     }
@@ -672,20 +1399,18 @@ class SettingsScreen extends ConsumerWidget {
 
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('📍 Position détectée : $city'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
             content: Text('Impossible de détecter la position'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -833,19 +1558,107 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  // ── QR Code export ────────────────────────────────────────────────
+  // ── QR Code export (chiffré AES-256) ──────────────────────────────
   void _showQrExport(
       BuildContext context, WidgetRef ref, AppSettings? settings) {
     if (settings == null) return;
 
-    // Données JSON compactes directement
-    final exportJson = settings.toExportJson();
-    final exportStr = jsonEncode(exportJson);
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
 
-    // Générer le QR comme image PNG en mémoire (évite les problèmes de
-    // rendu CustomPaint sur Linux Desktop)
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedQrCode,
+              color: Color(0xFF5856D6),
+              size: 22,
+            ),
+            SizedBox(width: 10),
+            Text('Chiffrer la configuration'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Saisissez un mot de passe pour chiffrer le QR Code.\n'
+              'Vous en aurez besoin pour importer sur un autre appareil.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Mot de passe',
+                prefixIcon: Icon(Icons.lock_outline),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Confirmer le mot de passe',
+                prefixIcon: Icon(Icons.lock_outline),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (passwordController.text.isEmpty) {
+                UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                    ?.showSnackBar(
+                  const SnackBar(content: Text('Le mot de passe est requis')),
+                );
+                return;
+              }
+              if (passwordController.text.length < 6) {
+                UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                    ?.showSnackBar(
+                  const SnackBar(content: Text('Minimum 6 caractères')),
+                );
+                return;
+              }
+              if (passwordController.text != confirmController.text) {
+                UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                    ?.showSnackBar(
+                  const SnackBar(
+                      content: Text('Les mots de passe ne correspondent pas')),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              _showEncryptedQrCode(
+                  context, settings, passwordController.text, ref);
+            },
+            child: const Text('Générer le QR'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEncryptedQrCode(BuildContext context, AppSettings settings,
+      String password, WidgetRef ref) async {
+    // Récupérer les tags personnalisés depuis la DB
+    final tags = await DatabaseHelper.instance.getAllTags();
+    // Données chiffrées AES-256 avec tags
+    final encryptedStr = settings.toEncryptedExportString(password, tags: tags);
+
     final painter = QrPainter(
-      data: exportStr,
+      data: encryptedStr,
       version: QrVersions.auto,
       eyeStyle: const QrEyeStyle(
         eyeShape: QrEyeShape.square,
@@ -883,6 +1696,34 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Indicateur de sécurité
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF34C759).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color:
+                              const Color(0xFF34C759).withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.shield, color: Color(0xFF34C759), size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          'Chiffré AES-256',
+                          style: TextStyle(
+                            color: Color(0xFF34C759),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Container(
                     width: 292,
                     height: 292,
@@ -946,7 +1787,8 @@ class SettingsScreen extends ConsumerWidget {
                         Text(
                           '1. Ouvrez MonAgenda\n'
                           '2. Paramètres → Importer config\n'
-                          '3. Scannez ce QR code',
+                          '3. Scannez ce QR code\n'
+                          '4. Saisissez votre mot de passe',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark
@@ -960,8 +1802,8 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Contient : identifiants, préférences, météo'
-                    ' (${exportStr.length} octets)',
+                    '🔒 Données chiffrées'
+                    ' (${encryptedStr.length} octets)',
                     style: TextStyle(
                       fontSize: 11,
                       color: isDark
@@ -990,7 +1832,13 @@ class SettingsScreen extends ConsumerWidget {
     if (settings == null) return;
 
     try {
-      final json = settings.toExportJson();
+      final tags = await DatabaseHelper.instance.getAllTags();
+      final json = settings.toExportJson(tags: tags);
+      // Retirer les credentials sensibles du fichier non-chiffré
+      json.remove('ik_user');
+      json.remove('ik_pass');
+      json.remove('ik_cal');
+      json.remove('notion');
       final jsonStr = const JsonEncoder.withIndent('  ').convert(json);
 
       final dir = await getApplicationDocumentsDirectory();
@@ -1003,20 +1851,18 @@ class SettingsScreen extends ConsumerWidget {
       await file.writeAsString(jsonStr);
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('✅ Configuration exportée : ${file.path}'),
-            behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('Erreur export : $e'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -1039,13 +1885,13 @@ class SettingsScreen extends ConsumerWidget {
       final content = await File(path).readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
 
-      // Vérifier la version
-      if (json['v'] != 1) {
+      // Vérifier la version (accepter v1 et v2)
+      final version = json['v'] as int?;
+      if (version == null || version < 1 || version > 2) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
             const SnackBar(
               content: Text('Format de configuration non reconnu'),
-              behavior: SnackBarBehavior.floating,
             ),
           );
         }
@@ -1053,6 +1899,7 @@ class SettingsScreen extends ConsumerWidget {
       }
 
       final imported = AppSettings.fromExportJson(json);
+      final exportedTags = AppSettings.parseExportedTags(json);
 
       // Confirmation
       if (!context.mounted) return;
@@ -1070,6 +1917,9 @@ class SettingsScreen extends ConsumerWidget {
               Text('• Thème : ${imported.theme}'),
               Text('• Vue par défaut : ${imported.defaultView}'),
               Text('• Météo : ${imported.weatherCity}'),
+              if (exportedTags.isNotEmpty)
+                Text(
+                    '• Tags : ${exportedTags.length} tag${exportedTags.length > 1 ? 's' : ''} personnalisé${exportedTags.length > 1 ? 's' : ''}'),
             ],
           ),
           actions: [
@@ -1086,22 +1936,22 @@ class SettingsScreen extends ConsumerWidget {
       );
 
       if (confirm == true) {
-        await ref.read(settingsProvider.notifier).importSettings(imported);
+        await ref
+            .read(settingsProvider.notifier)
+            .importSettings(imported, tags: exportedTags);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
             const SnackBar(
               content: Text('✅ Configuration importée avec succès'),
-              behavior: SnackBarBehavior.floating,
             ),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('Erreur import : $e'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }

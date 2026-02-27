@@ -1,24 +1,28 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz_data;
 import '../core/models/event_model.dart';
 import '../core/utils/date_utils.dart';
 
 /// Service de notifications locales (sans backend requis).
+/// Sur Linux, utilise des Timers + show() car zonedSchedule n'est pas supporté.
 class NotificationService {
   static final NotificationService instance = NotificationService._internal();
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
+  /// Timers actifs pour les notifications Linux planifiées.
+  final Map<int, Timer> _linuxTimers = {};
+
   NotificationService._internal();
 
   Future<void> initialize() async {
     if (_initialized) return;
 
-    tz_data.initializeTimeZones();
+    // Les timezones sont initialisées dans main.dart (Europe/Paris forcé)
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -68,6 +72,22 @@ class NotificationService {
 
     if (reminderTime.isBefore(DateTime.now())) return;
 
+    if (Platform.isLinux) {
+      // Linux : Timer + show() car zonedSchedule non supporté
+      final delay = reminderTime.difference(DateTime.now());
+      _linuxTimers[event.id!]?.cancel();
+      _linuxTimers[event.id!] = Timer(delay, () {
+        _showLinuxNotification(
+          event.id!,
+          'Rappel : ${event.title}',
+          _buildReminderBody(event),
+          payload: 'event:${event.id}',
+        );
+        _linuxTimers.remove(event.id!);
+      });
+      return;
+    }
+
     try {
       await _plugin.zonedSchedule(
         event.id!,
@@ -81,12 +101,14 @@ class NotificationService {
         payload: 'event:${event.id}',
       );
     } catch (_) {
-      // zonedSchedule non supporté sur desktop Linux
+      // zonedSchedule non supporté sur cette plateforme
     }
   }
 
   /// Annule le rappel d'un événement.
   Future<void> cancelEventReminder(int eventId) async {
+    _linuxTimers[eventId]?.cancel();
+    _linuxTimers.remove(eventId);
     try {
       await _plugin.cancel(eventId);
     } catch (_) {}
@@ -102,6 +124,13 @@ class NotificationService {
     try {
       await _plugin.cancel(id);
     } catch (_) {}
+
+    if (Platform.isLinux) {
+      // Linux : Timer récurrent via _scheduleLinuxDailySummary
+      _linuxTimers[id]?.cancel();
+      _scheduleLinuxDailySummary(id, hour, minute);
+      return;
+    }
 
     final now = tz.TZDateTime.now(tz.local);
     var scheduledDate = tz.TZDateTime(
@@ -131,18 +160,42 @@ class NotificationService {
         payload: 'daily_summary',
       );
     } catch (_) {
-      // zonedSchedule non supporté sur desktop Linux
+      // zonedSchedule non supporté sur cette plateforme
     }
+  }
+
+  /// Planifie le résumé matinal récurrent sur Linux via Timer.
+  void _scheduleLinuxDailySummary(int id, int hour, int minute) {
+    final now = DateTime.now();
+    var next = DateTime(now.year, now.month, now.day, hour, minute);
+    if (next.isBefore(now)) next = next.add(const Duration(days: 1));
+
+    final delay = next.difference(now);
+    _linuxTimers[id] = Timer(delay, () {
+      _showLinuxNotification(
+        id,
+        'Votre journée',
+        'Cliquez pour voir vos événements du jour',
+        payload: 'daily_summary',
+      );
+      // Re-planifier pour demain
+      _scheduleLinuxDailySummary(id, hour, minute);
+    });
   }
 
   /// Annule toutes les notifications d'une source.
   Future<void> cancelAllReminders() async {
+    // Annuler tous les timers Linux
+    for (final timer in _linuxTimers.values) {
+      timer.cancel();
+    }
+    _linuxTimers.clear();
     try {
       await _plugin.cancelAll();
     } catch (_) {}
   }
 
-  /// Affiche une notification immédiate (ex: fin de sync).
+  /// Affiche une notification via le plugin (fonctionne sur toutes les plateformes).
   Future<void> showInstantNotification({
     required String title,
     required String body,
@@ -155,6 +208,29 @@ class NotificationService {
       _buildNotificationDetails(),
       payload: payload,
     );
+  }
+
+  /// Affiche une notification sur Linux via le plugin show() + fallback notify-send.
+  Future<void> _showLinuxNotification(
+    int id,
+    String title,
+    String body, {
+    String? payload,
+  }) async {
+    try {
+      await _plugin.show(id, title, body, _buildNotificationDetails(),
+          payload: payload);
+    } catch (_) {
+      // Fallback : notify-send (disponible sur la plupart des distros Linux)
+      try {
+        await Process.run('notify-send', [
+          '--app-name=MonAgenda',
+          '--urgency=normal',
+          title,
+          body,
+        ]);
+      } catch (_) {}
+    }
   }
 
   String _buildReminderBody(EventModel event) {

@@ -1,3 +1,4 @@
+import '../../../app.dart';
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -179,7 +180,8 @@ class _ConnectionsSettingsScreenState
               _infomaniakPasswordController.clear();
               _infomaniakCalendarUrlController.clear();
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                    ?.showSnackBar(
                   const SnackBar(
                     content: Text('Infomaniak déconnecté'),
                   ),
@@ -365,7 +367,11 @@ class _ConnectionsSettingsScreenState
                 _buildMappingRow('Catégorie / Couleur', db.categoryProperty),
                 _buildMappingRow('Priorité', db.priorityProperty),
                 _buildMappingRow('État', db.statusProperty),
-                _buildMappingRow('Description', db.descriptionProperty),
+                _buildMappingRow(
+                    'Description',
+                    db.descriptionProperties.isNotEmpty
+                        ? db.descriptionProperties.join(', ')
+                        : null),
                 _buildMappingRow('Lieu (Où)', db.locationProperty),
                 _buildMappingRow('Objectif (Pourquoi)', db.objectiveProperty),
                 _buildMappingRow('Matériel (Quoi)', db.materialProperty),
@@ -428,7 +434,7 @@ class _ConnectionsSettingsScreenState
       schema = await service.getDatabaseSchema(db.effectiveSourceId);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(content: Text('Erreur schéma : $e')),
         );
       }
@@ -471,7 +477,7 @@ class _ConnectionsSettingsScreenState
     String? categoryProp = db.categoryProperty;
     String? priorityProp = db.priorityProperty;
     String? statusProp = db.statusProperty;
-    String? descProp = db.descriptionProperty;
+    List<String> descProps = List<String>.from(db.descriptionProperties);
     String? locationProp = db.locationProperty;
     String? objectiveProp = db.objectiveProperty;
     String? materialProp = db.materialProperty;
@@ -566,11 +572,74 @@ class _ConnectionsSettingsScreenState
                         selectPropNames,
                         (v) => setDialogState(() => statusProp = v),
                       ),
-                      buildDropdown(
-                        'Description',
-                        descProp,
-                        allPropNames,
-                        (v) => setDialogState(() => descProp = v),
+                      // Description — multi-select (comme Make/Integromat)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Description (multi-select)',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            helperText:
+                                'Sélectionnez les propriétés à concaténer dans la description',
+                          ),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              ...descProps.map(
+                                (p) => Chip(
+                                  label: Text(p,
+                                      style: const TextStyle(fontSize: 12)),
+                                  deleteIcon: const Icon(Icons.close, size: 14),
+                                  onDeleted: () =>
+                                      setDialogState(() => descProps.remove(p)),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              ActionChip(
+                                label: const Text('+ Ajouter',
+                                    style: TextStyle(fontSize: 12)),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onPressed: () async {
+                                  final available = allPropNames
+                                      .where((n) =>
+                                          n != '— Aucune —' &&
+                                          !descProps.contains(n))
+                                      .toList();
+                                  if (available.isEmpty) return;
+                                  final picked = await showDialog<String>(
+                                    context: ctx,
+                                    builder: (c) => SimpleDialog(
+                                      title:
+                                          const Text('Ajouter une propriété'),
+                                      children: available
+                                          .map(
+                                            (n) => SimpleDialogOption(
+                                              child: Text(n),
+                                              onPressed: () =>
+                                                  Navigator.pop(c, n),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  );
+                                  if (picked != null) {
+                                    setDialogState(() => descProps.add(picked));
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       buildDropdown(
                         'Lieu',
@@ -623,7 +692,7 @@ class _ConnectionsSettingsScreenState
         categoryProperty: categoryProp,
         priorityProperty: priorityProp,
         statusProperty: statusProp,
-        descriptionProperty: descProp,
+        descriptionProperties: descProps,
         locationProperty: locationProp,
         objectiveProperty: objectiveProp,
         materialProperty: materialProp,
@@ -646,16 +715,17 @@ class _ConnectionsSettingsScreenState
           await DatabaseHelper.instance.insertTag(tag);
         }
         if (missingTags.isNotEmpty && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
             SnackBar(
               content: Text(
                 'Mappings enregistrés — ${missingTags.length} tag(s) créé(s)',
+                style: const TextStyle(color: Colors.white),
               ),
               backgroundColor: Colors.green,
             ),
           );
         } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
             const SnackBar(
               content: Text('Mappings enregistrés'),
               backgroundColor: Colors.green,
@@ -665,9 +735,10 @@ class _ConnectionsSettingsScreenState
       } catch (_) {
         // Schema fetch failed — juste confirmer la sauvegarde
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
             const SnackBar(
-              content: Text('Mappings enregistrés'),
+              content: Text('Mappings enregistrés',
+                  style: TextStyle(color: Colors.white)),
               backgroundColor: Colors.green,
             ),
           );
@@ -741,7 +812,7 @@ class _ConnectionsSettingsScreenState
     final calendarUrl = _infomaniakCalendarUrlController.text.trim();
 
     if (username.isEmpty || appPassword.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
         const SnackBar(
           content:
               Text('Veuillez remplir le nom d\'utilisateur et le mot de passe'),
@@ -768,9 +839,10 @@ class _ConnectionsSettingsScreenState
           );
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
-            content: Text('Infomaniak connecté avec succès'),
+            content: Text('Infomaniak connecté avec succès',
+                style: TextStyle(color: Colors.white)),
             backgroundColor: Colors.green,
           ),
         );
@@ -793,7 +865,7 @@ class _ConnectionsSettingsScreenState
         errorMsg = 'Erreur : $e';
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMsg),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -818,9 +890,10 @@ class _ConnectionsSettingsScreenState
       await ref.read(settingsProvider.notifier).updateNotionApiKey(key.trim());
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
-            content: Text('Notion connecté avec succès'),
+            content: Text('Notion connecté avec succès',
+                style: TextStyle(color: Colors.white)),
             backgroundColor: Colors.green,
           ),
         );
@@ -844,7 +917,7 @@ class _ConnectionsSettingsScreenState
         errorMsg = 'Erreur : $e';
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMsg),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -904,7 +977,12 @@ class _ConnectionsSettingsScreenState
             startDateProperty: findProp(['Date']),
             categoryProperty: findProp(['Projet', 'Catégorie', 'Category']),
             priorityProperty: findProp(['Priorité', 'Priority']),
-            descriptionProperty: findProp(['Comment', 'Description']),
+            descriptionProperties: [
+              if (findProp(
+                      ['Comment', 'Description', 'Résumé / Commentaire']) !=
+                  null)
+                findProp(['Comment', 'Description', 'Résumé / Commentaire'])!,
+            ],
             participantsProperty:
                 findProp(['Qui', 'Participant', 'Responsable']),
             statusProperty: findProp(['État', 'Status', 'Statut']),
@@ -919,7 +997,7 @@ class _ConnectionsSettingsScreenState
       setState(() {});
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('$added base(s) de données trouvée(s)'),
             backgroundColor: added > 0 ? Colors.green : null,
@@ -939,7 +1017,7 @@ class _ConnectionsSettingsScreenState
         errorMsg = 'Erreur : $e';
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(errorMsg),
             backgroundColor: Theme.of(context).colorScheme.error,

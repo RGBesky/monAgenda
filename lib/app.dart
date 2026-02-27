@@ -15,6 +15,11 @@ import 'core/constants/app_constants.dart';
 class UnifiedCalendarApp extends ConsumerWidget {
   const UnifiedCalendarApp({super.key});
 
+  /// Clé globale pour le ScaffoldMessenger racine.
+  /// Permet d'afficher des SnackBars depuis n'importe où,
+  /// même avec des Scaffolds imbriqués.
+  static final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(settingsProvider);
@@ -27,7 +32,8 @@ class UnifiedCalendarApp extends ConsumerWidget {
         home: Scaffold(body: Center(child: Text('Erreur : $e'))),
       ),
       data: (settings) => MaterialApp(
-        title: 'Calendrier Unifié',
+        title: 'monAgenda',
+        scaffoldMessengerKey: UnifiedCalendarApp.scaffoldMessengerKey,
         debugShowCheckedModeBanner: false,
         themeMode: settings.themeMode,
         theme: _buildLightTheme(),
@@ -145,6 +151,10 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+        backgroundColor: const Color(0xFF37352F),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        actionTextColor: const Color(0xFF69AEFF),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -267,6 +277,12 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+        backgroundColor: const Color(0xFFE8E7E4),
+        contentTextStyle:
+            const TextStyle(color: Color(0xFF37352F), fontSize: 14),
+        actionTextColor: const Color(0xFF0A84FF),
+        closeIconColor: const Color(0xFF37352F),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -284,6 +300,26 @@ class UnifiedCalendarApp extends ConsumerWidget {
             side: const BorderSide(color: Color(0xFF373737), width: 0.5),
           ),
         ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return const Color(0xFF9B9A97); // gris visible
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF0A84FF);
+          }
+          return const Color(0xFF404040); // track visible sur fond sombre
+        }),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.transparent;
+          }
+          return const Color(0xFF5A5A5A); // bordure visible
+        }),
       ),
     );
   }
@@ -315,7 +351,12 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isOffline = ref.watch(isOfflineProvider).value ?? false;
+    // V2 : Garde le listener auto-sync actif en permanence
+    ref.watch(autoSyncOnConnectivityProvider);
+    // V2 : Fallback périodique pour Linux (connectivity_plus parfois muet)
+    ref.watch(periodicSyncRetryProvider);
+
+    final isOffline = ref.watch(isOfflineProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop = MediaQuery.of(context).size.width >= 800;
 
@@ -366,16 +407,50 @@ class _AppShellState extends ConsumerState<AppShell> {
       backgroundColor: bgColor,
       indicatorColor: selectedColor.withValues(alpha: 0.12),
       labelType: NavigationRailLabelType.all,
+      trailing: Expanded(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Opacity(
+              opacity: 0.7,
+              child: Image.asset(
+                'logo_pack/logo_color_48x48.png',
+                width: 32,
+                height: 32,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
+          ),
+        ),
+      ),
       leading: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: FloatingActionButton.small(
-          heroTag: 'rail_fab',
-          onPressed: () => _showQuickAddSheet(context, isDark),
-          child: HugeIcon(
-            icon: HugeIcons.strokeRoundedAdd01,
-            color: Colors.white,
-            size: 20,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Bouton hors-ligne toujours visible
+            Builder(
+              builder: (context) {
+                final forceOffline = ref.watch(forceOfflineProvider);
+                final isOffline = ref.watch(isOfflineProvider);
+                final isDarkRail =
+                    Theme.of(context).brightness == Brightness.dark;
+                return _buildOfflineMiniFab(
+                    forceOffline, isOffline, isDarkRail);
+              },
+            ),
+            const SizedBox(height: 8),
+            FloatingActionButton.small(
+              heroTag: 'rail_fab',
+              onPressed: () => _showQuickAddSheet(context, isDark),
+              child: HugeIcon(
+                icon: HugeIcons.strokeRoundedAdd01,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ],
         ),
       ),
       destinations: [
@@ -482,14 +557,68 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildFab(BuildContext context, bool isDark) {
-    return FloatingActionButton(
-      heroTag: 'main_fab',
-      onPressed: () => _showQuickAddSheet(context, isDark),
-      tooltip: 'Créer',
+    final forceOffline = ref.watch(forceOfflineProvider);
+    final isOffline = ref.watch(isOfflineProvider);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Bouton hors-ligne toujours visible
+        _buildOfflineMiniFab(forceOffline, isOffline, isDark),
+        const SizedBox(height: 10),
+        // FAB principal
+        FloatingActionButton(
+          heroTag: 'main_fab',
+          onPressed: () => _showQuickAddSheet(context, isDark),
+          tooltip: 'Créer',
+          child: HugeIcon(
+            icon: HugeIcons.strokeRoundedAdd01,
+            color: Colors.white,
+            size: 26,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Mini FAB hors-ligne — toujours visible au-dessus du FAB principal.
+  /// Couleurs : vert=connecté, orange=pas de réseau, rouge=hors-ligne forcé.
+  Widget _buildOfflineMiniFab(bool forceOffline, bool isOffline, bool isDark) {
+    final Color bg;
+    final Color iconColor;
+    final dynamic icon;
+    final String tooltip;
+
+    if (forceOffline) {
+      // Forcé hors-ligne : ROUGE
+      bg = const Color(0xFFFF3B30);
+      iconColor = Colors.white;
+      icon = HugeIcons.strokeRoundedWifiDisconnected04;
+      tooltip = 'Mode hors-ligne (cliquer pour reconnecter)';
+    } else if (isOffline) {
+      // Pas de réseau : ORANGE
+      bg = const Color(0xFFFF9500);
+      iconColor = Colors.white;
+      icon = HugeIcons.strokeRoundedWifi02;
+      tooltip = 'Pas de réseau';
+    } else {
+      // En ligne : VERT
+      bg = const Color(0xFF34C759);
+      iconColor = Colors.white;
+      icon = HugeIcons.strokeRoundedWifiFullSignal;
+      tooltip = 'Connecté — cliquer pour forcer hors-ligne';
+    }
+
+    return FloatingActionButton.small(
+      heroTag: 'offline_fab',
+      onPressed: () => ref.read(forceOfflineProvider.notifier).toggle(),
+      tooltip: tooltip,
+      backgroundColor: bg,
+      elevation: forceOffline || isOffline ? 4 : 2,
       child: HugeIcon(
-        icon: HugeIcons.strokeRoundedAdd01,
-        color: Colors.white,
-        size: 26,
+        icon: icon,
+        color: iconColor,
+        size: 18,
       ),
     );
   }
@@ -581,29 +710,57 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildOfflineBanner() {
-    return Container(
-      width: double.infinity,
-      color: AppColors.offlineBanner,
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-      child: Row(
-        children: [
-          HugeIcon(
-            icon: HugeIcons.strokeRoundedWifi02,
-            color: Colors.white,
-            size: 16,
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'Mode hors ligne — Lecture seule',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+    final forceOffline = ref.watch(forceOfflineProvider);
+    final pendingCount = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
+
+    return GestureDetector(
+      onTap: () => ref.read(forceOfflineProvider.notifier).toggle(),
+      child: Container(
+        width: double.infinity,
+        color: forceOffline
+            ? const Color(0xFFFF3B30) // Rouge si forcé hors-ligne
+            : const Color(0xFFFF9500), // Orange si pas de réseau
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+        child: Row(
+          children: [
+            HugeIcon(
+              icon: forceOffline
+                  ? HugeIcons.strokeRoundedWifiDisconnected04
+                  : HugeIcons.strokeRoundedWifi02,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                forceOffline
+                    ? 'Mode hors-ligne activé${pendingCount > 0 ? ' · $pendingCount en attente' : ''}'
+                    : 'Pas de connexion${pendingCount > 0 ? ' · $pendingCount en attente' : ''}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-        ],
+            // Toggle rapide
+            SizedBox(
+              height: 24,
+              child: Transform.scale(
+                scale: 0.7,
+                child: Switch(
+                  value: forceOffline,
+                  onChanged: (_) =>
+                      ref.read(forceOfflineProvider.notifier).toggle(),
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: Colors.white24,
+                  inactiveThumbColor: Colors.white70,
+                  inactiveTrackColor: Colors.white12,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

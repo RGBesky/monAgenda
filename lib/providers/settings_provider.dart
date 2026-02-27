@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
+import '../core/models/tag_model.dart';
+import '../core/utils/crypto_utils.dart';
 
 class AppSettings {
   final String? infomaniakUsername;
@@ -22,7 +24,7 @@ class AppSettings {
   final bool reminderEnabled;
   final String? pythonScriptPath;
   final String? pptTemplatePath;
-  final String? kDriveId;
+  final String? kDriveDepositLink;
   final bool isOffline;
   // Météo
   final String weatherCity;
@@ -47,7 +49,7 @@ class AppSettings {
     this.reminderEnabled = true,
     this.pythonScriptPath,
     this.pptTemplatePath,
-    this.kDriveId,
+    this.kDriveDepositLink,
     this.isOffline = false,
     this.weatherCity = 'Genève',
     this.weatherLatitude = 46.2044,
@@ -71,7 +73,7 @@ class AppSettings {
     bool? reminderEnabled,
     String? pythonScriptPath,
     String? pptTemplatePath,
-    String? kDriveId,
+    String? kDriveDepositLink,
     bool? isOffline,
     String? weatherCity,
     double? weatherLatitude,
@@ -98,7 +100,7 @@ class AppSettings {
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
       pythonScriptPath: pythonScriptPath ?? this.pythonScriptPath,
       pptTemplatePath: pptTemplatePath ?? this.pptTemplatePath,
-      kDriveId: kDriveId ?? this.kDriveId,
+      kDriveDepositLink: kDriveDepositLink ?? this.kDriveDepositLink,
       isOffline: isOffline ?? this.isOffline,
       weatherCity: weatherCity ?? this.weatherCity,
       weatherLatitude: weatherLatitude ?? this.weatherLatitude,
@@ -128,10 +130,10 @@ class AppSettings {
   }
 
   /// Sérialise les paramètres en JSON pour export (QR code / fichier).
-  /// Inclut les identifiants sensibles.
-  Map<String, dynamic> toExportJson() {
+  /// Inclut les identifiants sensibles et optionnellement les tags.
+  Map<String, dynamic> toExportJson({List<TagModel>? tags}) {
     final map = <String, dynamic>{
-      'v': 1,
+      'v': 2,
       'theme': theme,
       'view': defaultView,
       'first_day': firstDayOfWeek,
@@ -151,18 +153,73 @@ class AppSettings {
     if (infomaniakAppPassword != null) map['ik_pass'] = infomaniakAppPassword;
     if (infomaniakCalendarUrl != null) map['ik_cal'] = infomaniakCalendarUrl;
     if (notionApiKey != null) map['notion'] = notionApiKey;
-    if (kDriveId != null) map['kdrive'] = kDriveId;
+    if (kDriveDepositLink != null) map['kdrive_deposit'] = kDriveDepositLink;
+    // Tags personnalisés
+    if (tags != null && tags.isNotEmpty) {
+      map['tags'] = tags
+          .map((t) => {
+                'type': t.type,
+                'name': t.name,
+                'color': t.colorHex,
+                if (t.infomaniakMapping != null) 'ik_map': t.infomaniakMapping,
+                if (t.notionMapping != null) 'notion_map': t.notionMapping,
+                'order': t.sortOrder,
+              })
+          .toList();
+    }
     return map;
   }
 
-  /// Encode les paramètres en string compacte pour QR code (gzip + base64).
+  /// Encode les paramètres en string chiffrée AES-256 pour QR code.
+  /// Le mot de passe est requis — aucune donnée en clair dans le QR.
+  String toEncryptedExportString(String password, {List<TagModel>? tags}) {
+    final jsonStr = jsonEncode(toExportJson(tags: tags));
+    return CryptoUtils.encryptToExportString(jsonStr, password);
+  }
+
+  /// [LEGACY - V1] Encode non-chiffré (gzip + base64). Conservé pour migration.
+  @Deprecated('Utiliser toEncryptedExportString() pour la V2')
   String toExportString() {
     final jsonStr = jsonEncode(toExportJson());
     final compressed = gzip.encode(utf8.encode(jsonStr));
     return base64Encode(compressed);
   }
 
-  /// Décode un export string en AppSettings.
+  /// Déchiffre un export string AES-256 en AppSettings.
+  static AppSettings fromEncryptedExportString(
+      String encoded, String password) {
+    final jsonStr = CryptoUtils.decryptFromExportString(encoded, password);
+    final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+    return fromExportJson(json);
+  }
+
+  /// Extrait les tags depuis un JSON d'export (si présents, v>=2).
+  static List<TagModel> parseExportedTags(Map<String, dynamic> json) {
+    final tagsJson = json['tags'] as List?;
+    if (tagsJson == null) return [];
+    return tagsJson.map((t) {
+      final m = t as Map<String, dynamic>;
+      return TagModel(
+        type: m['type'] as String,
+        name: m['name'] as String,
+        colorHex: m['color'] as String,
+        infomaniakMapping: m['ik_map'] as String?,
+        notionMapping: m['notion_map'] as String?,
+        sortOrder: m['order'] as int? ?? 0,
+      );
+    }).toList();
+  }
+
+  /// Déchiffre et extrait les tags depuis un export AES-256.
+  static List<TagModel> parseExportedTagsEncrypted(
+      String encoded, String password) {
+    final jsonStr = CryptoUtils.decryptFromExportString(encoded, password);
+    final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+    return parseExportedTags(json);
+  }
+
+  /// [LEGACY - V1] Décode un export string non-chiffré. Conservé pour migration.
+  @Deprecated('Utiliser fromEncryptedExportString() pour la V2')
   static AppSettings fromExportString(String encoded) {
     final compressed = base64Decode(encoded);
     final jsonStr = utf8.decode(gzip.decode(compressed));
@@ -192,10 +249,10 @@ class AppSettings {
       weatherCity: json['weather_city'] as String? ?? 'Genève',
       weatherLatitude: (json['weather_lat'] as num?)?.toDouble() ?? 46.2044,
       weatherLongitude: (json['weather_lon'] as num?)?.toDouble() ?? 6.1432,
-      eventSortMode: json['event_sort'] as String? ??
-          AppConstants.sortChronological,
+      eventSortMode:
+          json['event_sort'] as String? ?? AppConstants.sortChronological,
       calendarOrder: (json['cal_order'] as List?)?.cast<String>() ?? [],
-      kDriveId: json['kdrive'] as String?,
+      kDriveDepositLink: (json['kdrive_deposit'] ?? json['kdrive']) as String?,
     );
   }
 }
@@ -245,14 +302,13 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       reminderEnabled: prefs.getBool('reminder_enabled') ?? true,
       pythonScriptPath: prefs.getString('python_script_path'),
       pptTemplatePath: prefs.getString('ppt_template_path'),
-      kDriveId: prefs.getString('kdrive_id'),
+      kDriveDepositLink: prefs.getString('kdrive_deposit_link'),
       weatherCity: prefs.getString('weather_city') ?? 'Genève',
       weatherLatitude: prefs.getDouble('weather_latitude') ?? 46.2044,
       weatherLongitude: prefs.getDouble('weather_longitude') ?? 6.1432,
-      eventSortMode: prefs.getString('event_sort_mode') ??
-          AppConstants.sortChronological,
-      calendarOrder: _decodeCalendarOrder(
-          prefs.getString('calendar_order')),
+      eventSortMode:
+          prefs.getString('event_sort_mode') ?? AppConstants.sortChronological,
+      calendarOrder: _decodeCalendarOrder(prefs.getString('calendar_order')),
     );
   }
 
@@ -373,7 +429,10 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   }
 
   /// Importe les paramètres depuis un export JSON (QR code ou fichier).
-  Future<void> importSettings(AppSettings imported) async {
+  /// Importe les paramètres et optionnellement les tags personnalisés.
+  /// Les tags sont dédupliqués par nom+type (pas de doublon).
+  Future<void> importSettings(AppSettings imported,
+      {List<TagModel>? tags}) async {
     // Stocker les identifiants sensibles
     if (imported.infomaniakUsername != null) {
       await _storage.write(
@@ -407,10 +466,25 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setDouble('weather_latitude', imported.weatherLatitude);
     await prefs.setDouble('weather_longitude', imported.weatherLongitude);
     await prefs.setString('event_sort_mode', imported.eventSortMode);
-    await prefs.setString(
-        'calendar_order', jsonEncode(imported.calendarOrder));
-    if (imported.kDriveId != null) {
-      await prefs.setString('kdrive_id', imported.kDriveId!);
+    await prefs.setString('calendar_order', jsonEncode(imported.calendarOrder));
+    if (imported.kDriveDepositLink != null) {
+      await prefs.setString('kdrive_deposit_link', imported.kDriveDepositLink!);
+    }
+
+    // Importer les tags (dédupliqués par nom+type)
+    if (tags != null && tags.isNotEmpty) {
+      final db = DatabaseHelper.instance;
+      final existingTags = await db.getAllTags();
+      final existingKeys =
+          existingTags.map((t) => '${t.type}::${t.name.toLowerCase()}').toSet();
+
+      for (final tag in tags) {
+        final key = '${tag.type}::${tag.name.toLowerCase()}';
+        if (!existingKeys.contains(key)) {
+          await db.insertTag(tag);
+          existingKeys.add(key);
+        }
+      }
     }
 
     state = AsyncData(imported);

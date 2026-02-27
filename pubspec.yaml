@@ -1,5 +1,5 @@
 name: unified_calendar
-description: Application Calendrier Unifiée — Infomaniak · Notion · Flutter
+description: monAgenda — Calendrier personnel Infomaniak · Notion · Flutter
 version: 1.0.0+1
 publish_to: none
 
@@ -37,6 +37,9 @@ dependencies:
   # Notifications locales
   flutter_local_notifications: ^18.0.0
   timezone: ^0.10.0
+
+  # Background tasks (notifications fiables)
+  workmanager: ^0.5.2
 
   # Contacts (Android)
   flutter_contacts: ^1.1.9+2
@@ -84,6 +87,9 @@ dependencies:
   hugeicons: ^1.1.5
   qr_flutter: ^4.1.0
 
+  # Scanner QR mobile (import config)
+  mobile_scanner: ^6.0.2
+
 dependency_overrides:
   intl: ^0.20.0
 
@@ -98,3 +104,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logos/
+    - logo_pack/

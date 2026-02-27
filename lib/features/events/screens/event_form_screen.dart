@@ -10,17 +10,30 @@ import '../../../core/utils/date_utils.dart';
 import '../../../providers/events_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/tags_provider.dart';
+import '../../../app.dart';
 
 class EventFormScreen extends ConsumerStatefulWidget {
   final EventModel? event;
   final DateTime? initialDate;
   final String? initialSource;
 
+  /// Si true, n'affiche pas le Scaffold/AppBar (pour usage intégré dans un Dialog).
+  final bool asDialogBody;
+
+  /// Callback appelé avec l'événement sauvegardé (en mode dialog).
+  final ValueChanged<EventModel>? onSaved;
+
+  /// Callback pour revenir à la vue détail (en mode dialog).
+  final VoidCallback? onCancel;
+
   const EventFormScreen({
     super.key,
     this.event,
     this.initialDate,
     this.initialSource,
+    this.asDialogBody = false,
+    this.onSaved,
+    this.onCancel,
   });
 
   @override
@@ -42,6 +55,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   int? _reminderMinutes;
   String? _rrule;
   bool _isLoading = false;
+  String? _selectedNotionDbId; // effectiveSourceId de la BDD Notion cible
 
   @override
   void initState() {
@@ -61,6 +75,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       _participants = List.from(event.participants);
       _reminderMinutes = event.reminderMinutes;
       _rrule = event.rrule;
+      _selectedNotionDbId = event.calendarId;
     } else {
       _startDate = DateTime(now.year, now.month, now.day, now.hour + 1);
       _endDate = _startDate.add(const Duration(hours: 1));
@@ -83,7 +98,176 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   Widget build(BuildContext context) {
     final isEditing = widget.event != null;
     final tagsAsync = ref.watch(tagsNotifierProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final secondaryIconColor =
+        isDark ? const Color(0xFF9B9A97) : const Color(0xFF787774);
 
+    // ── Contenu du formulaire (partagé entre Scaffold et Dialog) ──
+    final formBody = Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Source
+          _buildSourceSelector(),
+          // Sélecteur BDD Notion (visible uniquement si source = Notion)
+          if (_source == AppConstants.sourceNotion) _buildNotionDbSelector(),
+          const SizedBox(height: 16),
+
+          // Titre
+          TextFormField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              labelText: 'Titre *',
+              prefixIcon: HugeIcon(
+                  icon: HugeIcons.strokeRoundedTask01,
+                  color: secondaryIconColor,
+                  size: 18),
+              border: const OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+            validator: (v) =>
+                v?.trim().isEmpty == true ? 'Le titre est requis' : null,
+          ),
+          const SizedBox(height: 16),
+
+          // Journée entière
+          SwitchListTile(
+            title: const Text('Journée entière'),
+            value: _isAllDay,
+            onChanged: (v) => setState(() => _isAllDay = v),
+            contentPadding: EdgeInsets.zero,
+          ),
+
+          // Date et heure
+          _buildDateTimeSection(),
+          const SizedBox(height: 16),
+
+          // Lieu
+          TextFormField(
+            controller: _locationController,
+            decoration: InputDecoration(
+              labelText: 'Lieu',
+              prefixIcon: HugeIcon(
+                  icon: HugeIcons.strokeRoundedLocation01,
+                  color: secondaryIconColor,
+                  size: 18),
+              border: const OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 16),
+
+          // Description
+          TextFormField(
+            controller: _descriptionController,
+            decoration: InputDecoration(
+              labelText: 'Description',
+              prefixIcon: HugeIcon(
+                  icon: HugeIcons.strokeRoundedNote01,
+                  color: secondaryIconColor,
+                  size: 18),
+              border: const OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+            maxLines: 4,
+            textInputAction: TextInputAction.newline,
+          ),
+          const SizedBox(height: 16),
+
+          // Tags
+          tagsAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (tags) => _buildTagsSection(tags),
+          ),
+          const SizedBox(height: 16),
+
+          // Participants (Infomaniak uniquement)
+          if (_source == AppConstants.sourceInfomaniak) ...[
+            _buildParticipantsSection(),
+            const SizedBox(height: 16),
+          ],
+
+          // Rappel
+          _buildReminderSection(),
+          const SizedBox(height: 16),
+
+          // Récurrence (Infomaniak uniquement)
+          if (_source == AppConstants.sourceInfomaniak) ...[
+            _buildRecurrenceSection(),
+            const SizedBox(height: 16),
+          ],
+        ],
+      ),
+    );
+
+    // ── Mode Dialog : header intégré + formulaire, sans Scaffold ──
+    if (widget.asDialogBody) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return Column(
+        children: [
+          Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F5F7),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.arrow_back,
+                    size: 20,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                  onPressed: () => widget.onCancel?.call(),
+                  splashRadius: 18,
+                  tooltip: 'Retour',
+                ),
+                Text(
+                  isEditing ? 'Modifier' : 'Nouvel événement',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                if (_isLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  TextButton(
+                    onPressed: _save,
+                    child: Text(
+                      'Enregistrer',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(child: formBody),
+        ],
+      );
+    }
+
+    // ── Mode plein écran : Scaffold classique ──
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing ? 'Modifier' : 'Nouvel événement'),
@@ -107,102 +291,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Source
-            _buildSourceSelector(),
-            const SizedBox(height: 16),
-
-            // Titre
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Titre *',
-                prefixIcon: HugeIcon(
-                    icon: HugeIcons.strokeRoundedTask01,
-                    color: Color(0xFF787774),
-                    size: 18),
-                border: OutlineInputBorder(),
-              ),
-              textInputAction: TextInputAction.next,
-              validator: (v) =>
-                  v?.trim().isEmpty == true ? 'Le titre est requis' : null,
-            ),
-            const SizedBox(height: 16),
-
-            // Journée entière
-            SwitchListTile(
-              title: const Text('Journée entière'),
-              value: _isAllDay,
-              onChanged: (v) => setState(() => _isAllDay = v),
-              contentPadding: EdgeInsets.zero,
-            ),
-
-            // Date et heure
-            _buildDateTimeSection(),
-            const SizedBox(height: 16),
-
-            // Lieu
-            TextFormField(
-              controller: _locationController,
-              decoration: const InputDecoration(
-                labelText: 'Lieu',
-                prefixIcon: HugeIcon(
-                    icon: HugeIcons.strokeRoundedLocation01,
-                    color: Color(0xFF787774),
-                    size: 18),
-                border: OutlineInputBorder(),
-              ),
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 16),
-
-            // Description
-            TextFormField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                prefixIcon: HugeIcon(
-                    icon: HugeIcons.strokeRoundedNote01,
-                    color: Color(0xFF787774),
-                    size: 18),
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              maxLines: 4,
-              textInputAction: TextInputAction.newline,
-            ),
-            const SizedBox(height: 16),
-
-            // Tags
-            tagsAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (tags) => _buildTagsSection(tags),
-            ),
-            const SizedBox(height: 16),
-
-            // Participants (Infomaniak uniquement)
-            if (_source == AppConstants.sourceInfomaniak) ...[
-              _buildParticipantsSection(),
-              const SizedBox(height: 16),
-            ],
-
-            // Rappel
-            _buildReminderSection(),
-            const SizedBox(height: 16),
-
-            // Récurrence (Infomaniak uniquement)
-            if (_source == AppConstants.sourceInfomaniak) ...[
-              _buildRecurrenceSection(),
-              const SizedBox(height: 16),
-            ],
-          ],
-        ),
-      ),
+      body: formBody,
     );
   }
 
@@ -238,7 +327,9 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
                     subtitle: 'Tâche / Projet',
                     value: AppConstants.sourceNotion,
                     icon: 'N',
-                    color: Colors.black87,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF9B9A97)
+                        : Colors.black87,
                   ),
                 ),
               ],
@@ -246,6 +337,83 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNotionDbSelector() {
+    final notionDbsAsync = ref.watch(notionDatabasesProvider);
+    return notionDbsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text('Erreur chargement BDD Notion: $e',
+            style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      ),
+      data: (dbs) {
+        final enabledDbs = dbs.where((d) => d.isEnabled).toList();
+        if (enabledDbs.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Aucune base Notion configurée. Allez dans Paramètres.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          );
+        }
+        // Auto-sélectionner "Agenda des tâches" par défaut, sinon la première BDD
+        if (_selectedNotionDbId == null ||
+            !enabledDbs
+                .any((d) => d.effectiveSourceId == _selectedNotionDbId)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                final agendaTaches = enabledDbs
+                    .where(
+                      (d) =>
+                          d.name.toLowerCase().contains('agenda des tâches') ||
+                          d.name.toLowerCase().contains('agenda des taches'),
+                    )
+                    .firstOrNull;
+                _selectedNotionDbId =
+                    (agendaTaches ?? enabledDbs.first).effectiveSourceId;
+              });
+            }
+          });
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Base de données Notion',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...enabledDbs.map((db) => RadioListTile<String>(
+                        title: Text(db.name),
+                        subtitle: Text(db.effectiveSourceId.substring(0, 8)),
+                        value: db.effectiveSourceId,
+                        groupValue: _selectedNotionDbId,
+                        onChanged: (v) =>
+                            setState(() => _selectedNotionDbId = v),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      )),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -284,8 +452,10 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
               child: Center(
                 child: Text(
                   icon,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: color.computeLuminance() > 0.4
+                        ? Colors.black87
+                        : Colors.white,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
@@ -336,9 +506,11 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const HugeIcon(
+          leading: HugeIcon(
               icon: HugeIcons.strokeRoundedCalendar02,
-              color: Color(0xFF787774),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF9B9A97)
+                  : const Color(0xFF787774),
               size: 20),
           title: Text(
             _isAllDay
@@ -466,9 +638,11 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         ..._participants.map(
           (p) => ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: const HugeIcon(
+            leading: HugeIcon(
                 icon: HugeIcons.strokeRoundedUser,
-                color: Color(0xFF787774),
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF9B9A97)
+                    : const Color(0xFF787774),
                 size: 20),
             title: Text(p.name ?? p.email),
             subtitle: p.name != null ? Text(p.email) : null,
@@ -490,13 +664,15 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   Widget _buildReminderSection() {
     return DropdownButtonFormField<int?>(
       initialValue: _reminderMinutes,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Rappel',
         prefixIcon: HugeIcon(
             icon: HugeIcons.strokeRoundedNotification01,
-            color: Color(0xFF787774),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF9B9A97)
+                : const Color(0xFF787774),
             size: 18),
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
       ),
       items: const [
         DropdownMenuItem(value: null, child: Text('Aucun')),
@@ -515,13 +691,15 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   Widget _buildRecurrenceSection() {
     return DropdownButtonFormField<String?>(
       initialValue: _rrule,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Récurrence',
         prefixIcon: HugeIcon(
             icon: HugeIcons.strokeRoundedRepeat,
-            color: Color(0xFF787774),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF9B9A97)
+                : const Color(0xFF787774),
             size: 18),
-        border: OutlineInputBorder(),
+        border: const OutlineInputBorder(),
       ),
       items: const [
         DropdownMenuItem(value: null, child: Text('Aucune')),
@@ -645,19 +823,6 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final isOffline = ref.read(isOfflineProvider).value ?? false;
-    if (isOffline) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Impossible de créer/modifier en mode hors ligne'),
-            backgroundColor: Color(0xFFFF6D00),
-          ),
-        );
-      }
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
@@ -697,7 +862,9 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         tagIds: tagIds,
         tags: _selectedTags,
         rrule: _rrule,
-        calendarId: widget.event?.calendarId,
+        calendarId: _source == AppConstants.sourceNotion
+            ? (_selectedNotionDbId ?? widget.event?.calendarId)
+            : widget.event?.calendarId,
         notionPageId: widget.event?.notionPageId,
         reminderMinutes: _reminderMinutes,
         createdAt: widget.event?.createdAt ?? DateTime.now(),
@@ -715,13 +882,36 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         savedEvent = event;
       }
 
-      // Push vers la source distante
-      await ref.read(syncNotifierProvider.notifier).pushEvent(savedEvent);
+      // Push vers la source distante (best-effort, ne bloque pas la sauvegarde)
+      String? pushError;
+      try {
+        await ref.read(syncNotifierProvider.notifier).pushEvent(savedEvent);
+      } catch (e) {
+        // Le push sera retenté via la sync_queue au prochain sync
+        pushError = e.toString();
+        debugPrint('Push distant échoué (sera retenté) : $e');
+      }
 
-      if (mounted) Navigator.pop(context, event);
+      if (mounted) {
+        if (pushError != null) {
+          UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text('Sauvegardé localement — sync échouée : $pushError',
+                  style: const TextStyle(color: Colors.white)),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        if (widget.onSaved != null) {
+          widget.onSaved!(savedEvent);
+        } else {
+          Navigator.pop(context, event);
+        }
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('Erreur : $e'),
             backgroundColor: Theme.of(context).colorScheme.error,

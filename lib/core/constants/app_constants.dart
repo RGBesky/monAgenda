@@ -12,14 +12,15 @@ class AppConstants {
   // Météo Open-Meteo
   static const String openMeteoApiBase = 'https://api.open-meteo.com/v1';
 
-  // kDrive Infomaniak
-  static const String kDriveApiBase = 'https://api.infomaniak.com/2/drive';
+  // kDrive Infomaniak – lien de dépôt (pas besoin d'authentification)
+  static const String kDriveDepositApiBase =
+      'https://api.infomaniak.com/3/external/share';
   static const String kDriveBackupFileName = 'unified_calendar_backup.enc';
-  static const String kDriveBackupFolder = '/unified_calendar';
+  static const String kDriveLocalBackupDir = 'backups';
 
   // Base de données locale
   static const String dbName = 'unified_calendar.db';
-  static const int dbVersion = 5;
+  static const int dbVersion = 6;
 
   // Tables SQLite
   static const String tableEvents = 'events';
@@ -28,6 +29,8 @@ class AppConstants {
   static const String tableNotionDatabases = 'notion_databases';
   static const String tableIcsSubscriptions = 'ics_subscriptions';
   static const String tableSyncState = 'sync_state';
+  static const String tableSyncQueue = 'sync_queue';
+  static const String tableSystemLogs = 'system_logs';
 
   // Sources d'événements
   static const String sourceInfomaniak = 'infomaniak';

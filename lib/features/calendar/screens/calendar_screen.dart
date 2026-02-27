@@ -15,8 +15,10 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../services/sync_engine.dart';
 import '../../../services/weather_service.dart';
-import '../../events/screens/event_detail_screen.dart';
+import '../../events/widgets/event_detail_popup.dart';
 import '../../events/screens/event_form_screen.dart';
+import '../../../app.dart';
+import '../../../core/widgets/source_logos.dart';
 import '../widgets/weather_header.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -229,47 +231,98 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ),
           ],
         ),
-        // Bouton sync
-        IconButton(
-          icon: syncState.isSyncing
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : HugeIcon(
-                  icon: HugeIcons.strokeRoundedRefresh,
-                  color: Theme.of(context).colorScheme.onSurface,
-                  size: 22,
+        // Bouton sync — couleur selon l'état de connexion
+        Consumer(builder: (context, ref, _) {
+          final forceOffline = ref.watch(forceOfflineProvider);
+          final networkOffline =
+              ref.watch(connectivityStreamProvider).valueOrNull ?? false;
+
+          Color dotColor;
+          String tooltip;
+          if (forceOffline) {
+            dotColor = const Color(0xFFFF3B30);
+            tooltip = 'Mode hors-ligne (cliquer pour reconnecter)';
+          } else if (networkOffline) {
+            dotColor = const Color(0xFFFF9500);
+            tooltip = 'Pas de réseau';
+          } else {
+            dotColor = const Color(0xFF34C759);
+            tooltip = 'Connecté — cliquer pour synchroniser';
+          }
+
+          return Stack(
+            children: [
+              IconButton(
+                icon: syncState.isSyncing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : HugeIcon(
+                        icon: forceOffline
+                            ? HugeIcons.strokeRoundedWifiDisconnected04
+                            : HugeIcons.strokeRoundedRefresh,
+                        color: dotColor,
+                        size: 22,
+                      ),
+                onPressed: syncState.isSyncing
+                    ? null
+                    : () async {
+                        if (forceOffline) {
+                          ref.read(forceOfflineProvider.notifier).toggle();
+                          return;
+                        }
+                        await ref.read(syncNotifierProvider.notifier).syncAll();
+                        if (!mounted) return;
+                        final state = ref.read(syncNotifierProvider);
+                        if (state.sourceErrors.isNotEmpty) {
+                          UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                            ?..clearSnackBars()
+                            ..showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Erreurs de sync :\n${state.sourceErrors.entries.map((e) => '• ${e.key}: ${e.value}').join('\n')}',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 6),
+                              ),
+                            );
+                        } else if (state.lastResult == SyncResult.success) {
+                          UnifiedCalendarApp.scaffoldMessengerKey.currentState
+                            ?..clearSnackBars()
+                            ..showSnackBar(
+                              const SnackBar(
+                                content: Text('Synchronisation réussie',
+                                    style: TextStyle(color: Colors.white)),
+                                backgroundColor: Colors.green,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                        }
+                      },
+                tooltip: tooltip,
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
-          onPressed: syncState.isSyncing
-              ? null
-              : () async {
-                  await ref.read(syncNotifierProvider.notifier).syncAll();
-                  if (!mounted) return;
-                  final state = ref.read(syncNotifierProvider);
-                  if (state.sourceErrors.isNotEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Erreurs de sync :\n${state.sourceErrors.entries.map((e) => '• ${e.key}: ${e.value}').join('\n')}',
-                        ),
-                        backgroundColor: Colors.orange,
-                        duration: const Duration(seconds: 6),
-                      ),
-                    );
-                  } else if (state.lastResult == SyncResult.success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Synchronisation réussie'),
-                        backgroundColor: Colors.green,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                },
-          tooltip: 'Synchroniser',
-        ),
+              ),
+            ],
+          );
+        }),
       ],
     );
   }
@@ -304,15 +357,18 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   void _showFilterPanel(
     BuildContext context,
     List<NotionDatabaseModel> dbs,
-    Set<String> hidden,
+    Set<String> initialHidden,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    const infomaniakSourceId = 'infomaniak';
 
     showDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            // Relire le provider à chaque rebuild pour avoir l'état à jour
+            final hidden = ref.read(hiddenSourcesProvider);
             return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -333,14 +389,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ── Infomaniak (toujours visible, non masquable) ──
+                    // ── Infomaniak (togglable) ──
                     _buildSourceRow(
                       icon: HugeIcons.strokeRoundedCloud,
                       color: AppColors.sourceInfomaniak,
                       label: 'Infomaniak',
-                      isVisible: true,
-                      enabled: false,
-                      onChanged: null,
+                      isVisible: !hidden.contains(infomaniakSourceId),
+                      enabled: true,
+                      onChanged: (visible) {
+                        final newHidden =
+                            Set<String>.from(ref.read(hiddenSourcesProvider));
+                        if (visible) {
+                          newHidden.remove(infomaniakSourceId);
+                        } else {
+                          newHidden.add(infomaniakSourceId);
+                        }
+                        ref.read(hiddenSourcesProvider.notifier).state =
+                            newHidden;
+                        setDialogState(() {});
+                      },
                       isDark: isDark,
                     ),
                     const SizedBox(height: 4),
@@ -352,7 +419,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: _buildSourceRow(
                           icon: HugeIcons.strokeRoundedDatabase,
-                          color: AppColors.sourceNotion,
+                          color: isDark
+                              ? const Color(0xFF9B9A97)
+                              : AppColors.sourceNotion,
                           label: db.name,
                           isVisible: isVisible,
                           enabled: true,
@@ -463,7 +532,33 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     String currentView,
     AppSettings? settings,
   ) {
-    final dataSource = _CalendarDataSource(events);
+    // Appliquer le tri secondaire par calendrier (comme dans l'agenda)
+    final sortMode = settings?.eventSortMode ?? AppConstants.sortChronological;
+    final calendarOrder = settings?.calendarOrder ?? [];
+    final sorted = List<EventModel>.from(events);
+    sorted.sort((a, b) {
+      // All-day en premier (incl. évènements > 23 h)
+      final aAllDay =
+          a.isAllDay || a.endDate.difference(a.startDate).inHours > 23;
+      final bAllDay =
+          b.isAllDay || b.endDate.difference(b.startDate).inHours > 23;
+      if (aAllDay && !bAllDay) return -1;
+      if (!aAllDay && bAllDay) return 1;
+      // Si tri par calendrier : calendrier d'abord
+      if (sortMode == AppConstants.sortByCalendar) {
+        final calDiff =
+            _calendarIndex(a, calendarOrder) - _calendarIndex(b, calendarOrder);
+        if (calDiff != 0) return calDiff;
+      }
+      // Puis chronologique
+      return a.startDate.compareTo(b.startDate);
+    });
+    // On passe useSortOffset pour que SfCalendar respecte notre ordre :
+    // il re-trie par getStartTime(), donc on injecte un micro-décalage.
+    final dataSource = _CalendarDataSource(
+      sorted,
+      useSortOffset: sortMode == AppConstants.sortByCalendar,
+    );
     final firstDayOfWeek =
         settings?.firstDayOfWeek == AppConstants.firstDaySunday
             ? DateTime.sunday
@@ -504,8 +599,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         startHour: 6,
         endHour: 23,
         timeInterval: const Duration(minutes: 30),
-        timeIntervalHeight: 52,
-        timelineAppointmentHeight: 68,
+        timeIntervalHeight: 60,
+        timelineAppointmentHeight: 88,
+        minimumAppointmentDuration: const Duration(minutes: 30),
+        timeFormat: 'HH:mm',
         timeTextStyle: TextStyle(
           fontSize: 11, // Tiny: 11px (Design System)
           fontWeight: FontWeight.w500,
@@ -517,7 +614,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       monthViewSettings: MonthViewSettings(
         appointmentDisplayMode: MonthAppointmentDisplayMode.none,
         showAgenda: true,
-        agendaItemHeight: 76,
+        agendaItemHeight: 88,
         numberOfWeeksInView: 6,
         appointmentDisplayCount: 4,
         monthCellStyle: MonthCellStyle(
@@ -554,7 +651,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       ),
       scheduleViewSettings: ScheduleViewSettings(
         hideEmptyScheduleWeek: true,
-        appointmentItemHeight: 76,
+        appointmentItemHeight: 88,
         dayHeaderSettings: DayHeaderSettings(
           dayFormat: 'EEE',
           width: 56,
@@ -753,9 +850,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final isEffectiveAllDay = event.isAllDay ||
         event.endDate.difference(event.startDate).inHours > 23;
     final borderW = isEffectiveAllDay
-        ? (h * 0.25).clamp(2.0, 6.0)
-        : (w * 0.25).clamp(4.0, 24.0);
-    final contentW = isEffectiveAllDay ? w - 2 : w - borderW;
+        ? (h * 0.25).clamp(3.0, 8.0)
+        : (w * 0.25).clamp(6.0, 28.0);
+    final contentW = isEffectiveAllDay ? w - 3 : w - borderW;
 
     final radius = h < 16 ? 3.0 : (h < 28 ? 5.0 : 8.0);
 
@@ -781,16 +878,43 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             horizontal: contentW > 30 ? 6 : 3,
             vertical: vPad,
           ),
-          // OverflowBox permet au contenu d'être layouté à sa taille
-          // intrinsèque puis clippé par le ClipRRect parent — aucun
-          // overflow warning ne sera émis.
-          child: OverflowBox(
-            alignment: Alignment.topLeft,
-            maxHeight: double.infinity,
+          // SingleChildScrollView absorbe le surplus vertical
+          // (pas de yellow overflow stripe) ; NeverScrollable empêche
+          // le scroll utilisateur. La largeur reste contrainte → pas
+          // de débordement horizontal.
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
             child: _buildAppointmentContent(
                 event, titleColor, subColor, usableH, contentW, isDark),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Petit dot coloré pour la catégorie (layout compact all-day)
+  Widget _compactCategoryDot(EventModel event, bool isDark) {
+    final cat = event.categoryTags.first;
+    final color = AppColors.fromHex(cat.colorHex);
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+
+  /// Petit dot coloré pour le statut (layout compact all-day)
+  Widget _compactStatusDot(EventModel event, bool isDark) {
+    final color = AppColors.fromHex(event.statusTag!.colorHex);
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(2),
       ),
     );
   }
@@ -813,6 +937,44 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   ) {
     // Info multi-jours
     final multiDayInfo = _multiDayInfo(event);
+
+    // ── All-day / multi-day events dans le panneau all-day ──
+    // SfCalendar reporte h = hauteur totale du jour (ex: 1192px)
+    // mais n'affiche qu'une bande de ~25px dans le panneau all-day.
+    // → Forcer le layout compact single-line pour ces événements.
+    final isEffectiveAllDay = event.isAllDay ||
+        event.endDate.difference(event.startDate).inHours > 23;
+    if (isEffectiveAllDay) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              multiDayInfo != null
+                  ? '${event.title} $multiDayInfo'
+                  : event.title,
+              style: TextStyle(
+                color: titleColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          _sourceIcon(event, isDark, 12),
+          if (event.categoryTags.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            _compactCategoryDot(event, isDark),
+          ],
+          if (event.statusTag != null) ...[
+            const SizedBox(width: 4),
+            _compactStatusDot(event, isDark),
+          ],
+        ],
+      );
+    }
 
     // ── Tiny (< 18px) : titre seul, texte minimal ──
     if (h < 18) {
@@ -865,8 +1027,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       );
     }
 
-    // ── Medium (< 40px) : titre + source, en dessous meta compacte ──
-    if (h < 40) {
+    // ── Medium (< 44px) : titre + source, en dessous meta compacte ──
+    // SfCalendar all-day = 40px → doit rester dans ce tier
+    if (h < 44) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -900,8 +1063,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       );
     }
 
-    // ── Normal (< 62px) : titre + source + meta chips ──
-    if (h < 62) {
+    // ── Normal (< 66px) : titre + source + meta chips ──
+    if (h < 66) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -935,7 +1098,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       );
     }
 
-    // ── Grand (>= 62px) : titre + source + chips + heure ──
+    // ── Grand (>= 66px) : titre + source + chips + heure ──
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -962,7 +1125,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           ],
         ),
         // Ligne 2 : Chips catégorie + statut
-        if (h > 72 &&
+        if (h >= 76 &&
             (event.categoryTags.isNotEmpty || event.statusTag != null)) ...[
           const SizedBox(height: 4),
           _chipRow(event, isDark),
@@ -971,85 +1134,136 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         const SizedBox(height: 3),
         Flexible(
             child: _metaRow(event, subColor, isDark,
-                multiDayInfo: multiDayInfo, skipCategoryAndStatus: h > 72)),
+                multiDayInfo: multiDayInfo, skipCategoryAndStatus: h >= 76)),
       ],
     );
   }
 
   /// Icône source (Design System §4.1 : toujours visible, 16px)
+  /// Affiche le nom de la BDD Notion à côté de l'icône quand la taille le permet.
   Widget _sourceIcon(EventModel event, bool isDark, double size) {
-    dynamic icon;
-    Color color;
+    final dbNames = ref.watch(notionDbNamesMapProvider).value ?? {};
+    final notionDbName = event.isFromNotion ? dbNames[event.calendarId] : null;
+
+    Widget icon;
     if (event.isFromNotion) {
-      icon = HugeIcons.strokeRoundedTask01;
-      color = isDark
-          ? Colors.white.withValues(alpha: 0.6)
-          : const Color(0xFF37352F).withValues(alpha: 0.5);
+      icon = SourceLogos.notion(size: size, isDark: isDark);
     } else if (event.isFromInfomaniak) {
-      icon = HugeIcons.strokeRoundedCalendar03;
-      color = AppColors.sourceInfomaniak.withValues(alpha: 0.8);
+      icon = SourceLogos.infomaniak(size: size);
     } else {
-      icon = HugeIcons.strokeRoundedCalendar01;
-      color = AppColors.sourceIcs.withValues(alpha: 0.8);
+      final color = AppColors.sourceIcs.withValues(alpha: 0.8);
+      icon = HugeIcon(
+          icon: HugeIcons.strokeRoundedCalendar01, color: color, size: size);
     }
-    return HugeIcon(icon: icon, color: color, size: size);
+
+    if (notionDbName != null) {
+      // Pour les tailles >= 14, afficher le nom en texte à côté de l'icône
+      if (size >= 14) {
+        return Tooltip(
+          message: notionDbName,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
+                  notionDbName,
+                  style: TextStyle(
+                    fontSize: size >= 16 ? 9 : 8,
+                    color: isDark
+                        ? const Color(0xFF9B9A97)
+                        : const Color(0xFF37352F).withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      // Petite taille : tooltip seulement
+      return Tooltip(message: notionDbName, child: icon);
+    }
+    return icon;
   }
 
   /// Chips catégorie + statut (Design System §4.1)
   Widget _chipRow(EventModel event, bool isDark) {
-    return Wrap(
-      spacing: 4,
-      runSpacing: 2,
-      children: [
-        // Catégorie chips
-        ...event.categoryTags.take(2).map((tag) {
-          final tagColor = AppColors.fromHex(tag.colorHex);
-          final hsl = HSLColor.fromColor(tagColor);
-          final stabilo = hsl.lightness > 0.4
-              ? tagColor
-              : HSLColor.fromAHSL(1.0, hsl.hue,
-                      (hsl.saturation * 0.5).clamp(0.2, 0.6), 0.85)
-                  .toColor();
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? stabilo.withValues(alpha: 0.2)
-                  : stabilo.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              tag.name,
-              style: TextStyle(
-                fontSize: 11, // Tiny: 11px (Design System)
-                fontWeight: FontWeight.w600,
-                color: isDark ? stabilo : AppColors.textOnStabilo(stabilo),
-              ),
-            ),
-          );
-        }),
-        // Statut chip
-        if (event.statusTag != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-            decoration: BoxDecoration(
-              color: AppColors.fromHex(event.statusTag!.colorHex)
-                  .withValues(alpha: isDark ? 0.2 : 0.15),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              event.statusTag!.name,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isDark
-                    ? AppColors.fromHex(event.statusTag!.colorHex)
-                    : AppColors.textOnStabilo(
-                        AppColors.fromHex(event.statusTag!.colorHex)),
-              ),
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ClipRect(
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            children: [
+              // Catégorie chips
+              ...event.categoryTags.take(2).map((tag) {
+                final tagColor = AppColors.fromHex(tag.colorHex);
+                final hsl = HSLColor.fromColor(tagColor);
+                final stabilo = hsl.lightness > 0.4
+                    ? tagColor
+                    : HSLColor.fromAHSL(1.0, hsl.hue,
+                            (hsl.saturation * 0.5).clamp(0.2, 0.6), 0.85)
+                        .toColor();
+                return ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? stabilo.withValues(alpha: 0.2)
+                          : stabilo.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      tag.name,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color:
+                            isDark ? stabilo : AppColors.textOnStabilo(stabilo),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              }),
+              // Statut chip
+              if (event.statusTag != null)
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: AppColors.fromHex(event.statusTag!.colorHex)
+                          .withValues(alpha: isDark ? 0.2 : 0.15),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      event.statusTag!.name,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? AppColors.fromHex(event.statusTag!.colorHex)
+                            : AppColors.textOnStabilo(
+                                AppColors.fromHex(event.statusTag!.colorHex)),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+            ],
           ),
-      ],
+        );
+      },
     );
   }
 
@@ -1341,7 +1555,23 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
-    return Wrap(spacing: 5, runSpacing: 2, children: items);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ClipRect(
+          child: Wrap(
+            spacing: 5,
+            runSpacing: 2,
+            children: items
+                .map((item) => ConstrainedBox(
+                      constraints:
+                          BoxConstraints(maxWidth: constraints.maxWidth),
+                      child: item,
+                    ))
+                .toList(),
+          ),
+        );
+      },
+    );
   }
 
   /// Icône de status à partir d'un TagModel
@@ -1369,10 +1599,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     required Color color,
     required bool isDark,
   }) {
+    // En dark mode, éclaircir les couleurs sombres pour garantir la lisibilité
+    final displayColor = isDark && color.computeLuminance() < 0.3
+        ? Color.lerp(color, Colors.white, 0.4)!
+        : color;
     final chipBg = isDark
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.white.withValues(alpha: 0.88);
-    final borderColor = color.withValues(alpha: isDark ? 0.35 : 0.25);
+    final borderColor = displayColor.withValues(alpha: isDark ? 0.35 : 0.25);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -1384,20 +1618,68 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          HugeIcon(icon: icon, color: color, size: 11),
+          HugeIcon(icon: icon, color: displayColor, size: 11),
           const SizedBox(width: 3),
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              height: 1.1,
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: displayColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ── Tri secondaire par calendrier source ──────────────────────
+  /// Index de tri d'un événement dans l'ordre des calendriers configuré.
+  static int _calendarIndex(EventModel event, List<String> order) {
+    if (order.isNotEmpty) {
+      if (event.source == AppConstants.sourceInfomaniak) {
+        final idx = order.indexOf('infomaniak:');
+        if (idx != -1) return idx;
+      }
+      if (event.source == AppConstants.sourceNotion) {
+        final cid = event.calendarId ?? '';
+        if (cid.isNotEmpty) {
+          final idx = order.indexOf('notion:$cid');
+          if (idx != -1) return idx;
+        }
+        final notionEntries = order.where((k) => k.startsWith('notion:'));
+        if (notionEntries.length == 1) {
+          return order.indexOf(notionEntries.first);
+        }
+      }
+      if (event.source == AppConstants.sourceIcs) {
+        final subId = event.icsSubscriptionId ?? '';
+        if (subId.isNotEmpty) {
+          final idx = order.indexOf('ics:$subId');
+          if (idx != -1) return idx;
+        }
+      }
+    }
+    return 100 + _sourceOrder(event.source);
+  }
+
+  /// Ordre par défaut : Infomaniak → Notion → ICS → local
+  static int _sourceOrder(String source) {
+    switch (source) {
+      case AppConstants.sourceInfomaniak:
+        return 0;
+      case AppConstants.sourceNotion:
+        return 1;
+      case AppConstants.sourceIcs:
+        return 2;
+      default:
+        return 3;
+    }
   }
 
   void _onDragEnd(AppointmentDragEndDetails details) {
@@ -1407,9 +1689,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     if (event == null || details.droppingTime == null) return;
 
     if (event.isFromIcs) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
         const SnackBar(
-          content: Text('Les abonnements .ics sont en lecture seule'),
+          content: Text('Les abonnements .ics sont en lecture seule',
+              style: TextStyle(color: Colors.white)),
           backgroundColor: Color(0xFFFF9500),
         ),
       );
@@ -1442,9 +1725,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     if (event == null) return;
 
     if (event.isFromIcs) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
         const SnackBar(
-          content: Text('Les abonnements .ics sont en lecture seule'),
+          content: Text('Les abonnements .ics sont en lecture seule',
+              style: TextStyle(color: Colors.white)),
           backgroundColor: Color(0xFFFF9500),
         ),
       );
@@ -1528,14 +1812,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ? '${event.title} → ${CalendarDateUtils.formatDisplayTime(newStart)} - ${CalendarDateUtils.formatDisplayTime(newEnd)}'
             : '${event.title} déplacé au ${CalendarDateUtils.formatDisplayDateTime(newStart)}';
 
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState
+          ?..clearSnackBars()
           ..showSnackBar(
             SnackBar(
               content: Text(msg),
               duration: const Duration(seconds: 4),
               showCloseIcon: true,
-              behavior: SnackBarBehavior.floating,
               action: SnackBarAction(
                 label: 'Annuler',
                 onPressed: () async {
@@ -1557,7 +1840,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     } catch (e) {
       ref.read(eventsNotifierProvider.notifier).refresh();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('Erreur lors du déplacement : $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -1572,12 +1855,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       final apt = details.appointments?.first;
       final event = apt is EventModel ? apt : null;
       if (event != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EventDetailScreen(event: event),
-          ),
-        );
+        openEventDetail(context, event);
       }
     } else if (details.targetElement == CalendarElement.calendarCell &&
         details.date != null) {
@@ -1593,17 +1871,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   void _showCreateEventSheet(DateTime date) {
-    final isOffline = ref.read(isOfflineProvider).value ?? false;
-    if (isOffline) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Création impossible en mode hors ligne'),
-          backgroundColor: Color(0xFFFF6D00),
-        ),
-      );
-      return;
-    }
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1642,17 +1909,30 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 // ============================================================
 
 class _CalendarDataSource extends CalendarDataSource<EventModel> {
-  _CalendarDataSource(List<EventModel> events) {
+  /// Si [useSortOffset] est true, un micro-décalage est ajouté aux start/end
+  /// pour que SfCalendar (qui re-trie par startTime) respecte l'ordre de
+  /// notre liste pré-triée (tri secondaire par calendrier source).
+  final bool useSortOffset;
+
+  _CalendarDataSource(List<EventModel> events, {this.useSortOffset = false}) {
     appointments = events;
   }
 
   @override
-  DateTime getStartTime(int index) =>
-      (appointments![index] as EventModel).startDate;
+  DateTime getStartTime(int index) {
+    final event = appointments![index] as EventModel;
+    if (!useSortOffset) return event.startDate;
+    // Ajoute index microsecondes pour préserver l'ordre de tri.
+    // 1000 µs = 1 ms → invisible pour l'utilisateur.
+    return event.startDate.add(Duration(microseconds: index));
+  }
 
   @override
-  DateTime getEndTime(int index) =>
-      (appointments![index] as EventModel).endDate;
+  DateTime getEndTime(int index) {
+    final event = appointments![index] as EventModel;
+    if (!useSortOffset) return event.endDate;
+    return event.endDate.add(Duration(microseconds: index));
+  }
 
   @override
   String getSubject(int index) => (appointments![index] as EventModel).title;

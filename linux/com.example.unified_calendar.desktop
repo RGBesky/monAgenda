@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Calendrier Unifié
-Comment=Application calendrier Infomaniak · Notion · Flutter
+Name=monAgenda
+Comment=Calendrier personnel — Infomaniak · Notion · Flutter
 Exec=unified_calendar %U
-Icon=unified_calendar
+Icon=monagenda
 Terminal=false
 Categories=Office;Calendar;
 Keywords=calendrier;agenda;infomaniak;notion;

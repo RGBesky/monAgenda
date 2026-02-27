@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
 import '../core/models/notion_database_model.dart';
 import '../core/constants/app_constants.dart';
+import '../services/background_worker_service.dart';
+import '../services/sync_queue_worker.dart';
+import '../services/logger_service.dart';
 
 /// Plage de dates pour le chargement des événements.
 class DateRange {
@@ -48,6 +52,11 @@ final eventsInRangeProvider = FutureProvider<List<EventModel>>((ref) async {
       .getEventsByDateRange(range.start, range.end);
   if (hidden.isEmpty) return events;
   return events.where((e) {
+    // Filtrer Infomaniak
+    if (e.source == AppConstants.sourceInfomaniak &&
+        hidden.contains('infomaniak')) {
+      return false;
+    }
     // Pour les événements Notion, filtrer par calendarId (= effectiveSourceId)
     if (e.source == AppConstants.sourceNotion && e.calendarId != null) {
       return !hidden.contains(e.calendarId);
@@ -65,6 +74,11 @@ final eventsForDayProvider =
   final events = await DatabaseHelper.instance.getEventsByDateRange(start, end);
   if (hidden.isEmpty) return events;
   return events.where((e) {
+    // Filtrer Infomaniak
+    if (e.source == AppConstants.sourceInfomaniak &&
+        hidden.contains('infomaniak')) {
+      return false;
+    }
     if (e.source == AppConstants.sourceNotion && e.calendarId != null) {
       return !hidden.contains(e.calendarId);
     }
@@ -83,6 +97,23 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
     final id = await DatabaseHelper.instance.insertEvent(event);
     ref.invalidateSelf();
     ref.invalidate(eventsInRangeProvider);
+    // V2 : Optimistic UI — enqueue sync action pour push ultérieur
+    if (event.source == AppConstants.sourceInfomaniak ||
+        event.source == AppConstants.sourceNotion) {
+      try {
+        await DatabaseHelper.instance.enqueueSyncAction(
+          action: SyncAction.createEvent,
+          source: event.source,
+          eventId: id,
+          payload: jsonEncode(event.copyWith(id: id).toMap()),
+        );
+      } catch (e) {
+        AppLogger.instance
+            .error('EventsNotifier', 'enqueueSyncAction create failed', e);
+      }
+    }
+    // V2 : reprogrammer les notifications en background
+    BackgroundWorkerService.rescheduleNow();
     return id;
   }
 
@@ -90,12 +121,54 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
     await DatabaseHelper.instance.updateEvent(event);
     ref.invalidateSelf();
     ref.invalidate(eventsInRangeProvider);
+    // V2 : Enqueue sync action
+    if (event.source == AppConstants.sourceInfomaniak ||
+        event.source == AppConstants.sourceNotion) {
+      try {
+        await DatabaseHelper.instance.enqueueSyncAction(
+          action: SyncAction.updateEvent,
+          source: event.source,
+          eventId: event.id,
+          payload: jsonEncode(event.toMap()),
+        );
+      } catch (e) {
+        AppLogger.instance
+            .error('EventsNotifier', 'enqueueSyncAction update failed', e);
+      }
+    }
+    // V2 : reprogrammer les notifications en background
+    BackgroundWorkerService.rescheduleNow();
   }
 
   Future<void> deleteEvent(int id) async {
-    await DatabaseHelper.instance.deleteEvent(id);
+    // V2 : récupérer l'event avant suppression pour la queue
+    final db = DatabaseHelper.instance;
+    final range = ref.read(displayedDateRangeProvider);
+    final events = await db.getEventsByDateRange(range.start, range.end);
+    final event = events.where((e) => e.id == id).firstOrNull;
+
+    await db.deleteEvent(id);
     ref.invalidateSelf();
     ref.invalidate(eventsInRangeProvider);
+
+    // V2 : Enqueue delete sync action
+    if (event != null &&
+        (event.source == AppConstants.sourceInfomaniak ||
+            event.source == AppConstants.sourceNotion)) {
+      try {
+        await db.enqueueSyncAction(
+          action: SyncAction.deleteEvent,
+          source: event.source,
+          eventId: id,
+          payload: jsonEncode(event.toMap()),
+        );
+      } catch (e) {
+        AppLogger.instance
+            .error('EventsNotifier', 'enqueueSyncAction delete failed', e);
+      }
+    }
+    // V2 : reprogrammer les notifications en background
+    BackgroundWorkerService.rescheduleNow();
   }
 
   void refresh() {
@@ -108,3 +181,10 @@ final eventsNotifierProvider =
     AsyncNotifierProvider<EventsNotifier, List<EventModel>>(
   EventsNotifier.new,
 );
+
+/// Map calendarId → nom de la base Notion (pour affichage dans les vues).
+final notionDbNamesMapProvider =
+    FutureProvider<Map<String, String>>((ref) async {
+  final dbs = await DatabaseHelper.instance.getNotionDatabases();
+  return {for (final db in dbs) db.effectiveSourceId: db.name};
+});

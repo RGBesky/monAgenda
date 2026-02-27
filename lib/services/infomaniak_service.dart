@@ -175,16 +175,34 @@ class InfomaniakService {
       }
     }
 
-    final response = await _calDavDio.put(
-      eventUrl,
-      data: icsData,
-      options: Options(
-        headers: {
-          'Content-Type': 'text/calendar; charset=utf-8',
-          if (freshEtag != null) 'If-Match': freshEtag,
-        },
-      ),
-    );
+    Response response;
+    try {
+      response = await _calDavDio.put(
+        eventUrl,
+        data: icsData,
+        options: Options(
+          headers: {
+            'Content-Type': 'text/calendar; charset=utf-8',
+            if (freshEtag != null) 'If-Match': freshEtag,
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      // 412 Precondition Failed → retenter sans If-Match (force overwrite)
+      if (e.response?.statusCode == 412) {
+        response = await _calDavDio.put(
+          eventUrl,
+          data: icsData,
+          options: Options(
+            headers: {
+              'Content-Type': 'text/calendar; charset=utf-8',
+            },
+          ),
+        );
+      } else {
+        rethrow;
+      }
+    }
 
     return response.headers.value('ETag') ?? '';
   }
@@ -208,14 +226,19 @@ class InfomaniakService {
       freshEtag = headResp.headers.value('ETag');
     } catch (_) {}
 
-    await _calDavDio.delete(
-      eventUrl,
-      options: Options(
-        headers: {
-          if (freshEtag != null) 'If-Match': freshEtag,
-        },
-      ),
-    );
+    try {
+      await _calDavDio.delete(
+        eventUrl,
+        options: Options(
+          headers: {
+            if (freshEtag != null) 'If-Match': freshEtag,
+          },
+        ),
+      );
+    } on DioException catch (e) {
+      // 404 = déjà supprimé côté serveur, pas une erreur
+      if (e.response?.statusCode != 404) rethrow;
+    }
   }
 
   /// Récupère le sync-token (ctag) du calendrier.

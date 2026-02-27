@@ -257,9 +257,7 @@ class _AppearanceSettingsScreenState
               groupValue: settings.eventSortMode,
               onChanged: (v) async {
                 if (v != null) {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setEventSortMode(v);
+                  await ref.read(settingsProvider.notifier).setEventSortMode(v);
                 }
               },
               child: const Column(
@@ -271,8 +269,7 @@ class _AppearanceSettingsScreenState
                   ),
                   RadioListTile<String>(
                     title: Text('Par calendrier'),
-                    subtitle: Text(
-                        'Par heure, puis par ordre de calendrier'),
+                    subtitle: Text('Par heure, puis par ordre de calendrier'),
                     value: AppConstants.sortByCalendar,
                   ),
                 ],

@@ -26,7 +26,7 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
-set(APPLICATION_ID "com.example.unifiedCalendar")
+set(APPLICATION_ID "com.monagenda.app")
 
 add_executable(${BINARY_NAME}
   "runner/main.cc"
