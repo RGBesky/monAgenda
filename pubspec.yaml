@@ -1,6 +1,6 @@
 name: unified_calendar
 description: monAgenda — Calendrier personnel Infomaniak · Notion · Flutter
-version: 1.0.0+1
+version: 2.0.0+1
 publish_to: none
 
 environment:
@@ -39,10 +39,9 @@ dependencies:
   timezone: ^0.10.0
 
   # Background tasks (notifications fiables)
-  workmanager: ^0.5.2
+  workmanager: ^0.6.0
 
   # Contacts (Android)
-  flutter_contacts: ^1.1.9+2
   permission_handler: ^11.3.1
 
   # Widget Android 7 jours
@@ -69,7 +68,6 @@ dependencies:
   json_annotation: ^4.9.0
   shared_preferences: ^2.3.3
   url_launcher: ^6.3.1
-  share_plus: ^10.1.3
   open_filex: ^4.6.0
 
   # Polices

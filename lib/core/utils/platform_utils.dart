@@ -12,7 +12,6 @@ class PlatformUtils {
 
   static bool get supportsPptExport => isLinux;
   static bool get supportsAndroidWidget => isAndroid;
-  static bool get supportsContacts => isAndroid;
 
   static String get platformName {
     if (isAndroid) return 'Android';

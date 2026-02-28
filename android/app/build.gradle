@@ -65,6 +65,11 @@ flutter {
     source '../..'
 }
 
+configurations.all {
+    // Resolve work-runtime / work-runtime-ktx duplicate classes
+    exclude group: 'androidx.work', module: 'work-runtime-ktx'
+}
+
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${kotlin_version}"

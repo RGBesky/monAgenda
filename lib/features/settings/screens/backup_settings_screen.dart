@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../services/backup_service.dart';
 import '../../../core/database/database_helper.dart';
 
@@ -314,7 +316,7 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
     try {
       await _saveDepositLink();
       final backupService = BackupService(db: DatabaseHelper.instance);
-      await backupService.backup(
+      final file = await backupService.backup(
         encryptionPassword: _passwordController.text,
         depositLink: _depositLinkController.text.trim(),
       );
@@ -322,7 +324,22 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
       final lastDate = await backupService.lastLocalBackupDate();
       if (mounted) {
         setState(() => _lastBackupDate = lastDate);
-        _setStatus('Sauvegarde envoyée sur kDrive + copie locale');
+
+        // Copier le chemin dans le presse-papier
+        await Clipboard.setData(ClipboardData(text: file.path));
+
+        // Ouvrir le lien de dépôt dans le navigateur
+        final link = _depositLinkController.text.trim();
+        final uri = Uri.tryParse(link);
+        if (uri != null) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+
+        _setStatus(
+          'Fichier chiffré sauvegardé + chemin copié dans le presse-papier.\n'
+          'Glissez-déposez le fichier dans la fenêtre kDrive qui s\'est ouverte.\n'
+          '${file.path}',
+        );
       }
     } catch (e) {
       if (mounted) {

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:dio/dio.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/constants/app_constants.dart';
@@ -14,16 +13,9 @@ import '../core/models/event_model.dart';
 /// Service de sauvegarde/restauration via lien de dépôt kDrive (Infomaniak).
 /// Configuration chiffrée AES-256. Pas besoin de token OAuth2.
 class BackupService {
-  final Dio _dio;
   final DatabaseHelper _db;
 
-  BackupService({required DatabaseHelper db})
-      : _db = db,
-        _dio = Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 30),
-          receiveTimeout: const Duration(seconds: 60),
-          sendTimeout: const Duration(seconds: 60),
-        ));
+  BackupService({required DatabaseHelper db}) : _db = db;
 
   // ───────────────────────── Deposit link helpers ──────────────────────────
 
@@ -54,8 +46,9 @@ class BackupService {
 
   // ─────────────────────── Upload via lien de dépôt ────────────────────────
 
-  /// Sauvegarde la configuration sur kDrive via lien de dépôt + copie locale.
-  Future<void> backup({
+  /// Sauvegarde locale + ouvre le lien de dépôt dans le navigateur.
+  /// Retourne le fichier local pour que l'UI guide l'utilisateur.
+  Future<File> backup({
     required String encryptionPassword,
     required String depositLink,
   }) async {
@@ -63,39 +56,19 @@ class BackupService {
     if (uuid == null) {
       throw Exception(
         'Lien de dépôt invalide. Collez l\'URL depuis kDrive '
-        '(ex: https://kdrive.infomaniak.com/app/share/xxxxx/files)',
+        '(ex: https://kdrive.infomaniak.com/app/collaborate/xxxxx/xxxxx)',
       );
     }
 
     final config = await _buildBackupConfig();
     final encrypted = _encrypt(jsonEncode(config), encryptionPassword);
 
-    // 1. Sauvegarder localement
+    // Sauvegarder localement
     final localFile = await _localBackupFile();
     await localFile.parent.create(recursive: true);
     await localFile.writeAsBytes(encrypted);
 
-    // 2. Upload via le lien de dépôt kDrive (pas d'auth nécessaire)
-    FormData makeFormData() => FormData.fromMap({
-          'file': MultipartFile.fromBytes(
-            encrypted,
-            filename: AppConstants.kDriveBackupFileName,
-          ),
-        });
-
-    final uploadUrl = '${AppConstants.kDriveDepositApiBase}/$uuid/file';
-
-    try {
-      await _dio.post(uploadUrl, data: makeFormData());
-    } on DioException catch (e) {
-      // Si l'endpoint /file ne fonctionne pas, essayer /upload
-      if (e.response?.statusCode == 404) {
-        final altUrl = '${AppConstants.kDriveDepositApiBase}/$uuid/upload';
-        await _dio.post(altUrl, data: makeFormData());
-      } else {
-        rethrow;
-      }
-    }
+    return localFile;
   }
 
   // ──────────────────────── Sauvegarde locale seule ────────────────────────
