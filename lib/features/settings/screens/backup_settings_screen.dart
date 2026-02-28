@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../services/backup_service.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/widgets/settings_logo_header.dart';
 
 class BackupSettingsScreen extends ConsumerStatefulWidget {
   const BackupSettingsScreen({super.key});
@@ -74,6 +75,7 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const SettingsLogoHeader(),
           // ─── Explication ───
           Card(
             child: Padding(

@@ -1,10 +1,15 @@
+import 'dart:io';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:collection/collection.dart';
 import '../core/constants/app_constants.dart';
 import '../core/constants/app_colors.dart';
 import '../core/models/event_model.dart';
 import '../core/models/notion_database_model.dart';
 import '../core/models/tag_model.dart';
+import '../core/security/cert_pins.dart';
+import 'logger_service.dart';
 
 /// Service d'intégration Notion.
 /// Authentification via API Key (Integration Token).
@@ -21,7 +26,26 @@ class NotionService {
             'Content-Type': 'application/json',
             'Notion-Version': AppConstants.notionApiVersion,
           },
-        ));
+        )) {
+    // V3 : Certificate pinning pour Notion API
+    (_dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+      final client = HttpClient();
+      client.badCertificateCallback =
+          (X509Certificate cert, String host, int port) {
+        if (host.contains('notion.so') || host.contains('notion.com')) {
+          final sha256 = crypto.sha256.convert(cert.der).toString();
+          if (!kNotionCertPins.contains(sha256)) {
+            AppLogger.instance.error(
+              'CertPin',
+              'Certificate pinning FAIL on $host : $sha256',
+            );
+          }
+        }
+        return false;
+      };
+      return client;
+    };
+  }
 
   void setCredentials({required String apiKey}) {
     _apiKey = apiKey;
@@ -161,6 +185,39 @@ class NotionService {
     await _dio.patch('/pages/$pageId', data: {'archived': true});
   }
 
+  /// Requête brute sur une base de données avec filtre arbitraire.
+  /// Retourne les résultats (pages) comme List<Map>.
+  Future<List<Map<String, dynamic>>> queryDatabaseRaw({
+    required String databaseId,
+    Map<String, dynamic>? filter,
+  }) async {
+    final body = <String, dynamic>{};
+    if (filter != null) body['filter'] = filter;
+    final response = await _dio.post(
+      '/databases/$databaseId/query',
+      data: body,
+    );
+    return (response.data['results'] as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Crée une page avec un body brut (properties + children).
+  /// Retourne l'ID de la page créée.
+  Future<String> createPageRaw(Map<String, dynamic> body) async {
+    final response = await _dio.post('/pages', data: body);
+    return response.data['id'] as String;
+  }
+
+  /// Met à jour la date d'une page Notion (propriété "Date").
+  Future<void> updatePageDate(String pageId, DateTime date) async {
+    await _dio.patch('/pages/$pageId', data: {
+      'properties': {
+        'Date': {
+          'date': {'start': date.toUtc().toIso8601String()},
+        },
+      },
+    });
+  }
+
   /// Extrait les options de catégorie, priorité et statut depuis le schéma
   /// d'une BDD Notion.
   /// Retourne les TagModels pour les options qui n'existent pas encore localement.
@@ -286,11 +343,11 @@ class NotionService {
         final endStr = dateObj['end'] as String?;
 
         if (startStr != null) {
-          startDate = DateTime.parse(startStr);
+          startDate = DateTime.parse(startStr).toLocal();
           isAllDay = !startStr.contains('T');
         }
         if (endStr != null) {
-          endDate = DateTime.parse(endStr);
+          endDate = DateTime.parse(endStr).toLocal();
         } else if (startDate != null) {
           endDate =
               isAllDay ? startDate : startDate.add(const Duration(hours: 1));

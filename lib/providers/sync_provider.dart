@@ -13,6 +13,7 @@ import '../services/sync_queue_worker.dart';
 import '../services/logger_service.dart';
 import 'events_provider.dart';
 import 'settings_provider.dart';
+import 'tags_provider.dart';
 
 /// Provider du service Infomaniak.
 final infomaniakServiceProvider = Provider<InfomaniakService>((ref) {
@@ -201,8 +202,11 @@ class SyncNotifier extends Notifier<SyncState> {
       // Auto-clear du message d'erreur après 5 secondes
       if (errors.isNotEmpty) _scheduleAutoClear();
 
-      // Actualiser les événements
+      // Actualiser les événements et les tags (la sync peut créer de nouveaux tags)
       ref.read(eventsNotifierProvider.notifier).refresh();
+      ref.invalidate(tagsProvider);
+      ref.invalidate(categoryTagsProvider);
+      ref.invalidate(priorityTagsProvider);
     } catch (e) {
       state = state.copyWith(
         isSyncing: false,
@@ -218,8 +222,8 @@ class SyncNotifier extends Notifier<SyncState> {
     // L'action est déjà dans sync_queue (via EventsNotifier.createEvent/updateEvent).
     final forceOffline = ref.read(forceOfflineProvider);
     if (forceOffline) {
-      AppLogger.instance.info('Sync',
-          'pushEvent: mode offline — push différé (sync_queue)');
+      AppLogger.instance
+          .info('Sync', 'pushEvent: mode offline — push différé (sync_queue)');
       return;
     }
 
@@ -237,12 +241,12 @@ class SyncNotifier extends Notifier<SyncState> {
   }
 
   Future<void> deleteEvent(EventModel event) async {
-    // Guard : en mode offline, suppression locale seule + enqueue.
+    // Guard : en mode offline (forcé OU réseau indisponible), suppression locale seule + enqueue.
     // DatabaseHelper.deleteEvent() fait déjà is_deleted=1 + enqueueSyncAction.
-    final forceOffline = ref.read(forceOfflineProvider);
-    if (forceOffline) {
-      AppLogger.instance.info('Sync',
-          'deleteEvent: mode offline — suppression locale uniquement');
+    final offline = ref.read(isOfflineProvider);
+    if (offline) {
+      AppLogger.instance.info(
+          'Sync', 'deleteEvent: mode offline — suppression locale uniquement');
       await DatabaseHelper.instance.deleteEvent(event.id!);
       ref.read(eventsNotifierProvider.notifier).refresh();
       return;

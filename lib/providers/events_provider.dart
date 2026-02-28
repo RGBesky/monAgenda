@@ -141,39 +141,27 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
   }
 
   Future<void> deleteEvent(int id) async {
-    // V2 : récupérer l'event avant suppression pour la queue
+    // DatabaseHelper.deleteEvent() fait déjà : is_deleted=1 + enqueueSyncAction('delete').
+    // Ne PAS enqueue une 2e fois ici (double-enqueue provoquait des 404 au dépilage).
     final db = DatabaseHelper.instance;
-    final range = ref.read(displayedDateRangeProvider);
-    final events = await db.getEventsByDateRange(range.start, range.end);
-    final event = events.where((e) => e.id == id).firstOrNull;
-
     await db.deleteEvent(id);
-    ref.invalidateSelf();
-    ref.invalidate(eventsInRangeProvider);
+    _invalidateAll();
 
-    // V2 : Enqueue delete sync action
-    if (event != null &&
-        (event.source == AppConstants.sourceInfomaniak ||
-            event.source == AppConstants.sourceNotion)) {
-      try {
-        await db.enqueueSyncAction(
-          action: SyncAction.deleteEvent,
-          source: event.source,
-          eventId: id,
-          payload: jsonEncode(event.toMap()),
-        );
-      } catch (e) {
-        AppLogger.instance
-            .error('EventsNotifier', 'enqueueSyncAction delete failed', e);
-      }
-    }
     // V2 : reprogrammer les notifications en background
     BackgroundWorkerService.rescheduleNow();
   }
 
   void refresh() {
+    _invalidateAll();
+  }
+
+  /// Invalide tous les providers liés aux événements.
+  void _invalidateAll() {
     ref.invalidateSelf();
     ref.invalidate(eventsInRangeProvider);
+    // eventsForDayProvider est family → pas d'invalidation globale,
+    // mais l'invalidation de eventsNotifierProvider suffit car il est
+    // le provider racine que les vues day watchen indirectement.
   }
 }
 

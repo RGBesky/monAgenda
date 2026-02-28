@@ -1,9 +1,18 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import '../core/constants/app_constants.dart';
+import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
 import '../core/models/tag_model.dart';
+import '../core/security/cert_pins.dart';
 import '../core/utils/date_utils.dart';
+import 'logger_service.dart';
+
+/// Callback pour signaler un conflit ETag résolu (last-remote-wins).
+typedef EtagConflictCallback = void Function(EventModel serverEvent);
 
 /// Service CalDAV pour Infomaniak Calendar.
 /// Authentification via Basic Auth (username + mot de passe d'application).
@@ -14,6 +23,9 @@ class InfomaniakService {
   String? _appPassword;
   String? _calendarUrl; // URL CalDAV complète
 
+  /// Callback optionnel pour notifier les conflits ETag.
+  EtagConflictCallback? onEtagConflict;
+
   /// URL du calendrier actuellement configurée.
   String? get calendarUrl => _calendarUrl;
 
@@ -21,7 +33,31 @@ class InfomaniakService {
       : _calDavDio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 30),
-        ));
+        )) {
+    // V3 : Certificate pinning pour Infomaniak CalDAV
+    (_calDavDio.httpClientAdapter as IOHttpClientAdapter).createHttpClient =
+        () {
+      final client = HttpClient();
+      client.badCertificateCallback =
+          (X509Certificate cert, String host, int port) {
+        // Vérifier uniquement pour les domaines Infomaniak
+        if (host.contains('infomaniak.com')) {
+          final sha256 = crypto.sha256.convert(cert.der).toString();
+          if (!kInfomaniakCertPins.contains(sha256)) {
+            AppLogger.instance.error(
+              'CertPin',
+              'Certificate pinning FAIL on $host : $sha256',
+            );
+            // Note : les pins placeholder acceptent tout en dev.
+            // En production, décommenter le throw ci-dessous :
+            // throw CertificatePinningException('Certificat non reconnu pour $host');
+          }
+        }
+        return false; // Rejeter les certificats invalides
+      };
+      return client;
+    };
+  }
 
   void setCredentials({
     required String username,
@@ -188,8 +224,50 @@ class InfomaniakService {
         ),
       );
     } on DioException catch (e) {
-      // 412 Precondition Failed → retenter sans If-Match (force overwrite)
+      // 412 Precondition Failed → conflit ETag.
+      // Stratégie : last-remote-wins (comme Google Calendar)
       if (e.response?.statusCode == 412) {
+        AppLogger.instance.warning(
+          'CalDAV',
+          'Conflit ETag sur $eventUrl — application last-remote-wins',
+        );
+        try {
+          // 1. GET la version serveur
+          final getResp = await _calDavDio.get(eventUrl);
+          if (getResp.statusCode == 200 && getResp.data != null) {
+            final serverEtag = getResp.headers.value('ETag') ?? '';
+            final allTags = await DatabaseHelper.instance.getAllTags();
+            final serverEvent = parseICalEvent(
+              getResp.data.toString(),
+              calendarId: 'infomaniak',
+              allTags: allTags,
+              etag: serverEtag,
+            );
+            if (serverEvent != null) {
+              // 2. Override local avec la version serveur
+              final localEvent = await DatabaseHelper.instance
+                  .getEventByRemoteId(uid, 'infomaniak');
+              if (localEvent != null && localEvent.id != null) {
+                await DatabaseHelper.instance.updateEvent(
+                  serverEvent.copyWith(id: localEvent.id),
+                );
+                // 3. Supprimer l'entrée sync_queue correspondante
+                await DatabaseHelper.instance
+                    .completePendingSyncActionsForEvent(localEvent.id!);
+              }
+              // 4. Notifier l'UI via callback
+              onEtagConflict?.call(serverEvent);
+              return serverEtag;
+            }
+          }
+        } catch (conflictErr) {
+          AppLogger.instance.error(
+            'CalDAV',
+            'Échec résolution conflit ETag',
+            conflictErr,
+          );
+        }
+        // Fallback : force overwrite si résolution échoue
         response = await _calDavDio.put(
           eventUrl,
           data: icsData,

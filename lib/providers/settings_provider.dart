@@ -33,6 +33,8 @@ class AppSettings {
   // Tri
   final String eventSortMode;
   final List<String> calendarOrder;
+  // Notion Meeting Note
+  final String? notionMeetingDatabaseId;
 
   const AppSettings({
     this.infomaniakUsername,
@@ -56,6 +58,7 @@ class AppSettings {
     this.weatherLongitude = 6.1432,
     this.eventSortMode = AppConstants.sortChronological,
     this.calendarOrder = const [],
+    this.notionMeetingDatabaseId,
   });
 
   AppSettings copyWith({
@@ -80,6 +83,7 @@ class AppSettings {
     double? weatherLongitude,
     String? eventSortMode,
     List<String>? calendarOrder,
+    String? notionMeetingDatabaseId,
   }) {
     return AppSettings(
       infomaniakUsername: infomaniakUsername ?? this.infomaniakUsername,
@@ -107,6 +111,8 @@ class AppSettings {
       weatherLongitude: weatherLongitude ?? this.weatherLongitude,
       eventSortMode: eventSortMode ?? this.eventSortMode,
       calendarOrder: calendarOrder ?? this.calendarOrder,
+      notionMeetingDatabaseId:
+          notionMeetingDatabaseId ?? this.notionMeetingDatabaseId,
     );
   }
 
@@ -154,6 +160,9 @@ class AppSettings {
     if (infomaniakCalendarUrl != null) map['ik_cal'] = infomaniakCalendarUrl;
     if (notionApiKey != null) map['notion'] = notionApiKey;
     if (kDriveDepositLink != null) map['kdrive_deposit'] = kDriveDepositLink;
+    if (notionMeetingDatabaseId != null) {
+      map['notion_meeting_db'] = notionMeetingDatabaseId;
+    }
     // Tags personnalisés
     if (tags != null && tags.isNotEmpty) {
       map['tags'] = tags
@@ -253,6 +262,7 @@ class AppSettings {
           json['event_sort'] as String? ?? AppConstants.sortChronological,
       calendarOrder: (json['cal_order'] as List?)?.cast<String>() ?? [],
       kDriveDepositLink: (json['kdrive_deposit'] ?? json['kdrive']) as String?,
+      notionMeetingDatabaseId: json['notion_meeting_db'] as String?,
     );
   }
 }
@@ -309,6 +319,7 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       eventSortMode:
           prefs.getString('event_sort_mode') ?? AppConstants.sortChronological,
       calendarOrder: _decodeCalendarOrder(prefs.getString('calendar_order')),
+      notionMeetingDatabaseId: prefs.getString('notion_meeting_db_id'),
     );
   }
 
@@ -402,6 +413,13 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setString('calendar_order', jsonEncode(order));
     final current = state.valueOrNull ?? const AppSettings();
     state = AsyncData(current.copyWith(calendarOrder: order));
+  }
+
+  Future<void> setNotionMeetingDatabaseId(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('notion_meeting_db_id', id);
+    final current = state.valueOrNull ?? const AppSettings();
+    state = AsyncData(current.copyWith(notionMeetingDatabaseId: id));
   }
 
   Future<void> updateWeatherLocation({

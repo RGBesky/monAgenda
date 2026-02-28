@@ -1,16 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'dart:io' show Platform;
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
 import 'features/calendar/screens/agenda_screen.dart';
 import 'features/calendar/screens/calendar_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
+import 'features/setup/setup_screen.dart';
 import 'features/events/screens/event_form_screen.dart';
+import 'features/magic/magic_entry_screen.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
+
+/// Raccourcis clavier Desktop — données publiques pour affichage dans Settings.
+class AppShellShortcuts {
+  AppShellShortcuts._();
+  static const all = [
+    ('Ctrl + N', 'Nouvel événement'),
+    ('Ctrl + K', 'Saisie Magique (Spotlight)'),
+    ('Ctrl + F', 'Rechercher'),
+    ('Échap', 'Fermer / Retour'),
+  ];
+}
 
 class UnifiedCalendarApp extends ConsumerWidget {
   const UnifiedCalendarApp({super.key});
@@ -45,7 +60,9 @@ class UnifiedCalendarApp extends ConsumerWidget {
         ],
         supportedLocales: const [Locale('fr', 'FR')],
         locale: const Locale('fr', 'FR'),
-        home: const AppShell(),
+        home: settings.isInfomaniakConfigured
+            ? const AppShell()
+            : const SetupScreen(),
       ),
     );
   }
@@ -85,15 +102,37 @@ class UnifiedCalendarApp extends ConsumerWidget {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: const Color(0xFFF7F6F3),
-      textTheme: GoogleFonts.interTextTheme().apply(
-        bodyColor: const Color(0xFF37352F),
-        displayColor: const Color(0xFF37352F),
+      textTheme: GoogleFonts.interTextTheme().copyWith(
+        displayLarge: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF37352F)),
+        titleLarge: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF37352F)),
+        bodyLarge: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF37352F)),
+        bodyMedium: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFF37352F)),
+        labelLarge: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF787774)),
+        bodySmall: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF787774)),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         color: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
         ),
         margin: EdgeInsets.zero,
@@ -102,7 +141,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0.5,
-        backgroundColor: Color(0xFFFFFFFF),
+        backgroundColor: Color(0xFFF7F6F3),
         foregroundColor: Color(0xFF37352F),
         surfaceTintColor: Colors.transparent,
         titleTextStyle: TextStyle(
@@ -157,11 +196,46 @@ class UnifiedCalendarApp extends ConsumerWidget {
         actionTextColor: const Color(0xFF69AEFF),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 0,
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          side: const BorderSide(color: Color(0xFFE3E2DE)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFF7F6F3),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF007AFF), width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: WidgetStateProperty.all(0),
@@ -211,15 +285,38 @@ class UnifiedCalendarApp extends ConsumerWidget {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: const Color(0xFF191919),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).apply(
-        bodyColor: const Color(0xFFE8E7E4),
-        displayColor: const Color(0xFFE8E7E4),
+      textTheme:
+          GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
+        displayLarge: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFFE8E7E4)),
+        titleLarge: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFE8E7E4)),
+        bodyLarge: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFFE8E7E4)),
+        bodyMedium: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: Color(0xFFE8E7E4)),
+        labelLarge: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF9B9A97)),
+        bodySmall: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF9B9A97)),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: const Color(0xFF202020),
+        color: const Color(0xFF252525),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: Color(0xFF373737), width: 0.5),
         ),
         margin: EdgeInsets.zero,
@@ -285,11 +382,46 @@ class UnifiedCalendarApp extends ConsumerWidget {
         closeIconColor: const Color(0xFF37352F),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          elevation: 0,
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          side: const BorderSide(color: Color(0xFF373737)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF282828),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF373737), width: 0.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF373737), width: 0.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0A84FF), width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: WidgetStateProperty.all(0),
@@ -344,9 +476,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(syncNotifierProvider.notifier).syncAll();
-    });
+    // syncAll est déclenché par autoSyncOnConnectivityProvider — pas de double appel
   }
 
   @override
@@ -362,7 +492,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     if (isDesktop) {
       // ── Desktop : NavigationRail latéral (Design System §3.B) ──
-      return Scaffold(
+      final desktopScaffold = Scaffold(
         body: Row(
           children: [
             _buildNavigationRail(isDark),
@@ -371,6 +501,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               child: Column(
                 children: [
                   if (isOffline) _buildOfflineBanner(),
+                  _buildServerErrorBanner(),
                   Expanded(child: _screens[_selectedIndex]),
                 ],
               ),
@@ -378,6 +509,18 @@ class _AppShellState extends ConsumerState<AppShell> {
           ],
         ),
       );
+
+      // ── Raccourcis clavier Desktop (6.4) ──
+      if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+        return CallbackShortcuts(
+          bindings: _buildKeyboardShortcuts(context),
+          child: Focus(
+            autofocus: true,
+            child: desktopScaffold,
+          ),
+        );
+      }
+      return desktopScaffold;
     }
 
     // ── Mobile : BottomNavigationBar (Design System §3.A) ──
@@ -385,6 +528,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: Column(
         children: [
           if (isOffline) _buildOfflineBanner(),
+          _buildServerErrorBanner(),
           Expanded(child: _screens[_selectedIndex]),
         ],
       ),
@@ -444,7 +588,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             FloatingActionButton.small(
               heroTag: 'rail_fab',
               onPressed: () => _showQuickAddSheet(context, isDark),
-              child: HugeIcon(
+              child: const HugeIcon(
                 icon: HugeIcons.strokeRoundedAdd01,
                 color: Colors.white,
                 size: 20,
@@ -571,7 +715,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           heroTag: 'main_fab',
           onPressed: () => _showQuickAddSheet(context, isDark),
           tooltip: 'Créer',
-          child: HugeIcon(
+          child: const HugeIcon(
             icon: HugeIcons.strokeRoundedAdd01,
             color: Colors.white,
             size: 26,
@@ -622,6 +766,39 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
   }
+
+  // ── Raccourcis clavier Desktop (Task 6.4) ──────────────────
+  Map<ShortcutActivator, VoidCallback> _buildKeyboardShortcuts(
+      BuildContext context) {
+    return {
+      // Ctrl+N → Créer un événement
+      const SingleActivator(LogicalKeyboardKey.keyN, control: true): () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const EventFormScreen()),
+        );
+      },
+      // Ctrl+K → Saisie Magique (Spotlight)
+      const SingleActivator(LogicalKeyboardKey.keyK, control: true): () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MagicEntryScreen()),
+        );
+      },
+      // Ctrl+F → Focus recherche (switch to Agenda tab with search)
+      const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+        setState(() => _selectedIndex = 0);
+        // The search bar is in AgendaScreen — switching to it is sufficient
+      },
+      // Escape → Fermer modal/BottomSheet
+      const SingleActivator(LogicalKeyboardKey.escape): () {
+        Navigator.maybePop(context);
+      },
+    };
+  }
+
+  /// Liste des raccourcis pour affichage dans Settings
+  /// (Accessible via AppShellShortcuts.all depuis d'autres fichiers)
 
   void _showQuickAddSheet(BuildContext context, bool isDark) {
     showModalBottomSheet(
@@ -761,6 +938,58 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// V3 : Bannière d'erreur serveur (429/500/503/timeout).
+  Widget _buildServerErrorBanner() {
+    final serverError = ref.watch(serverSyncErrorProvider);
+    if (serverError == null) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFFF9500),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+      child: Row(
+        children: [
+          const HugeIcon(
+            icon: HugeIcons.strokeRoundedAlert02,
+            color: Colors.white,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '⚠️ $serverError',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(serverSyncErrorProvider.notifier).state = null;
+              ref.read(syncNotifierProvider.notifier).syncAll();
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+            ),
+            child: const Text('Réessayer', style: TextStyle(fontSize: 12)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white, size: 16),
+            constraints: const BoxConstraints(maxWidth: 28, maxHeight: 28),
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              ref.read(serverSyncErrorProvider.notifier).state = null;
+            },
+          ),
+        ],
       ),
     );
   }

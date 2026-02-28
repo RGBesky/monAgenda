@@ -13,6 +13,9 @@ import '../../../services/ics_service.dart';
 import '../../../services/sync_engine.dart';
 import '../../../services/notion_service.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/magic_feedback_repository.dart';
+import '../../../services/model_download_service.dart';
+import '../../../services/magic_entry_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -24,644 +27,1073 @@ import 'backup_settings_screen.dart';
 import 'import_config_screen.dart';
 import 'system_logs_screen.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  int _selectedSection = 0;
+
+  static const _sectionLabels = [
+    'Comptes',
+    'Notifications',
+    'Apparence',
+    'IA & Modèle',
+    'Avancé',
+  ];
+  static const _sectionIcons = [
+    Icons.link,
+    Icons.notifications_outlined,
+    Icons.palette_outlined,
+    Icons.smart_toy_outlined,
+    Icons.settings_outlined,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider).valueOrNull;
     final syncState = ref.watch(syncNotifierProvider);
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDesktop =
+        Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
+    if (isDesktop) {
+      return _buildDesktopLayout(context, settings, syncState, isDark);
+    }
+    return _buildMobileLayout(context, settings, syncState, isDark);
+  }
+
+  // ── Desktop : NavigationRail + content panel ──────────────
+  Widget _buildDesktopLayout(
+      BuildContext context, dynamic settings, dynamic syncState, bool isDark) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paramètres'),
-      ),
-      body: ListView(
+      appBar: AppBar(title: const Text('Paramètres')),
+      body: Row(
         children: [
-          // Logo de l'application
-          _buildAppLogoHeader(isDark),
-
-          // État de synchronisation
-          if (syncState.lastSyncedAt != null)
-            _buildSyncBanner(context, syncState),
-
-          // Section Connexions
-          _buildSection(
-            context,
-            title: 'Connexions',
-            hugeIcon: HugeIcons.strokeRoundedCloudServer,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedUserCircle02,
-                    color: Color(0xFF0098FF),
-                    size: 22),
-                title: const Text('Infomaniak'),
-                subtitle: Text(
-                  settings?.isInfomaniakConfigured == true
-                      ? 'Connecté'
-                      : 'Non configuré',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (settings?.isInfomaniakConfigured == true)
-                      const HugeIcon(
-                          icon: HugeIcons.strokeRoundedCheckmarkCircle01,
-                          color: Colors.green,
-                          size: 16),
-                    const SizedBox(width: 4),
-                    const HugeIcon(
-                        icon: HugeIcons.strokeRoundedArrowRight01,
-                        color: Colors.grey,
-                        size: 18),
-                  ],
-                ),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ConnectionsSettingsScreen(),
-                  ),
-                ),
+          NavigationRail(
+            selectedIndex: _selectedSection,
+            labelType: NavigationRailLabelType.all,
+            onDestinationSelected: (i) => setState(() => _selectedSection = i),
+            destinations: List.generate(
+              _sectionLabels.length,
+              (i) => NavigationRailDestination(
+                icon: Icon(_sectionIcons[i]),
+                selectedIcon: Icon(_sectionIcons[i]),
+                label: Text(_sectionLabels[i]),
               ),
-              ListTile(
-                leading: Image.asset(
-                  'assets/logos/notion_32x32.png',
-                  width: 22,
-                  height: 22,
-                ),
-                title: const Text('Notion'),
-                subtitle: Text(
-                  settings?.isNotionConfigured == true
-                      ? 'Connecté'
-                      : 'Non configuré',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (settings?.isNotionConfigured == true)
-                      const HugeIcon(
-                          icon: HugeIcons.strokeRoundedCheckmarkCircle01,
-                          color: Colors.green,
-                          size: 16),
-                    const SizedBox(width: 4),
-                    const HugeIcon(
-                        icon: HugeIcons.strokeRoundedArrowRight01,
-                        color: Colors.grey,
-                        size: 18),
-                  ],
-                ),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ConnectionsSettingsScreen(
-                      initialTab: 1,
-                    ),
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedCalendar01,
-                    color: Color(0xFF8E8E93),
-                    size: 22),
-                title: const Text('Abonnements .ics'),
-                trailing: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    color: Colors.grey,
-                    size: 18),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ConnectionsSettingsScreen(
-                      initialTab: 2,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-
-          // Section Tags
-          _buildSection(
-            context,
-            title: 'Tags',
-            hugeIcon: HugeIcons.strokeRoundedTag01,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedSortByDown01,
-                    color: Color(0xFF007AFF),
-                    size: 22),
-                title: const Text('Catégories et priorités'),
-                trailing: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    color: Colors.grey,
-                    size: 18),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const TagsSettingsScreen(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // Section Notifications
-          _buildSection(
-            context,
-            title: 'Notifications',
-            hugeIcon: HugeIcons.strokeRoundedNotification01,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedClock01,
-                    color: Color(0xFFFF9500),
-                    size: 22),
-                title: const Text('Rappels et résumé matinal'),
-                trailing: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    color: Colors.grey,
-                    size: 18),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const NotificationsSettingsScreen(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // Section Apparence
-          _buildSection(
-            context,
-            title: 'Apparence',
-            hugeIcon: HugeIcons.strokeRoundedColorPicker,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedMoon02,
-                    color: Color(0xFF5856D6),
-                    size: 22),
-                title: const Text('Thème et affichage'),
-                subtitle: Text(
-                  settings?.theme == 'light'
-                      ? 'Mode clair'
-                      : settings?.theme == 'dark'
-                          ? 'Mode sombre'
-                          : 'Automatique',
-                ),
-                trailing: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    color: Colors.grey,
-                    size: 18),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AppearanceSettingsScreen(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // Section Météo
-          _buildSection(
-            context,
-            title: 'Météo',
-            hugeIcon: HugeIcons.strokeRoundedSun01,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedLocation01,
-                    color: Color(0xFF42A5F5),
-                    size: 22),
-                title: const Text('Ville'),
-                subtitle: Text(settings?.weatherCity ?? 'Genève'),
-                trailing: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    color: Colors.grey,
-                    size: 18),
-                onTap: () => _editWeatherCity(context, ref, settings),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedGps01,
-                    color: Color(0xFF66BB6A),
-                    size: 22),
-                title: const Text('Détecter ma position'),
-                subtitle: const Text('Géolocalisation automatique'),
-                onTap: () => _detectLocation(context, ref),
-              ),
-            ],
-          ),
-
-          // Section Import/Export
-          _buildSection(
-            context,
-            title: 'Import / Export',
-            hugeIcon: HugeIcons.strokeRoundedExchange01,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedFileUpload,
-                    color: Color(0xFF34C759),
-                    size: 22),
-                title: const Text('Importer un fichier .ics'),
-                onTap: () => _importIcs(context, ref),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedDownload02,
-                    color: Color(0xFF007AFF),
-                    size: 22),
-                title: const Text('Exporter en .ics'),
-                onTap: () => _exportIcs(context, ref),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedFile01,
-                    color: Color(0xFF30B0C7),
-                    size: 22),
-                title: const Text('Exporter en .csv'),
-                onTap: () => _exportCsv(context, ref),
-              ),
-              if (PlatformUtils.supportsPptExport)
-                ListTile(
-                  leading: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedPresentation01,
-                      color: Color(0xFFFF9500),
-                      size: 22),
-                  title: const Text('Exporter planning PPT'),
-                  onTap: () => _exportPpt(context, ref, settings),
-                ),
-            ],
-          ),
-
-          // Section Transfert & Sauvegarde config
-          _buildSection(
-            context,
-            title: 'Transfert config',
-            hugeIcon: HugeIcons.strokeRoundedQrCode,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedQrCode,
-                    color: Color(0xFF5856D6),
-                    size: 22),
-                title: const Text('QR Code → Téléphone'),
-                subtitle: const Text('Transférer la config (chiffré AES-256)'),
-                onTap: () => _showQrExport(context, ref, settings),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedSmartPhone01,
-                    color: Color(0xFFFF9500),
-                    size: 22),
-                title: const Text('Scanner / Importer config'),
-                subtitle:
-                    const Text('Importer via QR code ou données chiffrées'),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ImportConfigScreen(),
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedFileExport,
-                    color: Color(0xFF007AFF),
-                    size: 22),
-                title: const Text('Exporter la configuration'),
-                subtitle: const Text('Sauvegarder dans un fichier .json'),
-                onTap: () => _exportConfig(context, ref, settings),
-              ),
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedFileImport,
-                    color: Color(0xFF34C759),
-                    size: 22),
-                title: const Text('Importer une configuration'),
-                subtitle: const Text('Restaurer depuis un fichier .json'),
-                onTap: () => _importConfig(context, ref),
-              ),
-            ],
-          ),
-
-          // Section Sauvegarde (kDrive)
-          _buildSection(
-            context,
-            title: 'Sauvegarde',
-            hugeIcon: HugeIcons.strokeRoundedCloudUpload,
-            children: [
-              ListTile(
-                leading: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedCloudUpload,
-                    color: Color(0xFF0098FF),
-                    size: 22),
-                title: const Text('Sauvegarde kDrive'),
-                trailing: const HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    color: Colors.grey,
-                    size: 18),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const BackupSettingsScreen(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // Section Logs système
-          _buildSection(
-            context,
-            title: 'Diagnostic',
-            hugeIcon: HugeIcons.strokeRoundedAlert02,
-            children: [
-              Consumer(
-                builder: (context, ref, _) {
-                  final errorCount =
-                      ref.watch(unreadErrorCountProvider).valueOrNull ?? 0;
-                  return ListTile(
-                    leading: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const HugeIcon(
-                          icon: HugeIcons.strokeRoundedAlert02,
-                          color: Color(0xFF8E8E93),
-                          size: 22,
-                        ),
-                        if (errorCount > 0)
-                          Positioned(
-                            right: -6,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFFF3B30),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                errorCount > 9 ? '9+' : '$errorCount',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    title: const Text('Logs système'),
-                    subtitle: Text(
-                      errorCount > 0
-                          ? '$errorCount erreur${errorCount > 1 ? 's' : ''} non lue${errorCount > 1 ? 's' : ''}'
-                          : 'Aucune erreur',
-                    ),
-                    trailing: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowRight01,
-                      color: Colors.grey,
-                      size: 18,
-                    ),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SystemLogsScreen(),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-
-          // Section Linux
-          if (PlatformUtils.isLinux)
-            _buildSection(
-              context,
-              title: 'Linux',
-              hugeIcon: HugeIcons.strokeRoundedComputerDesk01,
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                ListTile(
-                  leading: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedCode,
-                      color: Color(0xFF5856D6),
-                      size: 22),
-                  title: const Text('Script Python PPT'),
-                  subtitle: Text(
-                    settings?.pythonScriptPath ?? 'Auto-détecté (bundlé)',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowRight01,
-                      color: Colors.grey,
-                      size: 18),
-                  onTap: () => _pickPythonScript(context, ref),
-                ),
+                _buildAppLogoHeader(isDark),
+                ..._buildSectionContent(
+                    context, _selectedSection, settings, syncState, isDark),
               ],
             ),
-
-          // Section Mode hors-ligne & Synchronisation
-          _buildSection(
-            context,
-            title: 'Synchronisation',
-            hugeIcon: HugeIcons.strokeRoundedRefresh,
-            children: [
-              Consumer(
-                builder: (context, ref, _) {
-                  final forceOffline = ref.watch(forceOfflineProvider);
-                  final pendingCount =
-                      ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
-
-                  return Column(
-                    children: [
-                      SwitchListTile(
-                        secondary: HugeIcon(
-                          icon: HugeIcons.strokeRoundedWifiDisconnected04,
-                          color: forceOffline
-                              ? const Color(0xFFFF9500)
-                              : const Color(0xFF8E8E93),
-                          size: 22,
-                        ),
-                        title: const Text('Mode hors-ligne'),
-                        subtitle: Text(
-                          forceOffline
-                              ? 'Actif — les modifications sont empilées localement'
-                              : 'Désactivé — sync automatique',
-                        ),
-                        value: forceOffline,
-                        onChanged: (_) =>
-                            ref.read(forceOfflineProvider.notifier).toggle(),
-                      ),
-                      if (forceOffline && pendingCount > 0)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: Builder(
-                            builder: (context) {
-                              final isDarkBanner =
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark;
-                              return Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: isDarkBanner
-                                      ? const Color(0xFF3D2200)
-                                      : const Color(0xFFFFF3E0),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    HugeIcon(
-                                      icon: HugeIcons.strokeRoundedCloudUpload,
-                                      color: isDarkBanner
-                                          ? const Color(0xFFFFB74D)
-                                          : const Color(0xFFFF9500),
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        '$pendingCount modification${pendingCount > 1 ? 's' : ''} en attente',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: isDarkBanner
-                                              ? const Color(0xFFFFB74D)
-                                              : const Color(0xFFE65100),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      if (forceOffline && pendingCount > 0)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: syncState.isSyncing
-                                  ? null
-                                  : () => ref
-                                      .read(syncNotifierProvider.notifier)
-                                      .pushAndSync(),
-                              icon: syncState.isSyncing
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.cloud_upload),
-                              label: Text(
-                                syncState.isSyncing
-                                    ? 'Envoi en cours…'
-                                    : 'Pousser les modifications',
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (!forceOffline)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: OutlinedButton.icon(
-                            onPressed: syncState.isSyncing
-                                ? null
-                                : () => ref
-                                    .read(syncNotifierProvider.notifier)
-                                    .syncAll(),
-                            icon: syncState.isSyncing
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const HugeIcon(
-                                    icon: HugeIcons.strokeRoundedRefresh,
-                                    color: Color(0xFF007AFF),
-                                    size: 18),
-                            label: const Text('Synchroniser maintenant'),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
           ),
-
-          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
+  // ── Mobile : ExpansionTile ListView ───────────────────────
+  Widget _buildMobileLayout(
+      BuildContext context, dynamic settings, dynamic syncState, bool isDark) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Paramètres')),
+      body: ListView(
+        children: [
+          _buildAppLogoHeader(isDark),
+          if (syncState.lastSyncedAt != null)
+            _buildSyncBanner(context, syncState),
+          for (int i = 0; i < _sectionLabels.length; i++)
+            ExpansionTile(
+              leading: Icon(_sectionIcons[i], size: 20),
+              title: Text(_sectionLabels[i]),
+              initiallyExpanded: i == 0,
+              children:
+                  _buildSectionContent(context, i, settings, syncState, isDark),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Build content widgets for a given section index.
+  List<Widget> _buildSectionContent(BuildContext context, int section,
+      dynamic settings, dynamic syncState, bool isDark) {
+    switch (section) {
+      case 0: // Comptes
+        return _buildAccountsContent(context, settings);
+      case 1: // Notifications
+        return _buildNotificationsContent(context, settings);
+      case 2: // Apparence
+        return _buildAppearanceContent(context, settings, isDark);
+      case 3: // IA & Modèle
+        return _buildAiContent(context);
+      case 4: // Avancé
+        return _buildAdvancedContent(context, settings, syncState, isDark);
+      default:
+        return [];
+    }
+  }
+
+  List<Widget> _buildAccountsContent(BuildContext context, dynamic settings) {
+    return [
+      _buildSection(
+        context,
+        title: 'Connexions',
+        hugeIcon: HugeIcons.strokeRoundedLink01,
+        children: [
+          ListTile(
+            leading: Image.asset(
+              'assets/logos/infomaniak_32x32.png',
+              width: 22,
+              height: 22,
+            ),
+            title: const Text('Infomaniak'),
+            subtitle: Text(
+              settings?.isInfomaniakConfigured == true
+                  ? 'Connecté'
+                  : 'Non configuré',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (settings?.isInfomaniakConfigured == true)
+                  const HugeIcon(
+                      icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                      color: Colors.green,
+                      size: 16),
+                const SizedBox(width: 4),
+                const HugeIcon(
+                    icon: HugeIcons.strokeRoundedArrowRight01,
+                    color: Colors.grey,
+                    size: 18),
+              ],
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ConnectionsSettingsScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: Image.asset(
+              'assets/logos/notion_32x32.png',
+              width: 22,
+              height: 22,
+            ),
+            title: const Text('Notion'),
+            subtitle: Text(
+              settings?.isNotionConfigured == true
+                  ? 'Connecté'
+                  : 'Non configuré',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (settings?.isNotionConfigured == true)
+                  const HugeIcon(
+                      icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                      color: Colors.green,
+                      size: 16),
+                const SizedBox(width: 4),
+                const HugeIcon(
+                    icon: HugeIcons.strokeRoundedArrowRight01,
+                    color: Colors.grey,
+                    size: 18),
+              ],
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ConnectionsSettingsScreen(
+                  initialTab: 1,
+                ),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedCalendar01,
+                color: Color(0xFF8E8E93),
+                size: 22),
+            title: const Text('Abonnements .ics'),
+            trailing: const HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowRight01,
+                color: Colors.grey,
+                size: 18),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ConnectionsSettingsScreen(
+                  initialTab: 2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      // Tags section also belongs to Accounts
+      _buildSection(
+        context,
+        title: 'Tags',
+        hugeIcon: HugeIcons.strokeRoundedTag01,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedSortByDown01,
+                color: Color(0xFF007AFF),
+                size: 22),
+            title: const Text('Catégories et priorités'),
+            trailing: const HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowRight01,
+                color: Colors.grey,
+                size: 18),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TagsSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _buildNotificationsContent(
+      BuildContext context, dynamic settings) {
+    return [
+      _buildSection(
+        context,
+        title: 'Notifications',
+        hugeIcon: HugeIcons.strokeRoundedNotification01,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedClock01,
+                color: Color(0xFFFF9500),
+                size: 22),
+            title: const Text('Rappels et résumé matinal'),
+            trailing: const HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowRight01,
+                color: Colors.grey,
+                size: 18),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationsSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _buildAppearanceContent(
+      BuildContext context, dynamic settings, bool isDark) {
+    return [
+      _buildSection(
+        context,
+        title: 'Apparence',
+        hugeIcon: HugeIcons.strokeRoundedColorPicker,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedMoon02,
+                color: Color(0xFF5856D6),
+                size: 22),
+            title: const Text('Thème et affichage'),
+            subtitle: Text(
+              settings?.theme == 'light'
+                  ? 'Mode clair'
+                  : settings?.theme == 'dark'
+                      ? 'Mode sombre'
+                      : 'Automatique',
+            ),
+            trailing: const HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowRight01,
+                color: Colors.grey,
+                size: 18),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AppearanceSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+
+      // Section Météo
+      _buildSection(
+        context,
+        title: 'Météo',
+        hugeIcon: HugeIcons.strokeRoundedSun01,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedLocation01,
+                color: Color(0xFF42A5F5),
+                size: 22),
+            title: const Text('Ville'),
+            subtitle: Text(settings?.weatherCity ?? 'Genève'),
+            trailing: const HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowRight01,
+                color: Colors.grey,
+                size: 18),
+            onTap: () => _editWeatherCity(context, ref, settings),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedGps01,
+                color: Color(0xFF66BB6A),
+                size: 22),
+            title: const Text('Détecter ma position'),
+            subtitle: const Text('Géolocalisation automatique'),
+            onTap: () => _detectLocation(context, ref),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _buildAiContent(BuildContext context) {
+    return [
+      // ── Statut du modèle IA ──
+      _buildSection(
+        context,
+        title: 'Modèle IA local',
+        hugeIcon: HugeIcons.strokeRoundedAiBrain01,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final modelStatus = ref.watch(modelDownloadStatusProvider);
+              final downloadProgress = ref.watch(modelDownloadProgressProvider);
+
+              return modelStatus.when(
+                data: (status) {
+                  switch (status) {
+                    case ModelStatus.ready:
+                      return _buildModelReady(context, ref);
+                    case ModelStatus.downloading:
+                      return _buildModelDownloading(context, downloadProgress);
+                    case ModelStatus.error:
+                      return _buildModelError(context, ref);
+                    case ModelStatus.notDownloaded:
+                      return _buildModelNotInstalled(context, ref);
+                  }
+                },
+                loading: () => const ListTile(
+                  leading: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  title: Text('Vérification du modèle…'),
+                ),
+                error: (e, _) => ListTile(
+                  leading: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedAlert02,
+                      color: Colors.red,
+                      size: 22),
+                  title: const Text('Erreur de vérification'),
+                  subtitle: Text('$e'),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+
+      // ── Corrections IA (feedback loop) ──
+      _buildSection(
+        context,
+        title: 'Corrections IA',
+        hugeIcon: HugeIcons.strokeRoundedAiChat02,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final feedbackCount =
+                  ref.watch(magicFeedbackCountProvider).valueOrNull ?? 0;
+              return Column(
+                children: [
+                  ListTile(
+                    leading: const HugeIcon(
+                        icon: HugeIcons.strokeRoundedAiChat02,
+                        color: Color(0xFFFFBD98),
+                        size: 22),
+                    title: const Text('Corrections IA'),
+                    subtitle: Text(
+                        '$feedbackCount correction${feedbackCount > 1 ? 's' : ''} enregistrée${feedbackCount > 1 ? 's' : ''}'),
+                  ),
+                  ListTile(
+                    leading: const HugeIcon(
+                        icon: HugeIcons.strokeRoundedFileExport,
+                        color: Color(0xFF34C759),
+                        size: 22),
+                    title: const Text('Exporter corrections'),
+                    subtitle: const Text('Fichier CSV local'),
+                    onTap: feedbackCount > 0
+                        ? () => _exportMagicFeedback(context, ref)
+                        : null,
+                  ),
+                  ListTile(
+                    leading: const HugeIcon(
+                        icon: HugeIcons.strokeRoundedDelete02,
+                        color: Color(0xFFFF3B30),
+                        size: 22),
+                    title: const Text('Vider les corrections'),
+                    onTap: feedbackCount > 0
+                        ? () => _clearMagicFeedback(context, ref)
+                        : null,
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    ];
+  }
+
+  // ── Modèle installé et prêt ──
+  Widget _buildModelReady(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<double?>(
+      future: ModelDownloadService.instance.modelSizeMb,
+      builder: (context, snapshot) {
+        final sizeMb = snapshot.data;
+        return Column(
+          children: [
+            ListTile(
+              leading: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                  color: Colors.green,
+                  size: 22),
+              title: const Text('H2O Danube 3 (500M)'),
+              subtitle: Text(
+                'Installé${sizeMb != null ? ' · ${sizeMb.toStringAsFixed(0)} Mo' : ''}\n'
+                'Inférence 100% locale · CPU',
+              ),
+            ),
+            ListTile(
+              leading: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedDelete02,
+                  color: Color(0xFFFF3B30),
+                  size: 22),
+              title: const Text('Supprimer le modèle'),
+              subtitle: const Text('Libérer l\'espace disque'),
+              onTap: () => _confirmDeleteModel(context, ref),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── Modèle en cours de téléchargement ──
+  Widget _buildModelDownloading(
+      BuildContext context, AsyncValue<double> progress) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          const ListTile(
+            leading: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            title: Text('Téléchargement en cours…'),
+            subtitle: Text('H2O Danube 3 · ~300 Mo'),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: progress.when(
+              data: (v) => Column(
+                children: [
+                  LinearProgressIndicator(value: v),
+                  const SizedBox(height: 4),
+                  Text('${(v * 100).toStringAsFixed(1)}%',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+              loading: () => const LinearProgressIndicator(),
+              error: (e, _) =>
+                  Text('Erreur: $e', style: const TextStyle(color: Colors.red)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Modèle pas encore installé ──
+  Widget _buildModelNotInstalled(BuildContext context, WidgetRef ref) {
+    return Column(
+      children: [
+        const ListTile(
+          leading: HugeIcon(
+              icon: HugeIcons.strokeRoundedDownload02,
+              color: Color(0xFFFFBD98),
+              size: 22),
+          title: Text('H2O Danube 3 (500M)'),
+          subtitle: Text(
+            'Non installé · ~300 Mo\n'
+            'Requis pour la saisie magique avancée.\n'
+            'Sans modèle, seul le parsing basique (regex) est utilisé.',
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _downloadModelFromSettings(context, ref),
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Télécharger depuis HuggingFace'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Modèle en erreur ──
+  Widget _buildModelError(BuildContext context, WidgetRef ref) {
+    return Column(
+      children: [
+        const ListTile(
+          leading: HugeIcon(
+              icon: HugeIcons.strokeRoundedAlert02,
+              color: Colors.red,
+              size: 22),
+          title: Text('Erreur modèle IA'),
+          subtitle:
+              Text('Le téléchargement a échoué ou le fichier est corrompu.'),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _downloadModelFromSettings(context, ref),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Réessayer le téléchargement'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _downloadModelFromSettings(
+      BuildContext context, WidgetRef ref) async {
+    // Confirmation
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.smart_toy_outlined,
+            color: Color(0xFFFFBD98), size: 40),
+        title: const Text('Télécharger le modèle IA ?'),
+        content: const Text(
+          'H2O Danube 3 (500M, quantifié Q4_K_M)\n'
+          '~300 Mo à télécharger depuis HuggingFace.\n\n'
+          'Le modèle permet la compréhension avancée du langage naturel '
+          'pour la saisie magique. Tout reste 100% local.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Télécharger'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    // Lancer le téléchargement
+    final success = await ref.read(magicEntryProvider.notifier).downloadModel();
+    if (!context.mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✓ Modèle IA installé avec succès !'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✗ Échec du téléchargement. Vérifiez votre connexion.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteModel(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer le modèle IA ?'),
+        content: const Text(
+          'Le modèle sera supprimé du disque (~300 Mo libérés).\n'
+          'Vous pourrez le re-télécharger à tout moment.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(modelDownloadStatusProvider.notifier).deleteModel();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Modèle IA supprimé.'),
+          ),
+        );
+      }
+    }
+  }
+
+  List<Widget> _buildAdvancedContent(
+      BuildContext context, dynamic settings, dynamic syncState, bool isDark) {
+    return [
+      _buildSection(
+        context,
+        title: 'Import / Export',
+        hugeIcon: HugeIcons.strokeRoundedExchange01,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedFileUpload,
+                color: Color(0xFF34C759),
+                size: 22),
+            title: const Text('Importer un fichier .ics'),
+            onTap: () => _importIcs(context, ref),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedDownload02,
+                color: Color(0xFF007AFF),
+                size: 22),
+            title: const Text('Exporter en .ics'),
+            onTap: () => _exportIcs(context, ref),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedFile01,
+                color: Color(0xFF30B0C7),
+                size: 22),
+            title: const Text('Exporter en .csv'),
+            onTap: () => _exportCsv(context, ref),
+          ),
+          if (PlatformUtils.supportsPptExport)
+            ListTile(
+              leading: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedPresentation01,
+                  color: Color(0xFFFF9500),
+                  size: 22),
+              title: const Text('Exporter planning PPT'),
+              onTap: () => _exportPpt(context, ref, settings),
+            ),
+        ],
+      ),
+
+      // Section Transfert & Sauvegarde config
+      _buildSection(
+        context,
+        title: 'Transfert config',
+        hugeIcon: HugeIcons.strokeRoundedQrCode,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedQrCode,
+                color: Color(0xFF5856D6),
+                size: 22),
+            title: const Text('QR Code → Téléphone'),
+            subtitle: const Text('Transférer la config (chiffré AES-256)'),
+            onTap: () => _showQrExport(context, ref, settings),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedSmartPhone01,
+                color: Color(0xFFFF9500),
+                size: 22),
+            title: const Text('Scanner / Importer config'),
+            subtitle: const Text('Importer via QR code ou données chiffrées'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ImportConfigScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedFileExport,
+                color: Color(0xFF007AFF),
+                size: 22),
+            title: const Text('Exporter la configuration'),
+            subtitle: const Text('Sauvegarder dans un fichier .json'),
+            onTap: () => _exportConfig(context, ref, settings),
+          ),
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedFileImport,
+                color: Color(0xFF34C759),
+                size: 22),
+            title: const Text('Importer une configuration'),
+            subtitle: const Text('Restaurer depuis un fichier .json'),
+            onTap: () => _importConfig(context, ref),
+          ),
+        ],
+      ),
+
+      // Section Sauvegarde (kDrive)
+      _buildSection(
+        context,
+        title: 'Sauvegarde',
+        hugeIcon: HugeIcons.strokeRoundedCloudUpload,
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedCloudUpload,
+                color: Color(0xFF0098FF),
+                size: 22),
+            title: const Text('Sauvegarde kDrive'),
+            trailing: const HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowRight01,
+                color: Colors.grey,
+                size: 18),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BackupSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+
+      // Section Logs système
+      _buildSection(
+        context,
+        title: 'Diagnostic',
+        hugeIcon: HugeIcons.strokeRoundedAlert02,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final errorCount =
+                  ref.watch(unreadErrorCountProvider).valueOrNull ?? 0;
+              return ListTile(
+                leading: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const HugeIcon(
+                      icon: HugeIcons.strokeRoundedAlert02,
+                      color: Color(0xFF8E8E93),
+                      size: 22,
+                    ),
+                    if (errorCount > 0)
+                      Positioned(
+                        right: -6,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF3B30),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            errorCount > 9 ? '9+' : '$errorCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                title: const Text('Logs système'),
+                subtitle: Text(
+                  errorCount > 0
+                      ? '$errorCount erreur${errorCount > 1 ? 's' : ''} non lue${errorCount > 1 ? 's' : ''}'
+                      : 'Aucune erreur',
+                ),
+                trailing: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedArrowRight01,
+                  color: Colors.grey,
+                  size: 18,
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SystemLogsScreen(),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+
+      // Section Linux
+      if (PlatformUtils.isLinux)
+        _buildSection(
+          context,
+          title: 'Linux',
+          hugeIcon: HugeIcons.strokeRoundedComputerDesk01,
+          children: [
+            ListTile(
+              leading: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedCode,
+                  color: Color(0xFF5856D6),
+                  size: 22),
+              title: const Text('Script Python PPT'),
+              subtitle: Text(
+                settings?.pythonScriptPath ?? 'Auto-détecté (bundlé)',
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedArrowRight01,
+                  color: Colors.grey,
+                  size: 18),
+              onTap: () => _pickPythonScript(context, ref),
+            ),
+          ],
+        ),
+
+      // Section Mode hors-ligne & Synchronisation
+      _buildSection(
+        context,
+        title: 'Synchronisation',
+        hugeIcon: HugeIcons.strokeRoundedRefresh,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final forceOffline = ref.watch(forceOfflineProvider);
+              final pendingCount =
+                  ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
+
+              return Column(
+                children: [
+                  SwitchListTile(
+                    secondary: HugeIcon(
+                      icon: HugeIcons.strokeRoundedWifiDisconnected04,
+                      color: forceOffline
+                          ? const Color(0xFFFF9500)
+                          : const Color(0xFF8E8E93),
+                      size: 22,
+                    ),
+                    title: const Text('Mode hors-ligne'),
+                    subtitle: Text(
+                      forceOffline
+                          ? 'Actif — les modifications sont empilées localement'
+                          : 'Désactivé — sync automatique',
+                    ),
+                    value: forceOffline,
+                    onChanged: (_) =>
+                        ref.read(forceOfflineProvider.notifier).toggle(),
+                  ),
+                  if (forceOffline && pendingCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Builder(
+                        builder: (context) {
+                          final isDarkBanner =
+                              Theme.of(context).brightness == Brightness.dark;
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isDarkBanner
+                                  ? const Color(0xFF3D2200)
+                                  : const Color(0xFFFFF3E0),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                HugeIcon(
+                                  icon: HugeIcons.strokeRoundedCloudUpload,
+                                  color: isDarkBanner
+                                      ? const Color(0xFFFFB74D)
+                                      : const Color(0xFFFF9500),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '$pendingCount modification${pendingCount > 1 ? 's' : ''} en attente',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isDarkBanner
+                                          ? const Color(0xFFFFB74D)
+                                          : const Color(0xFFE65100),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  if (forceOffline && pendingCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: syncState.isSyncing
+                              ? null
+                              : () => ref
+                                  .read(syncNotifierProvider.notifier)
+                                  .pushAndSync(),
+                          icon: syncState.isSyncing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.cloud_upload),
+                          label: Text(
+                            syncState.isSyncing
+                                ? 'Envoi en cours…'
+                                : 'Pousser les modifications',
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (!forceOffline)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: OutlinedButton.icon(
+                        onPressed: syncState.isSyncing
+                            ? null
+                            : () => ref
+                                .read(syncNotifierProvider.notifier)
+                                .syncAll(),
+                        icon: syncState.isSyncing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const HugeIcon(
+                                icon: HugeIcons.strokeRoundedRefresh,
+                                color: Color(0xFF007AFF),
+                                size: 18),
+                        label: const Text('Synchroniser maintenant'),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+
+      // Section Raccourcis clavier (Desktop uniquement)
+      if (PlatformUtils.isDesktop)
+        _buildSection(
+          context,
+          title: 'Raccourcis clavier',
+          hugeIcon: HugeIcons.strokeRoundedKeyboard,
+          children: [
+            ListTile(
+              leading: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedKeyboard,
+                  color: Color(0xFF5856D6),
+                  size: 22),
+              title: const Text('Voir les raccourcis'),
+              subtitle: const Text('Ctrl+N, Ctrl+K, Ctrl+F…'),
+              trailing: const HugeIcon(
+                  icon: HugeIcons.strokeRoundedArrowRight01,
+                  color: Colors.grey,
+                  size: 18),
+              onTap: () => _showKeyboardShortcutsDialog(context),
+            ),
+          ],
+        ),
+
+      const SizedBox(height: 32),
+    ];
+  }
+
   Widget _buildAppLogoHeader(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      child: Column(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
                   color: (isDark ? Colors.black : Colors.grey)
-                      .withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+                      .withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
               child: Image.asset(
-                isDark
-                    ? 'logo_pack/logo_color_64x64.png'
-                    : 'logo_pack/logo_color_64x64.png',
-                width: 48,
-                height: 48,
+                'logo_pack/logo_color_128x128.png',
+                width: 80,
+                height: 80,
                 filterQuality: FilterQuality.medium,
               ),
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'monAgenda',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Calendrier personnel unifié',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? Colors.white60 : Colors.black54,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 12),
+          Text(
+            'monAgenda',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Calendrier personnel unifié',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white60 : Colors.black54,
             ),
           ),
         ],
@@ -1640,6 +2072,7 @@ class SettingsScreen extends ConsumerWidget {
                 return;
               }
               Navigator.pop(ctx);
+              // ignore: unawaited_futures
               _showEncryptedQrCode(
                   context, settings, passwordController.text, ref);
             },
@@ -1657,22 +2090,67 @@ class SettingsScreen extends ConsumerWidget {
     // Données chiffrées AES-256 avec tags
     final encryptedStr = settings.toEncryptedExportString(password, tags: tags);
 
-    final painter = QrPainter(
-      data: encryptedStr,
-      version: QrVersions.auto,
-      eyeStyle: const QrEyeStyle(
-        eyeShape: QrEyeShape.square,
-        color: Color(0xFF37352F),
-      ),
-      dataModuleStyle: const QrDataModuleStyle(
-        dataModuleShape: QrDataModuleShape.square,
-        color: Color(0xFF37352F),
-      ),
-      errorCorrectionLevel: QrErrorCorrectLevel.L,
-      gapless: true,
-    );
+    // Limite QR code : ~2,953 octets binaires en version 40, correction L.
+    // Au-delà, QrPainter lance une exception synchrone.
+    const maxQrDataLength = 2900;
+    if (encryptedStr.length > maxQrDataLength) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+              SizedBox(width: 10),
+              Text('Données trop volumineuses'),
+            ],
+          ),
+          content: Text(
+            'La configuration chiffrée fait ${encryptedStr.length} octets, '
+            'ce qui dépasse la capacité maximale d\u2019un QR code ($maxQrDataLength).\n\n'
+            'Utilisez l\u2019export fichier JSON à la place, ou réduisez le nombre de tags personnalisés.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Compris'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // Génération du QR code avec gestion d'erreur
+    QrPainter painter;
+    try {
+      painter = QrPainter(
+        data: encryptedStr,
+        version: QrVersions.auto,
+        eyeStyle: const QrEyeStyle(
+          eyeShape: QrEyeShape.square,
+          color: Color(0xFF37352F),
+        ),
+        dataModuleStyle: const QrDataModuleStyle(
+          dataModuleShape: QrDataModuleShape.square,
+          color: Color(0xFF37352F),
+        ),
+        errorCorrectionLevel: QrErrorCorrectLevel.L,
+        gapless: true,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Erreur QR : $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final Future<ByteData?> qrFuture = painter.toImageData(520);
 
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (ctx) {
@@ -1956,5 +2434,111 @@ class SettingsScreen extends ConsumerWidget {
         );
       }
     }
+  }
+
+  // ── IA Feedback ────────────────────────────────────────────
+
+  Future<void> _exportMagicFeedback(BuildContext context, WidgetRef ref) async {
+    try {
+      final repo = ref.read(magicFeedbackRepositoryProvider);
+      final csv = await repo.exportToCsv();
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(
+          '${dir.path}/magic_feedback_${DateTime.now().millisecondsSinceEpoch}.csv');
+      await file.writeAsString(csv);
+      if (context.mounted) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(content: Text('Export → ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(content: Text('Erreur export feedback : $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearMagicFeedback(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Vider les corrections ?'),
+        content: const Text(
+            'Toutes les corrections IA seront supprimées. Cette action est irréversible.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Vider', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await ref.read(magicFeedbackRepositoryProvider).clear();
+      ref.invalidate(magicFeedbackCountProvider);
+      if (context.mounted) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(content: Text('Corrections supprimées')),
+        );
+      }
+    }
+  }
+
+  void _showKeyboardShortcutsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Row(
+          children: [
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedKeyboard,
+              color: Color(0xFF5856D6),
+              size: 22,
+            ),
+            SizedBox(width: 10),
+            Text('Raccourcis clavier'),
+          ],
+        ),
+        children: [
+          for (final shortcut in AppShellShortcuts.all)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      shortcut.$1,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      shortcut.$2,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

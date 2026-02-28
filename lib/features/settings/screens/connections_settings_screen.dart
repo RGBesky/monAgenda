@@ -10,6 +10,7 @@ import '../../../core/models/notion_database_model.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../services/infomaniak_service.dart';
 import '../../../services/notion_service.dart';
+import '../../../core/widgets/settings_logo_header.dart';
 
 class ConnectionsSettingsScreen extends ConsumerStatefulWidget {
   final int initialTab;
@@ -91,6 +92,7 @@ class _ConnectionsSettingsScreenState
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const SettingsLogoHeader(),
         const Card(
           child: Padding(
             padding: EdgeInsets.all(16),
@@ -201,6 +203,7 @@ class _ConnectionsSettingsScreenState
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const SettingsLogoHeader(),
         const Card(
           child: Padding(
             padding: EdgeInsets.all(16),
@@ -576,11 +579,11 @@ class _ConnectionsSettingsScreenState
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: InputDecorator(
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             labelText: 'Description (multi-select)',
-                            border: const OutlineInputBorder(),
+                            border: OutlineInputBorder(),
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
+                            contentPadding: EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 10,
                             ),
@@ -756,6 +759,7 @@ class _ConnectionsSettingsScreenState
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const SettingsLogoHeader(),
             ...subs.map((sub) => _buildIcsSubscriptionTile(sub)),
             const SizedBox(height: 8),
             OutlinedButton.icon(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/tag_model.dart';
+import '../../../core/widgets/settings_logo_header.dart';
 import '../../../providers/tags_provider.dart';
 
 /// Palette organisée en 5 rangées de 6 — couleurs vives, modernes, lisibles.
@@ -109,6 +110,7 @@ class TagsSettingsScreen extends ConsumerWidget {
 
           return ListView(
             children: [
+              const SettingsLogoHeader(),
               _buildSection(
                 context,
                 ref,

@@ -4,12 +4,16 @@ import '../core/models/event_model.dart';
 import '../core/utils/date_utils.dart';
 import '../core/utils/platform_utils.dart';
 
-/// Service de mise à jour du widget Android (7 jours glissants).
+/// Service de mise à jour du widget Android (7 prochains RDV).
 class WidgetService {
   static const String _appGroupId = 'com.example.unified_calendar';
   static const String _widgetName = 'CalendarWidgetProvider';
+  static const int _maxEvents = 7;
 
-  /// Met à jour le widget avec les événements des 7 prochains jours.
+  /// Dernière signature (évite les updates inutiles).
+  static String _lastSignature = '';
+
+  /// Met à jour le widget avec les 7 prochains événements.
   static Future<void> updateWidget() async {
     if (!PlatformUtils.supportsAndroidWidget) return;
 
@@ -17,19 +21,46 @@ class WidgetService {
       await HomeWidget.setAppGroupId(_appGroupId);
 
       final now = DateTime.now();
-      final end = now.add(const Duration(days: 7));
+      final end = now.add(const Duration(days: 14));
 
       final events = await DatabaseHelper.instance.getEventsByDateRange(
         CalendarDateUtils.startOfDay(now),
         CalendarDateUtils.endOfDay(end),
       );
 
-      // Sérialiser les événements pour le widget
-      final eventData = _buildWidgetData(events, now, end);
+      // Trier par date puis prendre les 7 premiers
+      events.sort((a, b) => a.startDate.compareTo(b.startDate));
+      final next = events.take(_maxEvents).toList();
 
+      // Déduplication : ne mettre à jour que si la liste a changé
+      final signature =
+          next.map((e) => '${e.id}|${e.title}|${e.startDate}').join(';');
+      if (signature == _lastSignature) return;
+      _lastSignature = signature;
+
+      // Sauver chaque événement individuellement
+      for (int i = 0; i < _maxEvents; i++) {
+        if (i < next.length) {
+          final e = next[i];
+          final time = e.isAllDay
+              ? 'Toute la journée'
+              : CalendarDateUtils.formatDisplayTime(e.startDate);
+          final date = CalendarDateUtils.relativeDateLabel(e.startDate);
+          await HomeWidget.saveWidgetData<String>('event_${i}_title', e.title);
+          await HomeWidget.saveWidgetData<String>(
+              'event_${i}_time', '$date · $time');
+        } else {
+          await HomeWidget.saveWidgetData<String>('event_${i}_title', '');
+          await HomeWidget.saveWidgetData<String>('event_${i}_time', '');
+        }
+      }
+
+      await HomeWidget.saveWidgetData<int>('event_count', next.length);
+
+      // Legacy : garder aussi la clé texte pour compatibilité
       await HomeWidget.saveWidgetData<String>(
         'widget_events',
-        eventData,
+        _buildWidgetData(events, now, end),
       );
 
       await HomeWidget.updateWidget(

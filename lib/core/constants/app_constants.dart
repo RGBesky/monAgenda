@@ -20,7 +20,9 @@ class AppConstants {
 
   // Base de données locale
   static const String dbName = 'unified_calendar.db';
-  static const int dbVersion = 6;
+  // ATTENTION : la version effective est gérée par kCurrentDbVersion dans db_migrations.dart
+  // Cette constante est conservée pour référence mais NE PLUS L'UTILISER dans openDatabase().
+  static const int dbVersion = 6; // Legacy — voir db_migrations.dart
 
   // Tables SQLite
   static const String tableEvents = 'events';

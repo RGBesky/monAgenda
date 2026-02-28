@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart';
 import '../constants/app_constants.dart';
 import '../models/event_model.dart';
@@ -8,25 +12,77 @@ import '../models/tag_model.dart';
 import '../models/notion_database_model.dart';
 import '../models/ics_subscription_model.dart';
 import '../models/sync_state_model.dart';
+import 'db_migrations.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
+  static const _secureStorage = FlutterSecureStorage();
+  static const _dbKeyStorageKey = 'db_encryption_key';
 
   DatabaseHelper._internal();
+
+  /// Helper pour extraire la première valeur entière d'un résultat rawQuery.
+  /// Remplace Sqflite.firstIntValue qui n'est pas disponible via sqflite_common_ffi.
+  static int _firstIntValue(List<Map<String, Object?>> result) {
+    if (result.isEmpty) return 0;
+    final firstRow = result.first;
+    if (firstRow.isEmpty) return 0;
+    final val = firstRow.values.first;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    return 0;
+  }
 
   Future<Database> get database async {
     _database ??= await _initDatabase();
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, AppConstants.dbName);
+  /// Génère une clé aléatoire de 32 octets (base64) et la stocke dans flutter_secure_storage.
+  static Future<String> _generateAndStoreKey() async {
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    final key = base64Encode(bytes);
+    await _secureStorage.write(key: _dbKeyStorageKey, value: key);
+    return key;
+  }
 
-    return openDatabase(
+  /// Récupère la clé de chiffrement DB depuis le stockage sécurisé.
+  /// La génère si elle n'existe pas encore (premier lancement).
+  static Future<String> _getDbEncryptionKey() async {
+    final existing = await _secureStorage.read(key: _dbKeyStorageKey);
+    return existing ?? await _generateAndStoreKey();
+  }
+
+  Future<Database> _initDatabase() async {
+    // Sur desktop (Linux/macOS/Windows), sqflite_common_ffi ne supporte pas
+    // SQLCipher nativement ; le password est utilisé sur mobile uniquement.
+    final bool isDesktop =
+        Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
+    if (isDesktop) {
+      // Utilise databaseFactory globale (databaseFactoryFfi assignée dans main.dart)
+      final dbPath = await databaseFactory.getDatabasesPath();
+      final path = join(dbPath, AppConstants.dbName);
+      return databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: kCurrentDbVersion,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+        ),
+      );
+    }
+
+    // Mobile : base chiffrée via SQLCipher
+    final dbPath = await sqlcipher.getDatabasesPath();
+    final path = join(dbPath, AppConstants.dbName);
+    final dbKey = await _getDbEncryptionKey();
+    return sqlcipher.openDatabase(
       path,
-      version: AppConstants.dbVersion,
+      password: dbKey,
+      version: kCurrentDbVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -59,6 +115,7 @@ class DatabaseHelper {
         updated_at TEXT,
         synced_at TEXT,
         etag TEXT,
+        smart_attachments TEXT DEFAULT '[]',
         UNIQUE(remote_id, source)
       )
     ''');
@@ -246,6 +303,24 @@ class DatabaseHelper {
         'CREATE INDEX IF NOT EXISTS idx_system_logs_level ON ${AppConstants.tableSystemLogs}(level)',
       );
     }
+
+    // ── V7+ : Migrations centralisées (db_migrations.dart) ──
+    for (int v = (oldVersion < 7 ? 7 : oldVersion + 1); v <= newVersion; v++) {
+      final statements = kMigrations[v];
+      if (statements != null) {
+        for (final sql in statements) {
+          try {
+            await db.execute(sql);
+          } catch (e) {
+            // Ignore "duplicate column" or "table already exists" errors
+            if (!e.toString().contains('duplicate column') &&
+                !e.toString().contains('already exists')) {
+              rethrow;
+            }
+          }
+        }
+      }
+    }
   }
 
   Future<void> _insertDefaultTags(Database db) async {
@@ -339,14 +414,54 @@ class DatabaseHelper {
     );
   }
 
+  /// Suppression logique d'un événement (is_deleted = 1) directement via SQL.
+  /// Indépendant du state Riverpod — fonctionne même si l'event a scrollé hors de la vue.
+  /// Enqueue automatiquement l'action DELETE dans la sync_queue.
+  /// Annule les CREATE/UPDATE pending pour ce même event (évite push+delete inutile).
   Future<void> deleteEvent(int id) async {
     final db = await database;
+    // 1. Récupérer les infos nécessaires avant suppression logique
+    final maps = await db.query(
+      AppConstants.tableEvents,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    // 2. Suppression logique via SQL
     await db.update(
       AppConstants.tableEvents,
       {'is_deleted': 1, 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [id],
     );
+
+    // 3. Annuler les CREATE/UPDATE pending pour cet event
+    //    (si l'event a été créé offline, pas besoin de le pousser puis supprimer)
+    await db.delete(
+      AppConstants.tableSyncQueue,
+      where: 'event_id = ? AND action IN (?, ?) AND status = ?',
+      whereArgs: [id, 'create', 'update', 'pending'],
+    );
+
+    // 4. Enqueue l'action DELETE dans sync_queue (directement via SQL, pas via Riverpod)
+    //    Seulement si l'event a un remote_id (sinon rien à supprimer côté serveur)
+    if (maps.isNotEmpty) {
+      final source = maps.first['source'] as String? ?? '';
+      final remoteId = maps.first['remote_id'] as String?;
+      final notionPageId = maps.first['notion_page_id'] as String?;
+
+      // Si pas de remote_id ni notion_page_id, l'event est purement local
+      // → rien à pousser vers le serveur, la suppression locale suffit.
+      if (remoteId != null || notionPageId != null) {
+        await enqueueSyncAction(
+          action: 'delete',
+          source: source,
+          eventId: id,
+          payload: jsonEncode(maps.first),
+        );
+      }
+    }
   }
 
   Future<List<EventModel>> getEventsByDateRange(
@@ -381,7 +496,7 @@ class DatabaseHelper {
     final result = await db.rawQuery(
       'SELECT COUNT(*) as cnt FROM ${AppConstants.tableEvents} WHERE is_deleted = 0',
     );
-    return Sqflite.firstIntValue(result) ?? 0;
+    return _firstIntValue(result);
   }
 
   Future<List<EventModel>> searchEvents({
@@ -395,9 +510,14 @@ class DatabaseHelper {
     final conditions = <String>['is_deleted = 0'];
     final args = <dynamic>[];
 
+    // V3 : Utiliser FTS5 pour la recherche textuelle au lieu de LIKE '%mot%'
     if (keyword != null && keyword.isNotEmpty) {
-      conditions.add('(title LIKE ? OR description LIKE ?)');
-      args.addAll(['%$keyword%', '%$keyword%']);
+      // Échapper les caractères spéciaux FTS5
+      final safeKeyword = keyword.replaceAll('"', '""');
+      conditions.add(
+        'id IN (SELECT rowid FROM events_fts WHERE events_fts MATCH ?)',
+      );
+      args.add('"$safeKeyword"');
     }
     if (startDate != null) {
       conditions.add('start_date >= ?');
@@ -649,6 +769,8 @@ class DatabaseHelper {
   // ============================================================
 
   /// Ajoute une action à la queue de synchronisation.
+  /// Pour les actions UPDATE, déduplique automatiquement :
+  /// supprime les UPDATEs pending antérieurs pour le même event_id.
   Future<int> enqueueSyncAction({
     required String action,
     required String source,
@@ -656,6 +778,17 @@ class DatabaseHelper {
     required String payload,
   }) async {
     final db = await database;
+
+    // Déduplication : si UPDATE, supprimer les UPDATEs pending antérieurs
+    // pour cet event_id (Bug 1 — évite N requêtes API inutiles au retour réseau).
+    if (action == 'update' && eventId != null) {
+      await db.delete(
+        AppConstants.tableSyncQueue,
+        where: 'event_id = ? AND action = ? AND status = ?',
+        whereArgs: [eventId, 'update', 'pending'],
+      );
+    }
+
     return db.insert(AppConstants.tableSyncQueue, {
       'action': action,
       'source': source,
@@ -706,7 +839,7 @@ class DatabaseHelper {
       'SELECT COUNT(*) as cnt FROM ${AppConstants.tableSyncQueue} WHERE status = ?',
       ['pending'],
     );
-    return Sqflite.firstIntValue(result) ?? 0;
+    return _firstIntValue(result);
   }
 
   /// Supprime les actions terminées en erreur (après trop de retries).
@@ -794,7 +927,7 @@ class DatabaseHelper {
       'WHERE is_read = 0 AND level = ?',
       ['error'],
     );
-    return Sqflite.firstIntValue(result) ?? 0;
+    return _firstIntValue(result);
   }
 
   /// Nettoie les logs de plus de 7 jours.

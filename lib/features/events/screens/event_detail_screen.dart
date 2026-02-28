@@ -1,14 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/utils/date_utils.dart';
 import '../../../core/widgets/source_logos.dart';
 import '../../../providers/sync_provider.dart';
-import 'event_form_screen.dart';
-
 import '../../../providers/events_provider.dart';
+import '../../../services/notion_meeting_service.dart';
+import 'event_form_screen.dart';
 
 class EventDetailScreen extends ConsumerWidget {
   final EventModel event;
@@ -143,6 +148,13 @@ class EventDetailScreen extends ConsumerWidget {
                 textColor: textColor),
             const SizedBox(height: 14),
           ],
+
+          // ── Smart Attachments ───────────────────────────
+          _buildAttachmentsSection(context, ref, subColor, textColor),
+
+          // ── Meeting Note Notion (Desktop only) ──────────
+          if (Platform.isLinux || Platform.isMacOS || Platform.isWindows)
+            _buildMeetingNoteButton(context, ref),
 
           Divider(color: Theme.of(context).colorScheme.outline, height: 32),
           _buildMetadata(context, subColor),
@@ -530,6 +542,145 @@ class EventDetailScreen extends ConsumerWidget {
     return 'Récurrent';
   }
 
+  // ── Meeting Note Notion (Desktop) ─────────────────────────────
+  Widget _buildMeetingNoteButton(BuildContext context, WidgetRef ref) {
+    final meetingService = ref.watch(notionMeetingServiceProvider);
+    if (meetingService == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: _MeetingNoteButton(event: event, service: meetingService),
+    );
+  }
+
+  // ── Smart Attachments Section ─────────────────────────────────
+  Widget _buildAttachmentsSection(
+      BuildContext context, WidgetRef ref, Color subColor, Color textColor) {
+    final isDesktop =
+        Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+    final hasAttachments = event.smartAttachments.isNotEmpty;
+
+    if (!hasAttachments && !isDesktop) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            HugeIcon(
+                icon: HugeIcons.strokeRoundedAttachment01,
+                size: 18,
+                color: subColor),
+            const SizedBox(width: 10),
+            Text(
+              'Fichiers attachés',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: subColor,
+                letterSpacing: 0.3,
+              ),
+            ),
+            if (hasAttachments) ...[
+              const SizedBox(width: 6),
+              Text(
+                '(${event.smartAttachments.length})',
+                style: TextStyle(fontSize: 11, color: subColor),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Existing attachments list
+        ...event.smartAttachments.map((path) {
+          final fileName = path.split('/').last;
+          return Padding(
+            padding: const EdgeInsets.only(left: 28, bottom: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () async {
+                if (await File(path).exists()) {
+                  await OpenFilex.open(path);
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Fichier introuvable : $fileName'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.insert_drive_file_outlined,
+                      size: 20, color: subColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: textColor,
+                        decoration: TextDecoration.underline,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isDesktop)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => _removeAttachment(ref, path),
+                      tooltip: 'Retirer',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }),
+        // Desktop: "+ Attacher un fichier" button
+        if (isDesktop && !event.isFromIcs) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 28),
+            child: OutlinedButton.icon(
+              onPressed: () => _pickAndAttachFile(context, ref),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Attacher un fichier'),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+      ],
+    );
+  }
+
+  Future<void> _pickAndAttachFile(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null || result.files.single.path == null) return;
+    final filePath = result.files.single.path!;
+    final updated = event.copyWith(
+      smartAttachments: [...event.smartAttachments, filePath],
+    );
+    await ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
+  }
+
+  void _removeAttachment(WidgetRef ref, String path) {
+    final updated = event.copyWith(
+      smartAttachments:
+          event.smartAttachments.where((p) => p != path).toList(),
+    );
+    ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
+  }
+
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -557,6 +708,59 @@ class EventDetailScreen extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       await ref.read(syncNotifierProvider.notifier).deleteEvent(event);
       if (context.mounted) Navigator.pop(context);
+    }
+  }
+}
+
+/// Bouton stateful pour créer/ouvrir une note de réunion Notion.
+class _MeetingNoteButton extends StatefulWidget {
+  final EventModel event;
+  final NotionMeetingService service;
+
+  const _MeetingNoteButton({required this.event, required this.service});
+
+  @override
+  State<_MeetingNoteButton> createState() => _MeetingNoteButtonState();
+}
+
+class _MeetingNoteButtonState extends State<_MeetingNoteButton> {
+  bool _loading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: _loading ? null : _openOrCreate,
+      icon: _loading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.note_alt_outlined, size: 18),
+      label: Text(_loading ? 'Création...' : 'Ouvrir / Créer le compte-rendu'),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(double.infinity, 44),
+      ),
+    );
+  }
+
+  Future<void> _openOrCreate() async {
+    setState(() => _loading = true);
+    try {
+      final url = await widget.service.createOrOpen(widget.event);
+      if (mounted) {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur Meeting Note : $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 }

@@ -40,17 +40,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     _loadWeather();
     // Met à jour l'heure courante toutes les minutes
     _scheduleNowUpdate();
-    // Auto-sync au démarrage
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // Invalide le cache des events pour forcer un rechargement depuis la DB
-      ref.invalidate(eventsInRangeProvider);
-      // Lance la sync si des credentials sont configurés
-      final syncState = ref.read(syncNotifierProvider);
-      if (!syncState.isSyncing) {
-        ref.read(syncNotifierProvider.notifier).syncAll();
-      }
-    });
+    // Le rechargement des events est géré par le provider.
+    // syncAll est déclenché par autoSyncOnConnectivityProvider — pas de double appel.
   }
 
   void _scheduleNowUpdate() {
@@ -126,7 +117,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 ],
               ),
             ),
-          // Bandeau d'erreur sync (auto-dismiss après 5 s via SyncNotifier)
+          // Bandeau d'erreur/info sync (auto-dismiss après 5 s via SyncNotifier)
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
             transitionBuilder: (child, anim) => SizeTransition(
@@ -135,42 +126,53 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               child: child,
             ),
             child: (!syncState.isSyncing && syncState.errorMessage != null)
-                ? Container(
-                    key: const ValueKey('syncError'),
-                    width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    color: isDark
-                        ? const Color(0xFFFF3B30).withValues(alpha: 0.2)
-                        : const Color(0xFFFF3B30).withValues(alpha: 0.1),
-                    child: Row(
-                      children: [
-                        const HugeIcon(
-                          icon: HugeIcons.strokeRoundedAlert02,
-                          color: Color(0xFFFF3B30),
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            syncState.errorMessage!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFFFF3B30),
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                ? Builder(builder: (context) {
+                    // Remapping auto = info orange, erreur réelle = rouge
+                    final isRemapInfo = syncState.errorMessage!
+                        .contains('⚑ Propriété(s) remappée(s)');
+                    final bannerColor = isRemapInfo
+                        ? const Color(0xFFFF9500) // orange
+                        : const Color(0xFFFF3B30); // rouge
+                    return Container(
+                      key: ValueKey(isRemapInfo ? 'syncRemap' : 'syncError'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 16),
+                      color: isDark
+                          ? bannerColor.withValues(alpha: 0.2)
+                          : bannerColor.withValues(alpha: 0.1),
+                      child: Row(
+                        children: [
+                          HugeIcon(
+                            icon: isRemapInfo
+                                ? HugeIcons.strokeRoundedInformationCircle
+                                : HugeIcons.strokeRoundedAlert02,
+                            color: bannerColor,
+                            size: 16,
                           ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              ref.read(syncNotifierProvider.notifier).syncAll(),
-                          child: const Text('Réessayer',
-                              style: TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                  )
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              syncState.errorMessage!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: bannerColor,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => ref
+                                .read(syncNotifierProvider.notifier)
+                                .syncAll(),
+                            child: Text(isRemapInfo ? 'OK' : 'Réessayer',
+                                style: const TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    );
+                  })
                 : const SizedBox.shrink(key: ValueKey('noError')),
           ),
           Expanded(
@@ -226,8 +228,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         // Bouton sync — couleur selon l'état de connexion
         Consumer(builder: (context, ref, _) {
           final forceOffline = ref.watch(forceOfflineProvider);
-          final networkOffline =
-              ref.watch(connectivityStreamProvider).valueOrNull ?? false;
+          final networkOffline = ref.watch(isOfflineProvider) && !forceOffline;
 
           // Couleur : vert=connecté, orange=pas de réseau, rouge=mode hors-ligne forcé
           Color dotColor;
@@ -535,8 +536,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           : windowEnd.subtract(const Duration(days: 1));
 
       // Skip events entirely outside the window
-      if (displayStart.isAfter(windowEnd) || displayEnd.isBefore(today))
+      if (displayStart.isAfter(windowEnd) || displayEnd.isBefore(today)) {
         continue;
+      }
 
       // Add event to each day it spans within the window
       var day = displayStart;
@@ -902,13 +904,28 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             onPressed: syncState.isSyncing
                 ? null
                 : () => ref.read(syncNotifierProvider.notifier).syncAll(),
-            icon: HugeIcon(
+            icon: const HugeIcon(
               icon: HugeIcons.strokeRoundedRefresh,
               color: Colors.white,
               size: 16,
             ),
             label:
                 Text(syncState.isSyncing ? 'Sync…' : 'Synchroniser maintenant'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const EventFormScreen(),
+              ),
+            ),
+            icon: const HugeIcon(
+              icon: HugeIcons.strokeRoundedAdd01,
+              color: Color(0xFF007AFF),
+              size: 16,
+            ),
+            label: const Text('+ Créer'),
           ),
         ],
       ),

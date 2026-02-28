@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import '../core/database/database_helper.dart';
 import '../core/constants/app_constants.dart';
 import '../core/models/event_model.dart';
@@ -14,6 +16,9 @@ class SyncAction {
   static const String deleteEvent = 'delete';
 }
 
+/// Callback pour signaler les erreurs serveur (429/500/503/timeout).
+typedef ServerErrorCallback = void Function(String errorMessage);
+
 /// Worker qui dépile la sync_queue quand la connectivité est disponible.
 /// Fonctionne en mode "best effort" : les erreurs sont loguées, pas propagées.
 class SyncQueueWorker {
@@ -22,12 +27,16 @@ class SyncQueueWorker {
   final NotionService _notion;
   final _log = AppLogger.instance;
 
+  /// Callback optionnel pour notifier le provider d'erreur serveur.
+  ServerErrorCallback? onServerError;
+
   bool _isProcessing = false;
 
   SyncQueueWorker({
     required DatabaseHelper db,
     required InfomaniakService infomaniak,
     required NotionService notion,
+    this.onServerError,
   })  : _db = db,
         _infomaniak = infomaniak,
         _notion = notion;
@@ -58,6 +67,12 @@ class SyncQueueWorker {
         } catch (e) {
           await _db.failSyncAction(id, e.toString());
           _log.error('SyncQueue', 'Échec $actionType/$source', e);
+
+          // Détecter les erreurs serveur (saturé, rate-limit, timeout)
+          if (_isServerError(e)) {
+            final msg = _serverErrorMessage(e);
+            onServerError?.call(msg);
+          }
         }
       }
     } finally {
@@ -212,5 +227,32 @@ class SyncQueueWorker {
       if (match != null) return match;
     }
     return dbs.first;
+  }
+
+  /// Détecte si l'erreur est liée au serveur (429, 500, 503, timeout).
+  bool _isServerError(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 429 || code == 500 || code == 503) return true;
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        return true;
+      }
+    }
+    if (e is TimeoutException) return true;
+    return false;
+  }
+
+  /// Génère un message d'erreur lisible pour les erreurs serveur.
+  String _serverErrorMessage(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 429) return 'Serveur surchargé (429 — trop de requêtes)';
+      if (code == 500) return 'Erreur interne du serveur (500)';
+      if (code == 503) return 'Serveur indisponible (503)';
+      return 'Délai de connexion dépassé';
+    }
+    return 'Synchronisation en erreur (timeout)';
   }
 }

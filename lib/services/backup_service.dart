@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/constants/app_constants.dart';
@@ -9,6 +10,7 @@ import '../core/models/tag_model.dart';
 import '../core/models/notion_database_model.dart';
 import '../core/models/ics_subscription_model.dart';
 import '../core/models/event_model.dart';
+import 'logger_service.dart';
 
 /// Service de sauvegarde/restauration via lien de dépôt kDrive (Infomaniak).
 /// Configuration chiffrée AES-256. Pas besoin de token OAuth2.
@@ -247,5 +249,54 @@ class BackupService {
       return '"${value.replaceAll('"', '""')}"';
     }
     return value;
+  }
+
+  // ────────────────── V3 : Test connexion kDrive ───────────────────────────
+
+  /// Teste la connexion au lien de dépôt kDrive.
+  /// Retourne `true` si accessible (200/207), `false` sinon.
+  /// Lance une requête OPTIONS/GET sur l'URL d'API du share.
+  static Future<({bool success, int? statusCode, String? error})>
+      testKDriveConnection(String depositLink) async {
+    final uuid = extractShareUuid(depositLink);
+    if (uuid == null) {
+      return (
+        success: false,
+        statusCode: null,
+        error: 'Lien de dépôt invalide',
+      );
+    }
+
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+
+    try {
+      // Tester l'API externe de share kDrive
+      final testUrl =
+          '${AppConstants.kDriveDepositApiBase}/$uuid/file';
+      final response = await dio.get(testUrl);
+      final ok = response.statusCode == 200 || response.statusCode == 207;
+      AppLogger.instance.info(
+        'kDrive',
+        'Test connexion: status=${response.statusCode}, ok=$ok',
+      );
+      return (
+        success: ok,
+        statusCode: response.statusCode,
+        error: ok ? null : 'Code HTTP ${response.statusCode}',
+      );
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      AppLogger.instance.error('kDrive', 'Test connexion échoué', e);
+      return (
+        success: false,
+        statusCode: code,
+        error: code != null ? 'Erreur HTTP $code' : e.message ?? 'Timeout',
+      );
+    } finally {
+      dio.close();
+    }
   }
 }

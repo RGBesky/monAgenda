@@ -23,8 +23,8 @@ dependencies:
   # Requêtes HTTP
   dio: ^5.7.0
 
-  # Base de données locale
-  sqflite: ^2.3.3+1
+  # Base de données locale (chiffrée via SQLCipher)
+  sqflite_sqlcipher: ^3.1.0+1
   path: ^1.9.0
 
   # Stockage sécurisé (tokens, secrets)
@@ -33,6 +33,7 @@ dependencies:
   # Chiffrement AES-256
   encrypt: ^5.0.3
   pointycastle: ^3.9.1
+  crypto: ^3.0.3
 
   # Notifications locales
   flutter_local_notifications: ^18.0.0
@@ -73,9 +74,6 @@ dependencies:
   # Polices
   google_fonts: ^6.2.1
 
-  # Couleurs et thème
-  flex_color_scheme: ^7.3.1
-
   # Mise en page
   sliver_tools: ^0.2.12
   shimmer: ^3.0.0
@@ -87,6 +85,7 @@ dependencies:
 
   # Scanner QR mobile (import config)
   mobile_scanner: ^6.0.2
+  llama_cpp_dart: ^0.2.2
 
 dependency_overrides:
   intl: ^0.20.0

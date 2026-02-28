@@ -15,7 +15,7 @@ import '../../../core/widgets/source_logos.dart';
 /// │  [🏷️ Catégorie]  [🔄 Statut]                            │
 /// │  🕒 14:00 – 15:00                                        │
 /// └──────────────────────────────────────────────────────────┘
-class UnifiedEventCard extends StatelessWidget {
+class UnifiedEventCard extends StatefulWidget {
   final EventModel event;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -33,6 +33,37 @@ class UnifiedEventCard extends StatelessWidget {
     this.notionDbName,
   });
 
+  @override
+  State<UnifiedEventCard> createState() => _UnifiedEventCardState();
+}
+
+class _UnifiedEventCardState extends State<UnifiedEventCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fadeCtrl;
+  late final Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    final disableAnimations = WidgetsBinding.instance.disableAnimations;
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration:
+          disableAnimations ? Duration.zero : const Duration(milliseconds: 200),
+    );
+    _fade = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeIn);
+    _fadeCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
+
+  EventModel get event => widget.event;
+  bool get isCompleted => widget.isCompleted;
+
   // ── Couleur priorité (bordure gauche) ─────────────────────
   /// Utilise la couleur du tag (colorHex) pour être cohérent avec les chips.
   Color _priorityColor() {
@@ -48,8 +79,9 @@ class UnifiedEventCard extends StatelessWidget {
       final tagColor = AppColors.fromHex(categoryTags.first.colorHex);
       // Si la couleur est déjà "Stabilo-like" (très clair), l'utiliser directement.
       final luminance = tagColor.computeLuminance();
-      if (luminance > 0.5)
+      if (luminance > 0.5) {
         return tagColor.withValues(alpha: isDark ? 0.15 : 0.6);
+      }
       return isDark
           ? tagColor.withValues(alpha: 0.15)
           : Color.lerp(tagColor, Colors.white, 0.82)!;
@@ -76,43 +108,46 @@ class UnifiedEventCard extends StatelessWidget {
     final subColor = _subColor(isDark);
     final borderColor = isDark ? AppColors.darkOutline : AppColors.lightOutline;
 
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              border: Border(
-                left: BorderSide(color: priorityColor, width: 6),
-                top: BorderSide(color: borderColor, width: 0.5),
-                right: BorderSide(color: borderColor, width: 0.5),
-                bottom: BorderSide(color: borderColor, width: 0.5),
+    return FadeTransition(
+      opacity: _fade,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                border: Border(
+                  left: BorderSide(color: priorityColor, width: 6),
+                  top: BorderSide(color: borderColor, width: 0.5),
+                  right: BorderSide(color: borderColor, width: 0.5),
+                  bottom: BorderSide(color: borderColor, width: 0.5),
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ── Ligne 1 : Titre + checkbox tâche + source ──
-                  _buildTitleRow(textColor, isDark),
-                  // ── Ligne 2 : Chips (catégorie + statut) ───────
-                  if (event.categoryTags.isNotEmpty || _hasStatus())
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Ligne 1 : Titre + checkbox tâche + source ──
+                    _buildTitleRow(textColor, isDark),
+                    // ── Ligne 2 : Chips (catégorie + statut) ───────
+                    if (event.categoryTags.isNotEmpty || _hasStatus())
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: _buildChipsRow(isDark, subColor),
+                      ),
+                    // ── Ligne 3 : Heure ────────────────────────────
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: _buildChipsRow(isDark, subColor),
+                      padding: const EdgeInsets.only(top: 5),
+                      child: _buildTimeRow(subColor),
                     ),
-                  // ── Ligne 3 : Heure ────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5),
-                    child: _buildTimeRow(subColor),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -127,9 +162,9 @@ class UnifiedEventCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Checkbox pour les tâches Notion
-        if (isTask && onTaskToggle != null) ...[
+        if (isTask && widget.onTaskToggle != null) ...[
           GestureDetector(
-            onTap: () => onTaskToggle!(!isCompleted),
+            onTap: () => widget.onTaskToggle!(!isCompleted),
             child: Container(
               width: 20,
               height: 20,
@@ -183,11 +218,11 @@ class UnifiedEventCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SourceLogos.notion(size: 16, isDark: isDark),
-          if (notionDbName != null) ...[
+          if (widget.notionDbName != null) ...[
             const SizedBox(width: 3),
             Flexible(
               child: Text(
-                notionDbName!,
+                widget.notionDbName!,
                 style: TextStyle(
                   fontSize: 9,
                   color: isDark

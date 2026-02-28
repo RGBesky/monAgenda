@@ -90,7 +90,7 @@ class ModelDownloadService {
   Stream<double> get progressStream => _progressController.stream;
 
   Future<String> get modelPath async {
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await getApplicationSupportDirectory();
     final modelsDir = Directory('${appDir.path}/models');
     if (!await modelsDir.exists()) {
       await modelsDir.create(recursive: true);

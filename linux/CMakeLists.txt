@@ -77,3 +77,16 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime OPTIONAL)
+
+# --- llama.cpp native libraries for Saisie Magique (IA locale) ---
+set(LLAMA_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs")
+file(GLOB LLAMA_SHARED_LIBS "${LLAMA_LIBS_DIR}/lib*.so*")
+foreach(llama_lib ${LLAMA_SHARED_LIBS})
+  get_filename_component(lib_name "${llama_lib}" NAME)
+  # Only install real files and symlinks, skip duplicates
+  if(NOT IS_SYMLINK "${llama_lib}")
+    install(FILES "${llama_lib}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime)
+  else()
+    install(FILES "${llama_lib}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime)
+  endif()
+endforeach()

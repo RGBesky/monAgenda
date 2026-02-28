@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/settings_logo_header.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../services/notification_service.dart';
 
@@ -17,6 +18,7 @@ class NotificationsSettingsScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Erreur : $e')),
         data: (settings) => ListView(
           children: [
+            const SettingsLogoHeader(),
             SwitchListTile(
               title: const Text('Rappels d\'événements'),
               subtitle: const Text('Notification avant chaque événement'),
@@ -28,7 +30,6 @@ class NotificationsSettingsScreen extends ConsumerWidget {
               },
             ),
             const Divider(height: 1),
-
             if (settings.reminderEnabled) ...[
               ListTile(
                 title: const Text('Délai de rappel par défaut'),
@@ -40,7 +41,6 @@ class NotificationsSettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 1),
             ],
-
             SwitchListTile(
               title: const Text('Résumé matinal'),
               subtitle: const Text('Récapitulatif quotidien de votre agenda'),
@@ -60,7 +60,6 @@ class NotificationsSettingsScreen extends ConsumerWidget {
               },
             ),
             const Divider(height: 1),
-
             if (settings.morningSummaryEnabled) ...[
               ListTile(
                 title: const Text('Heure du résumé'),
@@ -73,7 +72,6 @@ class NotificationsSettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 1),
             ],
-
             Padding(
               padding: const EdgeInsets.all(16),
               child: OutlinedButton.icon(

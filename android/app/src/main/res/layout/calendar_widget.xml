@@ -3,22 +3,67 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF"
-    android:padding="8dp">
+    android:background="@android:color/white"
+    android:padding="12dp">
 
     <TextView
         android:id="@+id/widget_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Calendrier Unifié"
-        android:textSize="13sp"
+        android:text="monAgenda"
+        android:textSize="14sp"
         android:textStyle="bold"
-        android:textColor="#1565C0"
-        android:paddingBottom="4dp"/>
+        android:textColor="#007AFF"
+        android:paddingBottom="6dp"/>
 
-    <ListView
-        android:id="@android:id/list"
+    <LinearLayout
+        android:id="@+id/widget_events_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Event 0 -->
+        <TextView android:id="@+id/event_0_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end"/>
+        <TextView android:id="@+id/event_0_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp"/>
+
+        <!-- Event 1 -->
+        <TextView android:id="@+id/event_1_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end" android:visibility="gone"/>
+        <TextView android:id="@+id/event_1_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp" android:visibility="gone"/>
+
+        <!-- Event 2 -->
+        <TextView android:id="@+id/event_2_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end" android:visibility="gone"/>
+        <TextView android:id="@+id/event_2_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp" android:visibility="gone"/>
+
+        <!-- Event 3 -->
+        <TextView android:id="@+id/event_3_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end" android:visibility="gone"/>
+        <TextView android:id="@+id/event_3_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp" android:visibility="gone"/>
+
+        <!-- Event 4 -->
+        <TextView android:id="@+id/event_4_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end" android:visibility="gone"/>
+        <TextView android:id="@+id/event_4_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp" android:visibility="gone"/>
+
+        <!-- Event 5 -->
+        <TextView android:id="@+id/event_5_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end" android:visibility="gone"/>
+        <TextView android:id="@+id/event_5_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp" android:visibility="gone"/>
+
+        <!-- Event 6 -->
+        <TextView android:id="@+id/event_6_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="12sp" android:textStyle="bold" android:textColor="#37352F" android:maxLines="1" android:ellipsize="end" android:visibility="gone"/>
+        <TextView android:id="@+id/event_6_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textSize="10sp" android:textColor="#787774" android:paddingBottom="4dp" android:visibility="gone"/>
+
+    </LinearLayout>
 
 </LinearLayout>

@@ -15,10 +15,8 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../services/sync_engine.dart';
 import '../../../services/weather_service.dart';
-import '../../events/widgets/event_detail_popup.dart';
+import '../../events/screens/event_detail_screen.dart';
 import '../../events/screens/event_form_screen.dart';
-import '../../../app.dart';
-import '../../../core/widgets/source_logos.dart';
 import '../widgets/weather_header.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -231,98 +229,47 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ),
           ],
         ),
-        // Bouton sync — couleur selon l'état de connexion
-        Consumer(builder: (context, ref, _) {
-          final forceOffline = ref.watch(forceOfflineProvider);
-          final networkOffline =
-              ref.watch(connectivityStreamProvider).valueOrNull ?? false;
-
-          Color dotColor;
-          String tooltip;
-          if (forceOffline) {
-            dotColor = const Color(0xFFFF3B30);
-            tooltip = 'Mode hors-ligne (cliquer pour reconnecter)';
-          } else if (networkOffline) {
-            dotColor = const Color(0xFFFF9500);
-            tooltip = 'Pas de réseau';
-          } else {
-            dotColor = const Color(0xFF34C759);
-            tooltip = 'Connecté — cliquer pour synchroniser';
-          }
-
-          return Stack(
-            children: [
-              IconButton(
-                icon: syncState.isSyncing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : HugeIcon(
-                        icon: forceOffline
-                            ? HugeIcons.strokeRoundedWifiDisconnected04
-                            : HugeIcons.strokeRoundedRefresh,
-                        color: dotColor,
-                        size: 22,
-                      ),
-                onPressed: syncState.isSyncing
-                    ? null
-                    : () async {
-                        if (forceOffline) {
-                          ref.read(forceOfflineProvider.notifier).toggle();
-                          return;
-                        }
-                        await ref.read(syncNotifierProvider.notifier).syncAll();
-                        if (!mounted) return;
-                        final state = ref.read(syncNotifierProvider);
-                        if (state.sourceErrors.isNotEmpty) {
-                          UnifiedCalendarApp.scaffoldMessengerKey.currentState
-                            ?..clearSnackBars()
-                            ..showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Erreurs de sync :\n${state.sourceErrors.entries.map((e) => '• ${e.key}: ${e.value}').join('\n')}',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                                backgroundColor: Colors.orange,
-                                duration: const Duration(seconds: 6),
-                              ),
-                            );
-                        } else if (state.lastResult == SyncResult.success) {
-                          UnifiedCalendarApp.scaffoldMessengerKey.currentState
-                            ?..clearSnackBars()
-                            ..showSnackBar(
-                              const SnackBar(
-                                content: Text('Synchronisation réussie',
-                                    style: TextStyle(color: Colors.white)),
-                                backgroundColor: Colors.green,
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                        }
-                      },
-                tooltip: tooltip,
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: dotColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      width: 1.5,
-                    ),
-                  ),
+        // Bouton sync
+        IconButton(
+          icon: syncState.isSyncing
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : HugeIcon(
+                  icon: HugeIcons.strokeRoundedRefresh,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  size: 22,
                 ),
-              ),
-            ],
-          );
-        }),
+          onPressed: syncState.isSyncing
+              ? null
+              : () async {
+                  await ref.read(syncNotifierProvider.notifier).syncAll();
+                  if (!mounted) return;
+                  final state = ref.read(syncNotifierProvider);
+                  if (state.sourceErrors.isNotEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Erreurs de sync :\n${state.sourceErrors.entries.map((e) => '• ${e.key}: ${e.value}').join('\n')}',
+                        ),
+                        backgroundColor: Colors.orange,
+                        duration: const Duration(seconds: 6),
+                      ),
+                    );
+                  } else if (state.lastResult == SyncResult.success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Synchronisation réussie'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+          tooltip: 'Synchroniser',
+        ),
       ],
     );
   }
@@ -357,18 +304,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   void _showFilterPanel(
     BuildContext context,
     List<NotionDatabaseModel> dbs,
-    Set<String> initialHidden,
+    Set<String> hidden,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const infomaniakSourceId = 'infomaniak';
 
     showDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            // Relire le provider à chaque rebuild pour avoir l'état à jour
-            final hidden = ref.read(hiddenSourcesProvider);
             return AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -389,25 +333,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ── Infomaniak (togglable) ──
+                    // ── Infomaniak (toujours visible, non masquable) ──
                     _buildSourceRow(
                       icon: HugeIcons.strokeRoundedCloud,
                       color: AppColors.sourceInfomaniak,
                       label: 'Infomaniak',
-                      isVisible: !hidden.contains(infomaniakSourceId),
-                      enabled: true,
-                      onChanged: (visible) {
-                        final newHidden =
-                            Set<String>.from(ref.read(hiddenSourcesProvider));
-                        if (visible) {
-                          newHidden.remove(infomaniakSourceId);
-                        } else {
-                          newHidden.add(infomaniakSourceId);
-                        }
-                        ref.read(hiddenSourcesProvider.notifier).state =
-                            newHidden;
-                        setDialogState(() {});
-                      },
+                      isVisible: true,
+                      enabled: false,
+                      onChanged: null,
                       isDark: isDark,
                     ),
                     const SizedBox(height: 4),
@@ -419,9 +352,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: _buildSourceRow(
                           icon: HugeIcons.strokeRoundedDatabase,
-                          color: isDark
-                              ? const Color(0xFF9B9A97)
-                              : AppColors.sourceNotion,
+                          color: AppColors.sourceNotion,
                           label: db.name,
                           isVisible: isVisible,
                           enabled: true,
@@ -850,9 +781,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final isEffectiveAllDay = event.isAllDay ||
         event.endDate.difference(event.startDate).inHours > 23;
     final borderW = isEffectiveAllDay
-        ? (h * 0.25).clamp(3.0, 8.0)
-        : (w * 0.25).clamp(6.0, 28.0);
-    final contentW = isEffectiveAllDay ? w - 3 : w - borderW;
+        ? (h * 0.25).clamp(2.0, 6.0)
+        : (w * 0.25).clamp(4.0, 24.0);
+    final contentW = isEffectiveAllDay ? w - 2 : w - borderW;
 
     final radius = h < 16 ? 3.0 : (h < 28 ? 5.0 : 8.0);
 
@@ -1140,54 +1071,22 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   /// Icône source (Design System §4.1 : toujours visible, 16px)
-  /// Affiche le nom de la BDD Notion à côté de l'icône quand la taille le permet.
   Widget _sourceIcon(EventModel event, bool isDark, double size) {
-    final dbNames = ref.watch(notionDbNamesMapProvider).value ?? {};
-    final notionDbName = event.isFromNotion ? dbNames[event.calendarId] : null;
-
-    Widget icon;
+    dynamic icon;
+    Color color;
     if (event.isFromNotion) {
-      icon = SourceLogos.notion(size: size, isDark: isDark);
+      icon = HugeIcons.strokeRoundedTask01;
+      color = isDark
+          ? Colors.white.withValues(alpha: 0.6)
+          : const Color(0xFF37352F).withValues(alpha: 0.5);
     } else if (event.isFromInfomaniak) {
-      icon = SourceLogos.infomaniak(size: size);
+      icon = HugeIcons.strokeRoundedCalendar03;
+      color = AppColors.sourceInfomaniak.withValues(alpha: 0.8);
     } else {
-      final color = AppColors.sourceIcs.withValues(alpha: 0.8);
-      icon = HugeIcon(
-          icon: HugeIcons.strokeRoundedCalendar01, color: color, size: size);
+      icon = HugeIcons.strokeRoundedCalendar01;
+      color = AppColors.sourceIcs.withValues(alpha: 0.8);
     }
-
-    if (notionDbName != null) {
-      // Pour les tailles >= 14, afficher le nom en texte à côté de l'icône
-      if (size >= 14) {
-        return Tooltip(
-          message: notionDbName,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon,
-              const SizedBox(width: 3),
-              Flexible(
-                child: Text(
-                  notionDbName,
-                  style: TextStyle(
-                    fontSize: size >= 16 ? 9 : 8,
-                    color: isDark
-                        ? const Color(0xFF9B9A97)
-                        : const Color(0xFF37352F).withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-      // Petite taille : tooltip seulement
-      return Tooltip(message: notionDbName, child: icon);
-    }
-    return icon;
+    return HugeIcon(icon: icon, color: color, size: size);
   }
 
   /// Chips catégorie + statut (Design System §4.1)
@@ -1599,14 +1498,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     required Color color,
     required bool isDark,
   }) {
-    // En dark mode, éclaircir les couleurs sombres pour garantir la lisibilité
-    final displayColor = isDark && color.computeLuminance() < 0.3
-        ? Color.lerp(color, Colors.white, 0.4)!
-        : color;
     final chipBg = isDark
         ? Colors.white.withValues(alpha: 0.14)
         : Colors.white.withValues(alpha: 0.88);
-    final borderColor = displayColor.withValues(alpha: isDark ? 0.35 : 0.25);
+    final borderColor = color.withValues(alpha: isDark ? 0.35 : 0.25);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -1618,13 +1513,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          HugeIcon(icon: icon, color: displayColor, size: 11),
+          HugeIcon(icon: icon, color: color, size: 11),
           const SizedBox(width: 3),
           Flexible(
             child: Text(
               text,
               style: TextStyle(
-                color: displayColor,
+                color: color,
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 height: 1.1,
@@ -1689,10 +1584,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     if (event == null || details.droppingTime == null) return;
 
     if (event.isFromIcs) {
-      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Les abonnements .ics sont en lecture seule',
-              style: TextStyle(color: Colors.white)),
+          content: Text('Les abonnements .ics sont en lecture seule'),
           backgroundColor: Color(0xFFFF9500),
         ),
       );
@@ -1725,10 +1619,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     if (event == null) return;
 
     if (event.isFromIcs) {
-      UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Les abonnements .ics sont en lecture seule',
-              style: TextStyle(color: Colors.white)),
+          content: Text('Les abonnements .ics sont en lecture seule'),
           backgroundColor: Color(0xFFFF9500),
         ),
       );
@@ -1812,13 +1705,14 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ? '${event.title} → ${CalendarDateUtils.formatDisplayTime(newStart)} - ${CalendarDateUtils.formatDisplayTime(newEnd)}'
             : '${event.title} déplacé au ${CalendarDateUtils.formatDisplayDateTime(newStart)}';
 
-        UnifiedCalendarApp.scaffoldMessengerKey.currentState
-          ?..clearSnackBars()
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
           ..showSnackBar(
             SnackBar(
               content: Text(msg),
               duration: const Duration(seconds: 4),
               showCloseIcon: true,
+              behavior: SnackBarBehavior.floating,
               action: SnackBarAction(
                 label: 'Annuler',
                 onPressed: () async {
@@ -1840,7 +1734,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     } catch (e) {
       ref.read(eventsNotifierProvider.notifier).refresh();
       if (mounted) {
-        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur lors du déplacement : $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
@@ -1855,7 +1749,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       final apt = details.appointments?.first;
       final event = apt is EventModel ? apt : null;
       if (event != null) {
-        openEventDetail(context, event);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EventDetailScreen(event: event),
+          ),
+        );
       }
     } else if (details.targetElement == CalendarElement.calendarCell &&
         details.date != null) {
@@ -1892,7 +1791,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       heroTag: 'calendar_fab',
       onPressed: () => _showCreateEventSheet(DateTime.now()),
       tooltip: 'Nouvel événement',
-      child: HugeIcon(
+      child: const HugeIcon(
         icon: HugeIcons.strokeRoundedAdd01,
         color: Colors.white,
         size: 26,

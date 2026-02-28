@@ -76,10 +76,26 @@ class SyncEngine {
     // Validation schéma Notion + Sync
     if (_notion.isConfigured) {
       try {
-        // Valider le schéma avant la sync
+        // Valider le schéma avant la sync (avec auto-remap des propriétés renommées)
         final notionDbs = await _db.getNotionDatabases();
-        final validator = NotionSchemaValidator(notion: _notion);
+        final validator = NotionSchemaValidator(notion: _notion, db: _db);
         final validationResults = await validator.validateAll(notionDbs);
+
+        // Signaler les remappings automatiques (info, pas erreur)
+        final remappedDbs =
+            validationResults.where((r) => r.hasRemappings).toList();
+        if (remappedDbs.isNotEmpty) {
+          for (final r in remappedDbs) {
+            errors['Notion:${r.databaseName}'] =
+                '⚑ Propriété(s) remappée(s) : ${r.remappedProperties.join(", ")}';
+          }
+          AppLogger.instance.info(
+            'SyncEngine',
+            '${remappedDbs.length} base(s) Notion avec propriétés remappées automatiquement',
+          );
+        }
+
+        // Seules les bases véritablement invalides (après remap) sont des erreurs
         final invalidDbs = validationResults.where((r) => !r.isValid).toList();
         if (invalidDbs.isNotEmpty) {
           for (final r in invalidDbs) {
@@ -88,11 +104,15 @@ class SyncEngine {
           }
           AppLogger.instance.warning(
             'SyncEngine',
-            '${invalidDbs.length} base(s) Notion avec schéma invalide',
+            '${invalidDbs.length} base(s) Notion avec schéma invalide (après remap)',
           );
         }
 
-        await _syncNotion(start, end);
+        // Collecter les IDs des bases invalides pour les exclure de la sync
+        final invalidDbIds = invalidDbs.map((r) => r.databaseId).toSet();
+
+        // Relire les bases depuis SQLite (le remap a pu mettre à jour les mappings)
+        await _syncNotion(start, end, skipDatabaseIds: invalidDbIds);
       } catch (e) {
         success = false;
         errors['Notion'] = e.toString();
@@ -222,12 +242,23 @@ class SyncEngine {
     } catch (_) {}
   }
 
-  Future<void> _syncNotion(DateTime start, DateTime end) async {
+  Future<void> _syncNotion(DateTime start, DateTime end,
+      {Set<String> skipDatabaseIds = const {}}) async {
+    // Relire depuis SQLite (le remap a pu mettre à jour les mappings)
     final notionDbs = await _db.getNotionDatabases();
     var allTags = await _db.getAllTags();
 
     for (final notionDb in notionDbs) {
       if (!notionDb.isEnabled) continue;
+
+      // Exclure les bases dont le schéma est resté invalide après remap
+      if (skipDatabaseIds.contains(notionDb.effectiveSourceId)) {
+        AppLogger.instance.warning(
+          'SyncEngine',
+          'Base Notion "${notionDb.name}" ignorée (schéma invalide)',
+        );
+        continue;
+      }
 
       try {
         // ── Pré-créer les tags catégorie depuis le schéma Notion ──
@@ -333,6 +364,10 @@ class SyncEngine {
         syncedAt: DateTime.now(),
       ));
     } else {
+      // Ne JAMAIS ressusciter un event supprimé localement offline.
+      // La sync_queue propagera la suppression vers le serveur distant.
+      if (existing.isDeleted) return;
+
       // Pour les sources distantes (Notion, ICS), toujours écraser avec les
       // données fraîches : l'enrichissement local (description multi-propriétés,
       // tags…) peut changer même si la page Notion n'a pas été modifiée.
@@ -493,21 +528,36 @@ class SyncEngine {
     await _db.deleteEvent(event.id!);
 
     try {
+      bool remoteDeleteSuccess = false;
       if (event.isFromInfomaniak && _infomaniak.isConfigured) {
         if (event.remoteId != null) {
           await _infomaniak.deleteEvent(
             event.remoteId!,
             etag: event.etag,
           );
+          remoteDeleteSuccess = true;
         }
       } else if (event.isFromNotion && _notion.isConfigured) {
         if (event.notionPageId != null) {
           await _notion.archivePage(event.notionPageId!);
+          remoteDeleteSuccess = true;
         }
+      }
+
+      // Si la suppression distante a réussi, nettoyer l'entrée sync_queue
+      // (évite un retry inutile qui retournera 404).
+      if (remoteDeleteSuccess && event.id != null) {
+        final db = await _db.database;
+        await db.delete(
+          AppConstants.tableSyncQueue,
+          where: 'event_id = ? AND action = ? AND status = ?',
+          whereArgs: [event.id, 'delete', 'pending'],
+        );
       }
     } catch (e) {
       // La suppression locale est déjà faite.
       // Si le serveur échoue (404, réseau…), on logue sans propager.
+      // La sync_queue prendra le relais au prochain cycle.
       AppLogger.instance.warning(
         'SyncEngine',
         'Suppression distante échouée : $e',

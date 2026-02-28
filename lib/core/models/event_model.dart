@@ -65,6 +65,7 @@ class EventModel extends Equatable {
   final DateTime? updatedAt;
   final DateTime? syncedAt;
   final String? etag; // ETag pour la détection de conflits CalDAV
+  final List<String> smartAttachments; // Chemins fichiers attachés (Desktop)
 
   const EventModel({
     this.id,
@@ -92,6 +93,7 @@ class EventModel extends Equatable {
     this.updatedAt,
     this.syncedAt,
     this.etag,
+    this.smartAttachments = const [],
   });
 
   bool get isFromInfomaniak => source == AppConstants.sourceInfomaniak;
@@ -132,6 +134,7 @@ class EventModel extends Equatable {
     DateTime? updatedAt,
     DateTime? syncedAt,
     String? etag,
+    List<String>? smartAttachments,
   }) {
     return EventModel(
       id: id ?? this.id,
@@ -159,6 +162,7 @@ class EventModel extends Equatable {
       updatedAt: updatedAt ?? this.updatedAt,
       syncedAt: syncedAt ?? this.syncedAt,
       etag: etag ?? this.etag,
+      smartAttachments: smartAttachments ?? this.smartAttachments,
     );
   }
 
@@ -188,6 +192,7 @@ class EventModel extends Equatable {
       'updated_at': updatedAt?.toIso8601String(),
       'synced_at': syncedAt?.toIso8601String(),
       'etag': etag,
+      'smart_attachments': jsonEncode(smartAttachments),
     };
   }
 
@@ -238,6 +243,10 @@ class EventModel extends Equatable {
           ? DateTime.parse(map['synced_at'] as String)
           : null,
       etag: map['etag'] as String?,
+      smartAttachments: map['smart_attachments'] != null
+          ? (jsonDecode(map['smart_attachments'] as String) as List)
+              .cast<String>()
+          : <String>[],
     );
   }
 

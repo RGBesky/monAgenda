@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/widgets/settings_logo_header.dart';
 import '../../../providers/settings_provider.dart';
 
 /// Représente un calendrier dans la liste de tri.
@@ -120,6 +121,7 @@ class _AppearanceSettingsScreenState
         error: (e, _) => Center(child: Text('Erreur : $e')),
         data: (settings) => ListView(
           children: [
+            const SettingsLogoHeader(),
             // Thème
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
