@@ -163,9 +163,16 @@ class MagicEntryService {
     caseSensitive: false,
   );
 
-  /// Moments de la journée : "cet après-midi", "ce matin", "ce soir", "cette nuit"
+  /// Moments de la journée : "matin", "ce matin", "cet après-midi", "ce soir", "cette nuit", etc.
   static final _momentPattern = RegExp(
-    r"\b(?:cet\s+après[- ]midi|ce\s+matin|ce\s+soir|cette\s+nuit|en\s+fin\s+de?\s+(?:matinée|journée|après[- ]midi|soirée))\b",
+    r"\b(?:"
+    r"cet\s+après[- ]midi|ce\s+matin|ce\s+soir|cette\s+nuit|"
+    r"en\s+fin\s+de?\s+(?:matinée|journée|après[- ]midi|soirée)|"
+    r"en\s+(?:matinée|soirée)|"
+    r"(?:la\s+)?matinée|(?:le\s+)?matin|"
+    r"(?:l[' ]\s*)?après[- ]midi|"
+    r"(?:la\s+)?soirée|(?:le\s+)?soir"
+    r")\b",
     caseSensitive: false,
   );
 
@@ -285,9 +292,12 @@ class MagicEntryService {
 
       final location = json['location'] as String?;
       final category = json['category'] as String?;
+      final description = json['description'] as String?;
 
       return _buildEventModel({
         'title': title,
+        'description':
+            (description != null && description != 'null') ? description : null,
         'startDate': startDate,
         'startHour': startHour,
         'startMinute': startMinute,
@@ -480,11 +490,22 @@ class MagicEntryService {
       remaining = remaining.replaceFirst(locMatch.group(0)!, '').trim();
     }
 
-    // ── 11. Nettoyage du titre ──
+    // ── 11. Séparation titre/description si texte long ──
+    String? description;
+    if (remaining.length > 40) {
+      final split = _splitTitleDescription(remaining);
+      if (split['description'] != null) {
+        remaining = split['title']!;
+        description = split['description'];
+      }
+    }
+
+    // ── 12. Nettoyage du titre ──
     remaining = _cleanTitle(remaining);
 
     return {
       'title': remaining.isNotEmpty ? remaining : null,
+      'description': description,
       'category': category,
       'participants': participants,
       'startDate': startDate,
@@ -494,6 +515,42 @@ class MagicEntryService {
       'endMinute': endMinute,
       'location': location,
     };
+  }
+
+  /// Sépare un texte long en titre court + description.
+  /// Split sur "et" + verbe d'action, ou "puis", ou "penser à".
+  static Map<String, String?> _splitTitleDescription(String text) {
+    // Split sur "et" suivi d'un verbe d'action (infinitif)
+    final etSplit = RegExp(
+      r'\s+et\s+(?=(?:penser|faire|acheter|prendre|voir|trouver|préparer|'
+      r'ne\s+pas\s+oublier|pas\s+oublier|organiser|chercher|gérer|vérifier|'
+      r'appeler|envoyer|écrire|finir|commencer|essayer|prévoir|réserver|'
+      r'confirmer|annuler|rappeler|commander|récupérer|déposer|amener|ramener)\b)',
+      caseSensitive: false,
+    ).firstMatch(text);
+
+    if (etSplit != null && etSplit.start >= 3) {
+      final title = text.substring(0, etSplit.start).trim();
+      var desc = text.substring(etSplit.end).trim();
+      if (desc.isNotEmpty) {
+        desc = desc[0].toUpperCase() + desc.substring(1);
+      }
+      return {'title': title, 'description': desc};
+    }
+
+    // Split sur "puis"
+    final puisSplit =
+        RegExp(r'\s+puis\s+', caseSensitive: false).firstMatch(text);
+    if (puisSplit != null && puisSplit.start >= 3) {
+      final title = text.substring(0, puisSplit.start).trim();
+      var desc = text.substring(puisSplit.end).trim();
+      if (desc.isNotEmpty) {
+        desc = desc[0].toUpperCase() + desc.substring(1);
+      }
+      return {'title': title, 'description': desc};
+    }
+
+    return {'title': text, 'description': null};
   }
 
   /// Nettoie une chaîne pour en faire un titre propre.
@@ -514,10 +571,10 @@ class MagicEntryService {
       '',
     );
 
-    // Nettoyer espaces, ponctuation résiduelle
+    // Nettoyer espaces, ponctuation résiduelle, "et" orphelin
     title = title
         .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r'^\s*[,\-–.]\s*'), '')
+        .replaceAll(RegExp(r'^\s*(?:et\s+|[,\-–.]\s*)'), '')
         .replaceAll(RegExp(r'\s*[,\-–.]\s*$'), '')
         .trim();
 
@@ -629,7 +686,7 @@ class MagicEntryService {
       endDate: endDateTime,
       isAllDay: startHour == null,
       location: parsed['location'] as String?,
-      description: null,
+      description: parsed['description'] as String?,
       participants: participants,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),

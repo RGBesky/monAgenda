@@ -27,7 +27,7 @@ class LlamaService {
 
   /// Grammaire GBNF contraignant la sortie IA à un JSON strict.
   static const String gbnfGrammar = r'''
-root   ::= "{" ws "\"title\"" ws ":" ws string "," ws "\"date\"" ws ":" ws string "," ws "\"startTime\"" ws ":" ws (string | "null") "," ws "\"endTime\"" ws ":" ws (string | "null") "," ws "\"location\"" ws ":" ws (string | "null") "," ws "\"category\"" ws ":" ws (string | "null") "," ws "\"participants\"" ws ":" ws (arr | "null") ws "}"
+root   ::= "{" ws "\"title\"" ws ":" ws string "," ws "\"description\"" ws ":" ws (string | "null") "," ws "\"date\"" ws ":" ws string "," ws "\"startTime\"" ws ":" ws (string | "null") "," ws "\"endTime\"" ws ":" ws (string | "null") "," ws "\"location\"" ws ":" ws (string | "null") "," ws "\"category\"" ws ":" ws (string | "null") "," ws "\"participants\"" ws ":" ws (arr | "null") ws "}"
 arr    ::= "[" ws (string ("," ws string)*)? ws "]"
 string ::= "\"" [^"\\]* "\""
 ws     ::= [ \t\n]*
@@ -38,10 +38,12 @@ ws     ::= [ \t\n]*
   /// PAS de rôle système séparé — tout est dans <|prompt|>.
   /// Prompt optimisé pour Danube 3 500M : exemples concrets, pas de template abstrait.
   static const String systemPrompt =
-      'Extrais titre, date, heure début, heure fin, lieu, catégorie et participants.\n'
-      'Exemple: "Réunion lundi 14h-16h salle B" → '
-      '{"title":"Réunion","date":"2026-03-02","startTime":"14:00","endTime":"16:00","location":"salle B","category":null,"participants":null}\n'
-      'Si pas d\'heure, mets null. Si pas de lieu, mets null. Participants = prénoms mentionnés ou null.';
+      'Extrais un événement du texte. Réponds UNIQUEMENT en JSON.\n'
+      'title: résumé court (2-5 mots). description: détails/rappels ou null.\n'
+      'date: YYYY-MM-DD. matin=09:00-12:00. après-midi=14:00-17:00. soir=19:00-21:00.\n'
+      'location: lieu physique (pas l\'activité) ou null. category: Travail/Perso/Sport/Santé/Famille/Social/Formation/Administratif ou null.\n'
+      'Ex: "Réunion avec Marc demain matin salle B et préparer les slides" →\n'
+      '{"title":"Réunion","description":"Préparer les slides","date":"2026-03-01","startTime":"09:00","endTime":"12:00","location":"Salle B","category":"Travail","participants":["Marc"]}';
 
   /// Initialise le chemin de la bibliothèque native llama.cpp.
   /// Appelé une fois au démarrage de l'app.
@@ -77,7 +79,7 @@ ws     ::= [ \t\n]*
       ..nGpuLayers = 0 // CPU only
       ..mainGpu = -1; // Pas de sélection GPU (évite "invalid value for main_gpu: 0")
     final contextParams = ContextParams()
-      ..nCtx = 512 // Petit contexte suffisant pour extraction
+      ..nCtx = 768 // Contexte suffisant pour prompt amélioré + extraction
       ..nBatch = 256;
     final samplerParams = SamplerParams()
       ..temp = 0.1 // Quasi-déterministe pour extraction JSON
