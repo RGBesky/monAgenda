@@ -874,7 +874,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
 
       final notifier = ref.read(eventsNotifierProvider.notifier);
       EventModel savedEvent;
-      if (widget.event == null) {
+      if (event.id == null) {
+        // Nouvel événement (création classique OU depuis Saisie Magique)
         final newId = await notifier.createEvent(event);
         savedEvent = event.copyWith(id: newId);
       } else {

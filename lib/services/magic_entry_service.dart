@@ -361,11 +361,15 @@ class MagicEntryService {
       final title = _smartTitle(rawTitle, location: location);
       if (title.isEmpty) return null;
 
-      // Date
+      // Date — le LLM peut retourner ISO (2026-03-01) ou relatif (demain)
       DateTime? startDate;
       final dateStr = json['date'] as String?;
       if (dateStr != null && dateStr != 'null') {
         startDate = DateTime.tryParse(dateStr);
+        // Si DateTime.tryParse échoue, c'est probablement une date relative
+        if (startDate == null) {
+          startDate = _tryResolveRelativeDate(dateStr);
+        }
       }
       startDate ??= DateTime.now();
 
@@ -754,6 +758,20 @@ class MagicEntryService {
     }
 
     return title;
+  }
+
+  /// Tente de résoudre une date relative retournée par le LLM.
+  /// Retourne null si le texte n'est pas reconnu comme date relative.
+  static DateTime? _tryResolveRelativeDate(String dateStr) {
+    final lc = dateStr.toLowerCase().trim();
+    // Mots relatifs connus
+    final knownRelative = RegExp(
+        r"^(demain|après[- ]?demain|aujourd'?hui|"
+        r"lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$");
+    if (knownRelative.hasMatch(lc)) {
+      return _resolveRelativeDate(lc);
+    }
+    return null;
   }
 
   static DateTime _resolveRelativeDate(String word, {bool forceNext = false}) {
