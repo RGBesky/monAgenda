@@ -90,7 +90,7 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
         }
       }
 
-      // ── Étape 2 : Inférence LLM (Danube 3) si modèle chargé ──
+      // ── Étape 2 : Inférence LLM (Danube 3) — source unique quand modèle dispo ──
       if (llamaService.isModelLoaded) {
         AppLogger.instance.info('MagicEntry', 'Calling Danube 3 for: "$input"');
 
@@ -105,7 +105,7 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
 
         final iaResult =
             await llamaService.infer(input, habitsContext: habitsContext);
-        AppLogger.instance.info('MagicEntry', 'Danube 3 result: $iaResult');
+        AppLogger.instance.info('MagicEntry', 'Danube 3 raw result: $iaResult');
         if (iaResult != null) {
           // Appliquer les habitudes comme fallback sur les champs null
           final enriched = _applyHabitsToJson(iaResult, habits);
@@ -114,32 +114,25 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
           if (event != null) {
             stopwatch.stop();
             AppLogger.instance.info('MagicEntry',
-                'Danube 3 parse OK in ${stopwatch.elapsedMilliseconds}ms');
+                'LLM parse OK in ${stopwatch.elapsedMilliseconds}ms — title="${event.title}"');
             state = AsyncData(event);
             return event;
           }
         }
+        // LLM a échoué → fallback regex (modèle chargé mais résultat inutilisable)
         AppLogger.instance.info('MagicEntry',
-            'Danube 3 returned unusable result, falling back to regex');
+            'LLM returned unusable result, falling back to regex');
+      } else {
+        AppLogger.instance.info('MagicEntry',
+            'Model not loaded — using regex only');
       }
 
-      // ── Étape 3 : Fallback regex complet (title + date requis) ──
-      final regexResult =
-          MagicEntryService.parseWithRegex(input, habits: habits);
-      if (regexResult != null) {
-        stopwatch.stop();
-        AppLogger.instance.info('MagicEntry',
-            'Regex parse OK in ${stopwatch.elapsedMilliseconds}ms');
-        state = AsyncData(regexResult);
-        return regexResult;
-      }
-
-      // ── Étape 4 : Fallback regex partiel (dernier recours) ──
+      // ── Étape 3 : Fallback regex (uniquement si LLM indisponible ou échoué) ──
       final partial =
           MagicEntryService.parsePartialRegex(input, habits: habits);
       stopwatch.stop();
       AppLogger.instance.info('MagicEntry',
-          'Partial regex parse in ${stopwatch.elapsedMilliseconds}ms');
+          'Regex fallback in ${stopwatch.elapsedMilliseconds}ms — title="${partial?.title}"');
       state = AsyncData(partial);
       return partial;
     } catch (e) {
@@ -358,8 +351,15 @@ class MagicEntryService {
   static EventModel? buildFromIaJson(
       Map<String, dynamic> json, String originalInput) {
     try {
-      final title = json['title'] as String?;
-      if (title == null || title.isEmpty) return null;
+      final rawTitle = json['title'] as String?;
+      if (rawTitle == null || rawTitle.isEmpty) return null;
+
+      // Extraire le lieu tôt pour le fallback titre intelligent
+      final locationRaw = json['location'] as String?;
+      final location =
+          (locationRaw != null && locationRaw != 'null') ? locationRaw : null;
+      final title = _smartTitle(rawTitle, location: location);
+      if (title.isEmpty) return null;
 
       // Date
       DateTime? startDate;
@@ -402,7 +402,6 @@ class MagicEntryService {
         }
       }
 
-      final location = json['location'] as String?;
       final category = json['category'] as String?;
       final description = json['description'] as String?;
 
@@ -415,7 +414,7 @@ class MagicEntryService {
         'startMinute': startMinute,
         'endHour': endHour,
         'endMinute': endMinute,
-        'location': (location != null && location != 'null') ? location : null,
+        'location': location,
         'category': (category != null && category != 'null') ? category : null,
         'participants': participants,
       });
@@ -612,8 +611,8 @@ class MagicEntryService {
       }
     }
 
-    // ── 12. Nettoyage du titre ──
-    remaining = _cleanTitle(remaining);
+    // ── 12. Titre intelligent (nettoyage + fallback lieu) ──
+    remaining = _smartTitle(remaining, location: location);
 
     return {
       'title': remaining.isNotEmpty ? remaining : null,
@@ -666,18 +665,46 @@ class MagicEntryService {
   }
 
   /// Nettoie une chaîne pour en faire un titre propre.
+  /// Supprime verbes creux, mots temporels, prépositions orphelines.
   static String _cleanTitle(String raw) {
     var title = raw;
 
-    // Supprimer les préfixes courants : "Je vais", "Il faut", "J'ai", "On va"
+    // Supprimer les mots temporels (demain, matin, soir, jours de la semaine...)
+    title = title.replaceAll(
+      RegExp(
+        r"\b(?:demain|après[- ]demain|aujourd'?hui|"
+        r"ce\s+(?:matin|soir)|cet\s+après[- ]midi|cette\s+nuit|"
+        r"(?:le\s+)?matin|(?:la\s+)?matinée|(?:le\s+)?soir|(?:la\s+)?soirée|"
+        r"(?:l[' ]\s*)?après[- ]midi|midi|nuit|"
+        r"lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|"
+        r"prochain(?:e)?)\b",
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // Supprimer les verbes creux / préfixes (aller, faire, voir, penser à...)
     title = title.replaceFirst(
       RegExp(
-        r"^(?:je\s+(?:vais|dois|voudrais|veux)\s+|"
+        r"^(?:aller(?:\s+|$)|"
+        r"je\s+(?:vais|dois|voudrais|veux)\s+|"
         r"il\s+faut\s+|"
         r"j'ai\s+|"
         r"on\s+(?:va|doit)\s+|"
         r"(?:il|elle)\s+(?:va|doit)\s+|"
-        r"faut\s+)",
+        r"faut\s+|"
+        r"faire\s+|"
+        r"voir\s+|"
+        r"penser\s+à\s+)",
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // Supprimer les prépositions orphelines en début ("à la", "au", "chez", "en")
+    title = title.replaceFirst(
+      RegExp(
+        r"^(?:à\s+(?:la\s+|l['']\s*)?|au\s+|chez\s+(?:le\s+|la\s+|l['']\s*)?|en\s+)",
         caseSensitive: false,
       ),
       '',
@@ -693,6 +720,37 @@ class MagicEntryService {
     // Première lettre en majuscule
     if (title.isNotEmpty) {
       title = title[0].toUpperCase() + title.substring(1);
+    }
+
+    return title;
+  }
+
+  /// Génère un titre intelligent : nettoie le raw, fallback sur le lieu si vide.
+  /// Agressif : si le LLM copie le texte brut, on extrait le sujet principal.
+  static String _smartTitle(String rawTitle, {String? location}) {
+    var title = _cleanTitle(rawTitle);
+
+    // Si titre trop long (>5 mots), c'est probablement du texte brut copié
+    // → ne garder que les 3 premiers mots significatifs
+    final words = title.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.length > 5) {
+      title = words.take(3).join(' ');
+    }
+
+    // Si le titre est vide/trop court et qu'on a un lieu, l'utiliser
+    if (title.length <= 2 && location != null && location.isNotEmpty) {
+      title = location.replaceFirst(
+        RegExp(r"^(?:La\s+|Le\s+|Les\s+|L['']\s*)", caseSensitive: false),
+        '',
+      );
+      if (title.isNotEmpty) {
+        title = title[0].toUpperCase() + title.substring(1);
+      }
+    }
+
+    // Dernier garde-fou : si toujours vide
+    if (title.trim().isEmpty) {
+      title = 'Nouvel événement';
     }
 
     return title;
