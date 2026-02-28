@@ -12,15 +12,43 @@ final magicEntryProvider =
     AsyncNotifierProvider<MagicEntryNotifier, EventModel?>(
         MagicEntryNotifier.new);
 
+/// Indique si le modèle IA doit être téléchargé (true = absent).
+final modelNeedsDownloadProvider = StateProvider<bool>((ref) => false);
+
 class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
   @override
   Future<EventModel?> build() async => null;
 
+  /// Vérifie si le modèle est prêt (chargé ou sur disque).
+  Future<bool> isModelAvailable() async {
+    final llamaService = ref.read(llamaServiceProvider);
+    if (llamaService.isModelLoaded) return true;
+    final modelPath = await ModelDownloadService.instance.modelPath;
+    return File(modelPath).exists();
+  }
+
+  /// Télécharge le modèle depuis HuggingFace. Retourne true si succès.
+  Future<bool> downloadModel() async {
+    try {
+      AppLogger.instance
+          .info('MagicEntry', 'Downloading Danube 3 from HuggingFace...');
+      await ModelDownloadService.instance.ensureModelReady(kModelDownloadUrl);
+      ref.read(modelNeedsDownloadProvider.notifier).state = false;
+      // Mettre à jour le statut global
+      ref.invalidate(modelDownloadStatusProvider);
+      AppLogger.instance.info('MagicEntry', 'Model downloaded successfully');
+      return true;
+    } catch (e) {
+      AppLogger.instance.error('MagicEntry', 'Model download failed', e);
+      return false;
+    }
+  }
+
   /// Parse un texte en langage naturel et retourne un EventModel.
   ///
   /// Stratégie : LLM-first quand le modèle est dispo, regex en fallback.
-  /// Si le modèle n'est pas encore chargé, tente un lazy-load automatique.
-  /// En dernier recours, utilise le parsing regex.
+  /// Si le modèle n'est pas disponible, signale via modelNeedsDownloadProvider
+  /// et utilise le regex en attendant.
   Future<EventModel?> parseText(String input) async {
     final stopwatch = Stopwatch()..start();
     state = const AsyncLoading();
@@ -32,14 +60,24 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       if (!llamaService.isModelLoaded) {
         try {
           final modelPath = await ModelDownloadService.instance.modelPath;
-          if (await File(modelPath).exists()) {
+          final exists = await File(modelPath).exists();
+
+          if (!exists) {
+            // Signaler que le modèle doit être téléchargé (l'UI demandera)
+            ref.read(modelNeedsDownloadProvider.notifier).state = true;
+            AppLogger.instance
+                .info('MagicEntry', 'Model not found — falling back to regex');
+          } else {
+            // Charger le modèle existant
             AppLogger.instance
                 .info('MagicEntry', 'Lazy-loading Danube 3 model...');
             await llamaService.loadModel(modelPath);
             ref.read(llamaReadyProvider.notifier).state = true;
+            AppLogger.instance
+                .info('MagicEntry', 'Danube 3 model loaded successfully');
           }
         } catch (e) {
-          AppLogger.instance.error('MagicEntry', 'Lazy model load failed', e);
+          AppLogger.instance.error('MagicEntry', 'Model load failed: $e', e);
         }
       }
 
@@ -48,6 +86,7 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
         AppLogger.instance.info('MagicEntry', 'Calling Danube 3 for: "$input"');
 
         final iaResult = await llamaService.infer(input);
+        AppLogger.instance.info('MagicEntry', 'Danube 3 result: $iaResult');
         if (iaResult != null) {
           final event = MagicEntryService.buildFromIaJson(iaResult, input);
           if (event != null) {

@@ -33,12 +33,15 @@ string ::= "\"" [^"\\]* "\""
 ws     ::= [ \t\n]*
 ''';
 
-  /// System prompt intégré dans le format prompt Danube 3.
-  /// Danube 3 utilise <|prompt|>...<|answer|>, pas de balise system séparée.
+  /// System prompt pour l'extraction d'événements.
+  /// Danube 3 chat template : <|prompt|>instructions+user</s><|answer|>
+  /// PAS de rôle système séparé — tout est dans <|prompt|>.
+  /// Prompt optimisé pour Danube 3 500M : exemples concrets, pas de template abstrait.
   static const String systemPrompt =
-      "Tu extrais les données d'un événement depuis du texte libre français. "
-      "Retourne un JSON strict : title, date (YYYY-MM-DD), startTime (HH:MM), "
-      "endTime, location, category, participants (tableau de prénoms).";
+      'Extrais titre, date, heure début, heure fin, lieu, catégorie et participants.\n'
+      'Exemple: "Réunion lundi 14h-16h salle B" → '
+      '{"title":"Réunion","date":"2026-03-02","startTime":"14:00","endTime":"16:00","location":"salle B","category":null,"participants":null}\n'
+      'Si pas d\'heure, mets null. Si pas de lieu, mets null. Participants = prénoms mentionnés ou null.';
 
   /// Initialise le chemin de la bibliothèque native llama.cpp.
   /// Appelé une fois au démarrage de l'app.
@@ -70,10 +73,12 @@ ws     ::= [ \t\n]*
 
   /// Construit le LlamaLoad command avec les params optimisés Danube 3.
   static LlamaLoad _buildLoadCommand(String modelPath) {
-    final modelParams = ModelParams()..nGpuLayers = 0; // CPU only
+    final modelParams = ModelParams()
+      ..nGpuLayers = 0 // CPU only
+      ..mainGpu = -1; // Pas de sélection GPU (évite "invalid value for main_gpu: 0")
     final contextParams = ContextParams()
       ..nCtx = 512 // Petit contexte suffisant pour extraction
-      ..nBatch = 128;
+      ..nBatch = 256;
     final samplerParams = SamplerParams()
       ..temp = 0.1 // Quasi-déterministe pour extraction JSON
       ..topK = 10
@@ -86,6 +91,7 @@ ws     ::= [ \t\n]*
       modelParams: modelParams,
       contextParams: contextParams,
       samplingParams: samplerParams,
+      verbose: false,
     );
   }
 
@@ -132,10 +138,11 @@ ws     ::= [ \t\n]*
     final now = DateTime.now();
     final dateContext =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    // Danube 3 prompt template : <|prompt|>...<|answer|>
+    // Danube 3 chat template : <|prompt|>instructions+contenu</s><|answer|>
+    // Pas de rôle system séparé — tout va dans <|prompt|>
     final prompt = '<|prompt|>$systemPrompt\n'
         'Date du jour: $dateContext\n'
-        'Texte: $userText</s><|answer|>\n';
+        'Texte: $userText</s><|answer|>';
 
     try {
       // Collecter la sortie via le stream de tokens
@@ -158,8 +165,8 @@ ws     ::= [ \t\n]*
       // Envoyer le prompt
       await _parent!.sendPrompt(prompt);
 
-      // Attendre la fin avec timeout 8s
-      await completer.future.timeout(const Duration(seconds: 8));
+      // Attendre la fin avec timeout 15s (CPU-only peut être lent)
+      await completer.future.timeout(const Duration(seconds: 15));
 
       await tokenSub.cancel();
       await completionSub.cancel();

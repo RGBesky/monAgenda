@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -8,10 +9,49 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'services/notification_service.dart';
 import 'services/background_worker_service.dart';
+import 'services/logger_service.dart';
+import 'services/llama_service.dart';
 import 'app.dart';
+
+/// Observer global des providers Riverpod.
+/// Capture les erreurs de build/listen pour les envoyer dans AppLogger.
+class AppProviderObserver extends ProviderObserver {
+  @override
+  void providerDidFail(
+    ProviderBase<Object?> provider,
+    Object error,
+    StackTrace stackTrace,
+    ProviderContainer container,
+  ) {
+    AppLogger.instance.error(
+      'Provider',
+      'Provider ${provider.name ?? provider.runtimeType.toString()} failed: $error',
+      error,
+    );
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── Capture des erreurs Flutter non attrapées ──
+  FlutterError.onError = (FlutterErrorDetails details) {
+    AppLogger.instance.error(
+      'FlutterError',
+      'Flutter error: ${details.exceptionAsString()}',
+      details.exception,
+    );
+  };
+
+  // ── Capture des erreurs Platform (Dart async non attrapées) ──
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    AppLogger.instance.error(
+      'PlatformError',
+      'Platform error: $error',
+      error,
+    );
+    return true;
+  };
 
   // Sur desktop (Linux, macOS, Windows), utiliser sqflite_common_ffi
   if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
@@ -32,9 +72,13 @@ void main() async {
   // ── V2 : WorkManager pour notifications fiables en background ──
   await BackgroundWorkerService.initialize();
 
+  // ── V3 : Initialiser le chemin de la bibliothèque llama.cpp ──
+  LlamaService.initLibraryPath();
+
   runApp(
-    const ProviderScope(
-      child: UnifiedCalendarApp(),
+    ProviderScope(
+      observers: [AppProviderObserver()],
+      child: const UnifiedCalendarApp(),
     ),
   );
 }
