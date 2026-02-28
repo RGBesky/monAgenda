@@ -523,14 +523,27 @@ class MagicEntryService {
       remaining = remaining.replaceAll(RegExp(r'(?:\s+à)+\s*$'), '').trim();
     }
 
-    // ── 7. Moments de la journée (cet après-midi, ce soir, ce matin) ──
+    // ── 7. Date relative (demain, après-demain, lundi, ...) ──
+    // IMPORTANT : doit être AVANT le moment pattern (matin/soir/etc.)
+    // sinon "demain matin" → matin fixe la date à aujourd'hui et "demain" est ignoré.
+    if (startDate == null) {
+      final dateRelMatch = _dateRelativePattern.firstMatch(remaining);
+      if (dateRelMatch != null) {
+        startDate = _resolveRelativeDate(dateRelMatch.group(1)!);
+        remaining = remaining.replaceFirst(dateRelMatch.group(0)!, '').trim();
+      }
+    }
+
+    // ── 8. Moments de la journée (cet après-midi, ce soir, ce matin) ──
     final momentMatch = _momentPattern.firstMatch(remaining);
     if (momentMatch != null) {
       final moment = momentMatch.group(0)!.toLowerCase();
 
-      // Si pas de date explicite, c'est aujourd'hui
-      final now = DateTime.now();
-      startDate ??= DateTime(now.year, now.month, now.day);
+      // Ne fixer la date à aujourd'hui QUE si aucune date relative n'a été trouvée
+      if (startDate == null) {
+        final now = DateTime.now();
+        startDate = DateTime(now.year, now.month, now.day);
+      }
 
       // Assigner les heures par défaut si pas explicites
       if (startHour == null) {
@@ -570,15 +583,6 @@ class MagicEntryService {
       }
 
       remaining = remaining.replaceFirst(momentMatch.group(0)!, '').trim();
-    }
-
-    // ── 8. Date relative (demain, après-demain, lundi, ...) ──
-    if (startDate == null) {
-      final dateRelMatch = _dateRelativePattern.firstMatch(remaining);
-      if (dateRelMatch != null) {
-        startDate = _resolveRelativeDate(dateRelMatch.group(1)!);
-        remaining = remaining.replaceFirst(dateRelMatch.group(0)!, '').trim();
-      }
     }
 
     // ── 9. Date absolue (15/03, 15-03-2025) ──
