@@ -35,6 +35,10 @@ final infomaniakServiceProvider = Provider<InfomaniakService>((ref) {
       'InfomaniakService créé SANS credentials (settings loaded=${settings != null})',
     );
   }
+  // V3 : Connecter le callback de conflit ETag
+  service.onEtagConflict = (serverEvent) {
+    ref.read(etagConflictProvider.notifier).state = serverEvent;
+  };
   return service;
 });
 
@@ -73,11 +77,16 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
 /// V2 : Provider du SyncQueueWorker.
 /// Utilise ref.watch pour se recréer quand les services changent.
 final syncQueueWorkerProvider = Provider<SyncQueueWorker>((ref) {
-  return SyncQueueWorker(
+  final worker = SyncQueueWorker(
     db: DatabaseHelper.instance,
     infomaniak: ref.watch(infomaniakServiceProvider),
     notion: ref.watch(notionServiceProvider),
   );
+  // V3 : Connecter le callback d'erreur serveur au provider
+  worker.onServerError = (msg) {
+    ref.read(serverSyncErrorProvider.notifier).state = msg;
+  };
+  return worker;
 });
 
 /// V2 : Provider du nombre d'actions en attente dans la queue.
@@ -89,6 +98,14 @@ final pendingSyncCountProvider = FutureProvider<int>((ref) async {
 final unreadErrorCountProvider = FutureProvider<int>((ref) async {
   return DatabaseHelper.instance.getUnreadErrorCount();
 });
+
+/// V3 : Provider d'erreur de sync serveur (429, 500, 503, timeout).
+/// null = pas d'erreur. String = message d'erreur à afficher en bannière.
+final serverSyncErrorProvider = StateProvider<String?>((ref) => null);
+
+/// V3 : Provider de conflit ETag (modification simultanée offline + serveur).
+/// null = pas de conflit. EventModel = événement overridé par la version serveur.
+final etagConflictProvider = StateProvider<EventModel?>((ref) => null);
 
 /// État de la synchronisation.
 class SyncState {
@@ -197,6 +214,15 @@ class SyncNotifier extends Notifier<SyncState> {
   }
 
   Future<void> pushEvent(EventModel event) async {
+    // Guard : ne pas pousser vers le serveur si mode hors-ligne forcé.
+    // L'action est déjà dans sync_queue (via EventsNotifier.createEvent/updateEvent).
+    final forceOffline = ref.read(forceOfflineProvider);
+    if (forceOffline) {
+      AppLogger.instance.info('Sync',
+          'pushEvent: mode offline — push différé (sync_queue)');
+      return;
+    }
+
     final engine = ref.read(syncEngineProvider);
     AppLogger.instance.info('Sync',
         'pushEvent: source=${event.source}, id=${event.id}, remoteId=${event.remoteId}');
@@ -211,6 +237,17 @@ class SyncNotifier extends Notifier<SyncState> {
   }
 
   Future<void> deleteEvent(EventModel event) async {
+    // Guard : en mode offline, suppression locale seule + enqueue.
+    // DatabaseHelper.deleteEvent() fait déjà is_deleted=1 + enqueueSyncAction.
+    final forceOffline = ref.read(forceOfflineProvider);
+    if (forceOffline) {
+      AppLogger.instance.info('Sync',
+          'deleteEvent: mode offline — suppression locale uniquement');
+      await DatabaseHelper.instance.deleteEvent(event.id!);
+      ref.read(eventsNotifierProvider.notifier).refresh();
+      return;
+    }
+
     final engine = ref.read(syncEngineProvider);
     await engine.deleteEvent(event);
     ref.read(eventsNotifierProvider.notifier).refresh();
@@ -276,20 +313,22 @@ final syncNotifierProvider =
 /// Mode hors-ligne forcé par l'utilisateur.
 /// Persiste dans SharedPreferences.
 final forceOfflineProvider =
-    StateNotifierProvider<ForceOfflineNotifier, bool>((ref) {
-  return ForceOfflineNotifier();
-});
+    NotifierProvider<ForceOfflineNotifier, bool>(ForceOfflineNotifier.new);
 
-class ForceOfflineNotifier extends StateNotifier<bool> {
+class ForceOfflineNotifier extends Notifier<bool> {
   static const _key = 'force_offline_mode';
 
-  ForceOfflineNotifier() : super(false) {
+  @override
+  bool build() {
     _load();
+    return false;
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getBool(_key) ?? false;
+    final val = prefs.getBool(_key) ?? false;
+    // Eviter notification inutile si la valeur est identique
+    if (val != state) state = val;
   }
 
   Future<void> toggle() async {
@@ -323,6 +362,7 @@ final connectivityStreamProvider = StreamProvider<bool>((ref) {
 
 /// V2 : Auto-déclenche syncAll quand la connectivité revient.
 /// Ce provider doit être watched au niveau app (ProviderScope) pour rester actif.
+/// Debounce 10s au démarrage pour éviter les cascade de rebuilds.
 final autoSyncOnConnectivityProvider = Provider<void>((ref) {
   final forceOffline = ref.watch(forceOfflineProvider);
   if (forceOffline) return; // Ne pas auto-sync si mode offline forcé
@@ -331,21 +371,26 @@ final autoSyncOnConnectivityProvider = Provider<void>((ref) {
 
   // isNetworkOffline == false signifie "réseau disponible"
   if (isNetworkOffline == false) {
-    // Debounce : ne pas auto-sync si un sync est déjà en cours ou récent (< 5s)
+    // Debounce : ne pas auto-sync si un sync est déjà en cours ou récent (< 30s)
     final syncState = ref.read(syncNotifierProvider);
     if (syncState.isSyncing) return;
     final lastSync = syncState.lastSyncedAt;
-    if (lastSync != null && DateTime.now().difference(lastSync).inSeconds < 5) {
+    if (lastSync != null &&
+        DateTime.now().difference(lastSync).inSeconds < 30) {
       return;
     }
 
-    // Lancer une sync complète (processQueue + pull distant) en arrière-plan
-    AppLogger.instance
-        .info('AutoSync', 'Connectivité retrouvée — lancement syncAll');
-    ref.read(syncNotifierProvider.notifier).syncAll().then((_) {
-      ref.invalidate(pendingSyncCountProvider);
-    }).catchError((e) {
-      AppLogger.instance.error('AutoSync', 'Échec auto-sync: $e');
+    // Debounce au démarrage : attendre 3s pour éviter les cascades
+    Future.delayed(const Duration(seconds: 3), () {
+      final currentState = ref.read(syncNotifierProvider);
+      if (currentState.isSyncing) return;
+      AppLogger.instance
+          .info('AutoSync', 'Connectivité retrouvée — lancement syncAll');
+      ref.read(syncNotifierProvider.notifier).syncAll().then((_) {
+        ref.invalidate(pendingSyncCountProvider);
+      }).catchError((e) {
+        AppLogger.instance.error('AutoSync', 'Échec auto-sync: $e');
+      });
     });
   }
 });
