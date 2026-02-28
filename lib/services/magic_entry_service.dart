@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
+import '../core/database/magic_habits_repository.dart';
 import '../core/models/event_model.dart';
 import '../services/logger_service.dart';
 import '../services/llama_service.dart';
@@ -55,6 +56,14 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
 
     try {
       final llamaService = ref.read(llamaServiceProvider);
+      final habitsRepo = ref.read(magicHabitsRepositoryProvider);
+
+      // ── Étape 0 : Charger les habitudes utilisateur ──
+      final habits = await habitsRepo.lookupForText(input);
+      if (habits.isNotEmpty) {
+        AppLogger.instance
+            .info('MagicEntry', 'Habits found: $habits');
+      }
 
       // ── Étape 1 : Essayer de charger le modèle si pas encore fait ──
       if (!llamaService.isModelLoaded) {
@@ -85,10 +94,23 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       if (llamaService.isModelLoaded) {
         AppLogger.instance.info('MagicEntry', 'Calling Danube 3 for: "$input"');
 
-        final iaResult = await llamaService.infer(input);
+        // Construire le contexte des habitudes pour le LLM
+        String? habitsContext;
+        if (habits.isNotEmpty) {
+          final lines = habits.entries
+              .map((e) => 'Défaut: ${e.key}=${e.value}')
+              .join('. ');
+          habitsContext = 'Habitudes utilisateur: $lines';
+        }
+
+        final iaResult =
+            await llamaService.infer(input, habitsContext: habitsContext);
         AppLogger.instance.info('MagicEntry', 'Danube 3 result: $iaResult');
         if (iaResult != null) {
-          final event = MagicEntryService.buildFromIaJson(iaResult, input);
+          // Appliquer les habitudes comme fallback sur les champs null
+          final enriched = _applyHabitsToJson(iaResult, habits);
+          final event =
+              MagicEntryService.buildFromIaJson(enriched, input);
           if (event != null) {
             stopwatch.stop();
             AppLogger.instance.info('MagicEntry',
@@ -102,7 +124,8 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       }
 
       // ── Étape 3 : Fallback regex complet (title + date requis) ──
-      final regexResult = MagicEntryService.parseWithRegex(input);
+      final regexResult =
+          MagicEntryService.parseWithRegex(input, habits: habits);
       if (regexResult != null) {
         stopwatch.stop();
         AppLogger.instance.info('MagicEntry',
@@ -112,7 +135,8 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       }
 
       // ── Étape 4 : Fallback regex partiel (dernier recours) ──
-      final partial = MagicEntryService.parsePartialRegex(input);
+      final partial =
+          MagicEntryService.parsePartialRegex(input, habits: habits);
       stopwatch.stop();
       AppLogger.instance.info('MagicEntry',
           'Partial regex parse in ${stopwatch.elapsedMilliseconds}ms');
@@ -125,6 +149,88 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       state = AsyncError(e, StackTrace.current);
       return null;
     }
+  }
+
+  /// Applique les habitudes utilisateur comme fallback sur les champs null du JSON LLM.
+  static Map<String, dynamic> _applyHabitsToJson(
+      Map<String, dynamic> json, Map<String, String> habits) {
+    if (habits.isEmpty) return json;
+    final result = Map<String, dynamic>.from(json);
+    for (final entry in habits.entries) {
+      final field = entry.key;
+      final value = entry.value;
+      // Ne remplit que si le champ est null ou absent
+      if (result[field] == null || result[field] == 'null') {
+        result[field] = value;
+      }
+    }
+    return result;
+  }
+
+  /// Apprend les habitudes utilisateur depuis les corrections.
+  ///
+  /// Compare le résultat original (IA ou regex) avec la version sauvegardée
+  /// par l'utilisateur. Pour chaque champ corrigé (ajouté par l'utilisateur),
+  /// extrait un mot-clé de l'input et crée une habitude.
+  ///
+  /// Exemple : input="aller à la messe", original.location=null,
+  /// final.location="Saint-Défendent" → habitude(messe, location, Saint-Défendent)
+  Future<void> learnFromCorrection({
+    required String inputText,
+    required EventModel originalEvent,
+    required EventModel correctedEvent,
+  }) async {
+    final habitsRepo = ref.read(magicHabitsRepositoryProvider);
+    final inputLc = inputText.toLowerCase();
+
+    // Mots significatifs de l'input (>= 4 caractères, pas des stop words)
+    final keywords = _extractKeywords(inputLc);
+    if (keywords.isEmpty) return;
+
+    // Comparer chaque champ corrigé
+    final corrections = <String, String>{};
+
+    if (correctedEvent.location != null &&
+        correctedEvent.location != originalEvent.location &&
+        correctedEvent.location!.isNotEmpty) {
+      corrections['location'] = correctedEvent.location!;
+    }
+    if (correctedEvent.description != null &&
+        correctedEvent.description != originalEvent.description &&
+        correctedEvent.description!.isNotEmpty) {
+      corrections['description'] = correctedEvent.description!;
+    }
+
+    if (corrections.isEmpty) return;
+
+    // Pour chaque correction, associer au mot-clé le plus pertinent
+    for (final entry in corrections.entries) {
+      // Utiliser le premier mot-clé significatif comme ancre
+      final keyword = keywords.first;
+      await habitsRepo.upsert(
+        keyword: keyword,
+        fieldName: entry.key,
+        fieldValue: entry.value,
+      );
+      AppLogger.instance.info('MagicEntry',
+          'Habit learned: "$keyword" → ${entry.key}=${entry.value}');
+    }
+  }
+
+  /// Extrait les mots-clés significatifs d'un texte (>= 4 chars, pas stop words).
+  static List<String> _extractKeywords(String text) {
+    const stopWords = {
+      'aller', 'faire', 'voir', 'avec', 'pour', 'dans', 'chez',
+      'mais', 'donc', 'puis', 'aussi', 'tout', 'tous', 'cette',
+      'demain', 'matin', 'soir', 'aujourd', 'après', 'avant',
+      'faut', 'penser', 'comme', 'être', 'avoir', 'très',
+      'bien', 'plus', 'encore', 'déjà', 'toujours', 'jamais',
+    };
+    return text
+        .replaceAll(RegExp(r'[^a-zàâäéèêëïîôùûç\s-]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length >= 4 && !stopWords.contains(w))
+        .toList();
   }
 }
 
@@ -222,8 +328,11 @@ class MagicEntryService {
   // ──────────────────────────────────────────────────────────────
 
   /// Parse complet : retourne un EventModel si title + date sont extraits.
-  static EventModel? parseWithRegex(String input) {
+  static EventModel? parseWithRegex(String input,
+      {Map<String, String> habits = const {}}) {
     final parsed = _extractAll(input);
+    // Appliquer les habitudes sur les champs null
+    _applyHabitsToParsed(parsed, habits);
     final title = parsed['title'] as String?;
     if (title == null || title.isEmpty || parsed['startDate'] == null) {
       return null;
@@ -232,8 +341,11 @@ class MagicEntryService {
   }
 
   /// Parse partiel : retourne un EventModel avec ce qu'on a pu extraire.
-  static EventModel? parsePartialRegex(String input) {
+  static EventModel? parsePartialRegex(String input,
+      {Map<String, String> habits = const {}}) {
     final parsed = _extractAll(input);
+    // Appliquer les habitudes sur les champs null
+    _applyHabitsToParsed(parsed, habits);
     final title = parsed['title'] as String?;
     if (title == null || title.isEmpty) {
       // Dernier recours : utiliser l'input brut comme titre
@@ -622,6 +734,43 @@ class MagicEntryService {
     }
 
     return DateTime(now.year, now.month, now.day);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Habitudes utilisateur
+  // ──────────────────────────────────────────────────────────────
+
+  /// Applique les habitudes comme fallback sur les champs null du parsed map.
+  static void _applyHabitsToParsed(
+      Map<String, dynamic> parsed, Map<String, String> habits) {
+    if (habits.isEmpty) return;
+    for (final entry in habits.entries) {
+      switch (entry.key) {
+        case 'location':
+          parsed['location'] ??= entry.value;
+        case 'category':
+          parsed['category'] ??= entry.value;
+        case 'description':
+          parsed['description'] ??= entry.value;
+        // startTime/endTime : seulement si pas d'heure extraite du tout
+        case 'startTime':
+          if (parsed['startHour'] == null) {
+            final parts = entry.value.split(':');
+            if (parts.length >= 2) {
+              parsed['startHour'] = int.tryParse(parts[0]);
+              parsed['startMinute'] = int.tryParse(parts[1]) ?? 0;
+            }
+          }
+        case 'endTime':
+          if (parsed['endHour'] == null) {
+            final parts = entry.value.split(':');
+            if (parts.length >= 2) {
+              parsed['endHour'] = int.tryParse(parts[0]);
+              parsed['endMinute'] = int.tryParse(parts[1]) ?? 0;
+            }
+          }
+      }
+    }
   }
 
   // ──────────────────────────────────────────────────────────────

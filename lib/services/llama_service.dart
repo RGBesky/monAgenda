@@ -38,12 +38,15 @@ ws     ::= [ \t\n]*
   /// PAS de rôle système séparé — tout est dans <|prompt|>.
   /// Prompt optimisé pour Danube 3 500M : exemples concrets, pas de template abstrait.
   static const String systemPrompt =
-      'Extrais un événement du texte. Réponds UNIQUEMENT en JSON.\n'
-      'title: résumé court (2-5 mots). description: détails/rappels ou null.\n'
+      'Crée un événement agenda à partir du texte. Réponds UNIQUEMENT en JSON.\n'
+      'title: INVENTE un titre court et clair (2-4 mots), NE COPIE PAS le texte brut.\n'
+      'description: résumé des détails, rappels, tâches associées ou null.\n'
       'date: YYYY-MM-DD. matin=09:00-12:00. après-midi=14:00-17:00. soir=19:00-21:00.\n'
-      'location: lieu physique (pas l\'activité) ou null. category: Travail/Perso/Sport/Santé/Famille/Social/Formation/Administratif ou null.\n'
-      'Ex: "Réunion avec Marc demain matin salle B et préparer les slides" →\n'
-      '{"title":"Réunion","description":"Préparer les slides","date":"2026-03-01","startTime":"09:00","endTime":"12:00","location":"Salle B","category":"Travail","participants":["Marc"]}';
+      'location: lieu physique ou null. category: Travail/Perso/Sport/Santé/Famille/Social/Formation/Administratif ou null.\n'
+      'Ex1: "Aller à la messe demain matin et penser à gérer la pancarte du caddie fraternel" →\n'
+      '{"title":"Messe","description":"Gérer la pancarte du caddie fraternel","date":"2026-03-01","startTime":"09:00","endTime":"12:00","location":null,"category":"Perso","participants":null}\n'
+      'Ex2: "Dîner avec Marc vendredi 20h au Resto" →\n'
+      '{"title":"Dîner avec Marc","description":null,"date":"2026-03-06","startTime":"20:00","endTime":"22:00","location":"Resto","category":"Social","participants":["Marc"]}';
 
   /// Initialise le chemin de la bibliothèque native llama.cpp.
   /// Appelé une fois au démarrage de l'app.
@@ -129,7 +132,11 @@ ws     ::= [ \t\n]*
 
   /// Exécute une inférence dans l'Isolate. Retourne le JSON parsé.
   /// Timeout de 8 secondes comme spécifié dans le plan.
-  Future<Map<String, dynamic>?> infer(String userText) async {
+  /// [habitsContext] : lignes de contexte issues des habitudes utilisateur,
+  /// injectées avant le texte pour guider le modèle.
+  /// Exemple : "Habitude: messe → location=Saint-Défendent"
+  Future<Map<String, dynamic>?> infer(String userText,
+      {String? habitsContext}) async {
     if (!_isModelLoaded || _parent == null) {
       AppLogger.instance
           .error('LlamaService', 'infer() called but model not loaded');
@@ -142,8 +149,12 @@ ws     ::= [ \t\n]*
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     // Danube 3 chat template : <|prompt|>instructions+contenu</s><|answer|>
     // Pas de rôle system séparé — tout va dans <|prompt|>
+    final habitsLine =
+        (habitsContext != null && habitsContext.isNotEmpty)
+            ? '\n$habitsContext'
+            : '';
     final prompt = '<|prompt|>$systemPrompt\n'
-        'Date du jour: $dateContext\n'
+        'Date du jour: $dateContext$habitsLine\n'
         'Texte: $userText</s><|answer|>';
 
     try {
