@@ -361,14 +361,22 @@ class MagicEntryService {
       final title = _smartTitle(rawTitle, location: location);
       if (title.isEmpty) return null;
 
-      // Date — le LLM peut retourner ISO (2026-03-01) ou relatif (demain)
+      // Date — priorité aux mots relatifs détectés dans le TEXTE ORIGINAL
+      // Le LLM 500M échoue souvent à calculer "demain" → ISO correct,
+      // donc on résout les dates relatives côté Dart.
       DateTime? startDate;
-      final dateStr = json['date'] as String?;
-      if (dateStr != null && dateStr != 'null') {
-        startDate = DateTime.tryParse(dateStr);
-        // Si DateTime.tryParse échoue, c'est probablement une date relative
-        if (startDate == null) {
-          startDate = _tryResolveRelativeDate(dateStr);
+      final dateFromInput = _extractRelativeDateFromInput(originalInput);
+      if (dateFromInput != null) {
+        // Le texte utilisateur contient "demain", "après-demain", un jour, etc.
+        // → on fait confiance au calcul Dart, pas au LLM
+        startDate = dateFromInput;
+      } else {
+        final dateStr = json['date'] as String?;
+        if (dateStr != null && dateStr != 'null') {
+          startDate = DateTime.tryParse(dateStr);
+          if (startDate == null) {
+            startDate = _tryResolveRelativeDate(dateStr);
+          }
         }
       }
       startDate ??= DateTime.now();
@@ -758,6 +766,41 @@ class MagicEntryService {
     }
 
     return title;
+  }
+
+  /// Extrait et résout une date relative directement depuis le texte utilisateur.
+  /// Prioritaire sur la date LLM car le modèle 500M échoue souvent en calcul.
+  static DateTime? _extractRelativeDateFromInput(String input) {
+    final lc = input.toLowerCase();
+
+    // Ordre important : "après-demain" avant "demain"
+    if (lc.contains('après-demain') || lc.contains('après demain') || lc.contains('apres-demain') || lc.contains('apres demain')) {
+      return _resolveRelativeDate('après-demain');
+    }
+    if (lc.contains('demain')) {
+      return _resolveRelativeDate('demain');
+    }
+    if (lc.contains("aujourd'hui") || lc.contains('aujourdhui')) {
+      return _resolveRelativeDate("aujourd'hui");
+    }
+
+    // Jours de la semaine : "lundi prochain", "mardi", etc.
+    final dayWithProchain = RegExp(
+        r'(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+prochain');
+    final dayMatch = dayWithProchain.firstMatch(lc);
+    if (dayMatch != null) {
+      return _resolveRelativeDate(dayMatch.group(1)!, forceNext: true);
+    }
+
+    // Jours simples
+    final daySimple = RegExp(
+        r'\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b');
+    final simpleDayMatch = daySimple.firstMatch(lc);
+    if (simpleDayMatch != null) {
+      return _resolveRelativeDate(simpleDayMatch.group(1)!);
+    }
+
+    return null;
   }
 
   /// Tente de résoudre une date relative retournée par le LLM.
