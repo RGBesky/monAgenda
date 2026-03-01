@@ -1,31 +1,41 @@
-/// Certificate pins pour les domaines critiques (CalDAV Infomaniak + Notion).
-///
-/// Ces SHA-256 des certificats leaf/intermediate sont utilisés pour le
-/// certificate pinning afin de protéger contre les attaques MitM sur WiFi public.
-///
-/// Pour extraire les pins à jour :
-///   openssl s_client -connect sync.infomaniak.com:443 < /dev/null 2>/dev/null | \
-///     openssl x509 -fingerprint -sha256 -noout
-///
-/// ATTENTION : Ces pins doivent être mis à jour lors du renouvellement des
-/// certificats. Inclure au moins le leaf ET l'intermediate pour survivre
-/// à un renouvellement du leaf.
+// Certificate pins (SPKI SHA-256 base64) pour les domaines critiques.
+//
+// Méthode : pin de la clé publique SPKI (Subject Public Key Info),
+// pas du certificat entier. Plus résistant aux renouvellements tant
+// que la clé privée du serveur ne change pas.
+//
+// Pour extraire / vérifier un pin :
+//   echo | openssl s_client -connect HOST:443 2>/dev/null \
+//     | openssl x509 -pubkey -noout \
+//     | openssl pkey -pubin -outform DER \
+//     | openssl dgst -sha256 -binary | base64
+//
+// ATTENTION : Mettre à jour ces pins si un domaine change de clé privée.
+// On garde leaf + intermediate pour survivre à un renouvellement simple.
+//
+// Dernière extraction : 01/03/2026.
 
-/// Pins SHA-256 pour sync.infomaniak.com (CalDAV).
-/// Inclut le leaf et l'intermediate (Let's Encrypt / Sectigo).
+// Pins SPKI SHA-256 pour Infomaniak (API REST + CalDAV sync).
+// - api.infomaniak.com  : leaf *.infomaniak.com (Sectigo, exp 25/02/2027)
+// - sync.infomaniak.com : leaf sync.infomaniak.com (Let's Encrypt R12, exp 25/04/2026)
+// - Intermediate commun Infomaniak (Sectigo Public Server Auth CA DV R36)
 const Set<String> kInfomaniakCertPins = {
-  // Infomaniak leaf cert SHA-256 (à extraire au moment du build)
-  // TODO: Extraire via openssl s_client -connect sync.infomaniak.com:443
-  'placeholder_infomaniak_leaf_sha256',
-  // Infomaniak intermediate cert SHA-256
-  'placeholder_infomaniak_intermediate_sha256',
+  // api.infomaniak.com — leaf SPKI pin (CN=*.infomaniak.com, Sectigo)
+  'Ssd/jHGJ3OqEg6/K6iY1iEn201FKSH67WWHL5idnYp8=',
+  // sync.infomaniak.com — leaf SPKI pin (CN=sync.infomaniak.com, Let's Encrypt R12)
+  'xCow0zf72ea3k4uL7eNlmHKyUK3110jHkWwr4ftfxm4=',
+  // Infomaniak intermediate — Sectigo Public Server Auth CA DV R36
+  'a9khLOZJxlnJyrxstg/P+seiDCm+Yf3OsrXyFocBaI0=',
 };
 
-/// Pins SHA-256 pour api.notion.com (API Notion).
+// Pins SPKI SHA-256 pour Notion (API REST).
+// - api.notion.com : leaf (CN=notion.com, Google Trust Services WE1, exp 18/04/2026)
+// - Intermediate Google Trust Services WE1
 const Set<String> kNotionCertPins = {
-  // Notion leaf cert SHA-256 (à extraire au moment du build)
-  // TODO: Extraire via openssl s_client -connect api.notion.com:443
-  'placeholder_notion_leaf_sha256',
+  // api.notion.com — leaf SPKI pin (CN=notion.com)
+  '6ChH0NMiOiR0QXe/gYrm3bQwIuVGxV/wLQsdJN9WgT0=',
+  // Google Trust Services WE1 — intermediate
+  'kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=',
 };
 
 /// Exception levée quand un certificat ne correspond à aucun pin connu.
