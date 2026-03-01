@@ -1,9 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/key_derivators/api.dart';
+import 'package:pointycastle/key_derivators/pbkdf2.dart';
+import 'package:pointycastle/macs/hmac.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
 import '../core/models/tag_model.dart';
@@ -191,26 +196,76 @@ class BackupService {
     }
   }
 
+  // ─────────────────────── PBKDF2 Key Derivation ───────────────────────────
+
+  /// Magic header pour identifier le format PBKDF2 (v2).
+  /// Les anciens backups n'ont pas ce header → fallback padRight.
+  static const _magicHeader = <int>[0x4D, 0x41, 0x50, 0x32]; // "MAP2"
+  static const _pbkdf2Iterations = 100000;
+  static const _saltLength = 32;
+
+  /// Dérive une clé AES-256 depuis un mot de passe via PBKDF2-HMAC-SHA256.
+  static Uint8List _deriveKey(String password, Uint8List salt) {
+    final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, _pbkdf2Iterations, 32));
+    return pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
+  }
+
+  /// Ancienne dérivation faible (rétrocompat lecture).
+  static Key _legacyKey(String password) {
+    return Key.fromUtf8(password.padRight(32, '0').substring(0, 32));
+  }
+
   Uint8List _encrypt(String plaintext, String password) {
-    final key = Key.fromUtf8(password.padRight(32, '0').substring(0, 32));
+    final salt = Uint8List(_saltLength);
+    final rng = Random.secure();
+    for (var i = 0; i < _saltLength; i++) {
+      salt[i] = rng.nextInt(256);
+    }
+
+    final keyBytes = _deriveKey(password, salt);
+    final key = Key(keyBytes);
     final iv = IV.fromSecureRandom(16);
     final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
     final encrypted = encrypter.encrypt(plaintext, iv: iv);
 
-    // Format : [IV (16 bytes)] + [données chiffrées]
-    final result = Uint8List(16 + encrypted.bytes.length);
-    result.setAll(0, iv.bytes);
-    result.setAll(16, encrypted.bytes);
+    // Format v2 : [magic 4B] + [salt 32B] + [IV 16B] + [données chiffrées]
+    final result = Uint8List(
+      _magicHeader.length + _saltLength + 16 + encrypted.bytes.length,
+    );
+    result.setAll(0, _magicHeader);
+    result.setAll(_magicHeader.length, salt);
+    result.setAll(_magicHeader.length + _saltLength, iv.bytes);
+    result.setAll(_magicHeader.length + _saltLength + 16, encrypted.bytes);
     return result;
   }
 
   String _decrypt(Uint8List data, String password) {
-    if (data.length < 16) throw Exception('Données invalides');
+    // Détecter le format par le magic header
+    if (data.length >= _magicHeader.length + _saltLength + 16 &&
+        data[0] == _magicHeader[0] &&
+        data[1] == _magicHeader[1] &&
+        data[2] == _magicHeader[2] &&
+        data[3] == _magicHeader[3]) {
+      // Format v2 : PBKDF2
+      final salt = Uint8List.fromList(
+        data.sublist(_magicHeader.length, _magicHeader.length + _saltLength),
+      );
+      final ivStart = _magicHeader.length + _saltLength;
+      final iv = IV(Uint8List.fromList(data.sublist(ivStart, ivStart + 16)));
+      final encryptedBytes = data.sublist(ivStart + 16);
 
+      final keyBytes = _deriveKey(password, salt);
+      final key = Key(keyBytes);
+      final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
+      return encrypter.decrypt(Encrypted(encryptedBytes), iv: iv);
+    }
+
+    // Format v1 (legacy) : [IV 16B] + [données chiffrées]
+    if (data.length < 16) throw Exception('Données invalides');
     final iv = IV(Uint8List.fromList(data.sublist(0, 16)));
     final encryptedBytes = data.sublist(16);
-
-    final key = Key.fromUtf8(password.padRight(32, '0').substring(0, 32));
+    final key = _legacyKey(password);
     final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
     return encrypter.decrypt(Encrypted(encryptedBytes), iv: iv);
   }
