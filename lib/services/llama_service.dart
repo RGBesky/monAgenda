@@ -13,8 +13,8 @@ import 'logger_service.dart';
 /// - Wrapper FFI : dart:ffi pour llama.cpp (.so Linux / .so Android)
 /// - Isolate obligatoire (via LlamaParent)
 /// - Grammaire GBNF obligatoire
-/// - Modèle : H2O Danube 3 (500M, q4_k_m, ~400Mo)
-/// - SLA : < 3s mid-range, timeout 8s
+/// - Modèle : Qwen2.5-Instruct (0.5B ou 1.5B, q4_k_m, GGUF)
+/// - SLA : < 3s mid-range, timeout 15s
 class LlamaService {
   LlamaService._();
   static final LlamaService instance = LlamaService._();
@@ -26,27 +26,38 @@ class LlamaService {
   bool get isModelLoaded => _isModelLoaded;
 
   /// Grammaire GBNF contraignant la sortie IA à un JSON strict.
+  /// Seuls les champs SÉMANTIQUES sont demandés au LLM.
+  /// Les champs temporels (date, heures, durée) sont gérés 100% par regex Dart.
   static const String gbnfGrammar = r'''
-root   ::= "{" ws "\"title\"" ws ":" ws string "," ws "\"description\"" ws ":" ws (string | "null") "," ws "\"date\"" ws ":" ws string "," ws "\"startTime\"" ws ":" ws (string | "null") "," ws "\"endTime\"" ws ":" ws (string | "null") "," ws "\"location\"" ws ":" ws (string | "null") "," ws "\"category\"" ws ":" ws (string | "null") "," ws "\"participants\"" ws ":" ws (arr | "null") ws "}"
+root   ::= "{" ws "\"title\"" ws ":" ws string "," ws "\"description\"" ws ":" ws (string | "null") "," ws "\"location\"" ws ":" ws (string | "null") "," ws "\"category\"" ws ":" ws (string | "null") "," ws "\"participants\"" ws ":" ws (arr | "null") ws "}"
 arr    ::= "[" ws (string ("," ws string)*)? ws "]"
 string ::= "\"" [^"\\]* "\""
 ws     ::= [ \t\n]*
 ''';
 
   /// System prompt pour l'extraction d'événements.
-  /// Danube 3 chat template : <|prompt|>instructions+user</s><|answer|>
-  /// PAS de rôle système séparé — tout est dans <|prompt|>.
-  /// Prompt optimisé pour Danube 3 500M : exemples concrets, pas de template abstrait.
+  ///
+  /// Qwen2.5-Instruct — Multilingue (29 langues dont FR), optimisé JSON.
+  /// Template ChatML : <|im_start|>system\n...<|im_end|>\n<|im_start|>user\n...<|im_end|>\n<|im_start|>assistant\n
+  ///
+  /// Stratégie : On lui demande UNIQUEMENT l'extraction sémantique (titre,
+  /// lieu, catégorie, participants). Tout le temporel (date, heure, durée,
+  /// moment de la journée) est calculé par regex Dart après.
   static const String systemPrompt =
-      'Crée un événement agenda à partir du texte. Réponds UNIQUEMENT en JSON.\n'
-      'title: INVENTE un titre court et clair (2-4 mots), NE COPIE PAS le texte brut.\n'
-      'description: résumé des détails, rappels, tâches associées ou null.\n'
-      'date: YYYY-MM-DD. matin=09:00-12:00. après-midi=14:00-17:00. soir=19:00-21:00.\n'
-      'location: lieu physique ou null. category: Travail/Perso/Sport/Santé/Famille/Social/Formation/Administratif ou null.\n'
-      'Ex1: "Aller à la messe demain matin et penser à gérer la pancarte du caddie fraternel" →\n'
-      '{"title":"Messe","description":"Gérer la pancarte du caddie fraternel","date":"2026-03-01","startTime":"09:00","endTime":"12:00","location":null,"category":"Perso","participants":null}\n'
+      'Extract calendar event from French text. Reply ONLY in JSON.\n'
+      'title: short title (2-5 words). Remove temporal words (demain, matin, soir, 30min, pendant...).\n'
+      'description: extra details or null.\n'
+      'location: physical place ONLY. NO temporal words (demain, matin, soir). null if no place.\n'
+      'category: one of Travail/Perso/Sport/Santé/Famille/Social/Formation/Administratif or null.\n'
+      'participants: list of first names or null.\n'
+      'Ex1: "Aller courir au parc du 26eme centenaire demain matin pendant 40min" →\n'
+      '{"title":"Courir au parc","description":null,"location":"Parc du 26eme centenaire","category":"Sport","participants":null}\n'
       'Ex2: "Dîner avec Marc vendredi 20h au Resto" →\n'
-      '{"title":"Dîner avec Marc","description":null,"date":"2026-03-06","startTime":"20:00","endTime":"22:00","location":"Resto","category":"Social","participants":["Marc"]}';
+      '{"title":"Dîner avec Marc","description":null,"location":"Resto","category":"Social","participants":["Marc"]}\n'
+      'Ex3: "Aller à la messe demain matin et penser à gérer la pancarte du caddie" →\n'
+      '{"title":"Messe","description":"Gérer la pancarte du caddie","location":null,"category":"Perso","participants":null}\n'
+      'Ex4: "RDV dentiste jeudi 14h30 chez Dr Dupont" →\n'
+      '{"title":"RDV dentiste","description":null,"location":"Dr Dupont","category":"Santé","participants":null}';
 
   /// Initialise le chemin de la bibliothèque native llama.cpp.
   /// Appelé une fois au démarrage de l'app.
@@ -76,11 +87,12 @@ ws     ::= [ \t\n]*
     }
   }
 
-  /// Construit le LlamaLoad command avec les params optimisés Danube 3.
+  /// Construit le LlamaLoad command avec les params optimisés Qwen2.5.
   static LlamaLoad _buildLoadCommand(String modelPath) {
     final modelParams = ModelParams()
       ..nGpuLayers = 0 // CPU only
-      ..mainGpu = -1; // Pas de sélection GPU (évite "invalid value for main_gpu: 0")
+      ..mainGpu =
+          -1; // Pas de sélection GPU (évite "invalid value for main_gpu: 0")
     final contextParams = ContextParams()
       ..nCtx = 768 // Contexte suffisant pour prompt amélioré + extraction
       ..nBatch = 256;
@@ -147,15 +159,13 @@ ws     ::= [ \t\n]*
     final now = DateTime.now();
     final dateContext =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    // Danube 3 chat template : <|prompt|>instructions+contenu</s><|answer|>
-    // Pas de rôle system séparé — tout va dans <|prompt|>
-    final habitsLine =
-        (habitsContext != null && habitsContext.isNotEmpty)
-            ? '\n$habitsContext'
-            : '';
-    final prompt = '<|prompt|>$systemPrompt\n'
-        'Date du jour: $dateContext$habitsLine\n'
-        'Texte: $userText</s><|answer|>';
+    // Qwen2.5 ChatML template : <|im_start|>system\n...<|im_end|>\n<|im_start|>user\n...<|im_end|>\n<|im_start|>assistant\n
+    final habitsLine = (habitsContext != null && habitsContext.isNotEmpty)
+        ? '\n$habitsContext'
+        : '';
+    final prompt = '<|im_start|>system\n$systemPrompt<|im_end|>\n'
+        '<|im_start|>user\nDate du jour: $dateContext$habitsLine\nTexte: $userText<|im_end|>\n'
+        '<|im_start|>assistant\n';
 
     try {
       // Collecter la sortie via le stream de tokens

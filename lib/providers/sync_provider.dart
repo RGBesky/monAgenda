@@ -66,13 +66,18 @@ final notionServiceProvider = Provider<NotionService>((ref) {
 /// Utilise ref.watch pour se recréer quand les services changent
 /// (ex: rechargement credentials depuis le stockage sécurisé).
 final syncEngineProvider = Provider<SyncEngine>((ref) {
-  return SyncEngine(
+  final engine = SyncEngine(
     db: DatabaseHelper.instance,
     infomaniak: ref.watch(infomaniakServiceProvider),
     notion: ref.watch(notionServiceProvider),
     ics: IcsService(),
     notifications: NotificationService.instance,
   );
+  // V3 : Connecter le callback d'erreur serveur au provider
+  engine.onServerError = (msg) {
+    ref.read(serverSyncErrorProvider.notifier).state = msg;
+  };
+  return engine;
 });
 
 /// V2 : Provider du SyncQueueWorker.
@@ -145,7 +150,10 @@ class SyncNotifier extends Notifier<SyncState> {
   Timer? _autoClearTimer;
 
   @override
-  SyncState build() => const SyncState();
+  SyncState build() {
+    ref.onDispose(() => _autoClearTimer?.cancel());
+    return const SyncState();
+  }
 
   /// Efface automatiquement le message d'erreur après [seconds] secondes.
   void _scheduleAutoClear({int seconds = 5}) {
@@ -385,7 +393,7 @@ final autoSyncOnConnectivityProvider = Provider<void>((ref) {
     }
 
     // Debounce au démarrage : attendre 3s pour éviter les cascades
-    Future.delayed(const Duration(seconds: 3), () {
+    final debounceTimer = Timer(const Duration(seconds: 3), () {
       final currentState = ref.read(syncNotifierProvider);
       if (currentState.isSyncing) return;
       AppLogger.instance
@@ -396,6 +404,7 @@ final autoSyncOnConnectivityProvider = Provider<void>((ref) {
         AppLogger.instance.error('AutoSync', 'Échec auto-sync: $e');
       });
     });
+    ref.onDispose(() => debounceTimer.cancel());
   }
 });
 

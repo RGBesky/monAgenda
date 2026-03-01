@@ -103,8 +103,8 @@ class NotionProjectTasksNotifier extends AsyncNotifier<List<NotionTaskModel>> {
   }
 
   /// Assigne une date à une tâche (Optimistic UI).
-  Future<void> assignDate(String taskId, String databaseId,
-      DateTime date) async {
+  Future<void> assignDate(
+      String taskId, String databaseId, DateTime date) async {
     // Optimistic : retirer de la liste
     final prev = state.valueOrNull ?? [];
     final task = prev.firstWhere((t) => t.id == taskId);
@@ -177,8 +177,7 @@ class _ProjectViewScreenState extends ConsumerState<ProjectViewScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                ref.invalidate(notionProjectTasksProvider),
+            onPressed: () => ref.invalidate(notionProjectTasksProvider),
             tooltip: 'Rafraîchir les tâches',
           ),
         ],
@@ -235,7 +234,10 @@ class _ProjectViewScreenState extends ConsumerState<ProjectViewScreen> {
           decoration: isDragging
               ? BoxDecoration(
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.3),
                     width: 2,
                   ),
                 )

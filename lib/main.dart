@@ -11,8 +11,10 @@ import 'services/notification_service.dart';
 import 'services/background_worker_service.dart';
 import 'services/logger_service.dart';
 import 'services/llama_service.dart';
+import 'services/model_download_service.dart';
 import 'core/database/database_helper.dart';
 import 'app.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Observer global des providers Riverpod.
 /// Capture les erreurs de build/listen pour les envoyer dans AppLogger.
@@ -76,6 +78,15 @@ void main() async {
 
   // ── V3 : Initialiser le chemin de la bibliothèque llama.cpp ──
   LlamaService.initLibraryPath();
+
+  // ── V3 : Charger le choix de modèle IA depuis les préférences ──
+  final prefs = await SharedPreferences.getInstance();
+  final modelChoice = prefs.getString('magic_model_choice') ?? 'qwen05b';
+  ModelDownloadService.instance.selectedModel =
+      MagicModelChoiceExt.fromString(modelChoice);
+
+  // Supprimer l'ancien modèle legacy s'il existe
+  ModelDownloadService.instance.cleanupLegacyModel();
 
   // ── Nettoyage automatique des logs au démarrage ──
   // Supprime les logs > 7 jours + trim à 1000 max

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/magic_habits_repository.dart';
@@ -32,9 +33,10 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
   /// Télécharge le modèle depuis HuggingFace. Retourne true si succès.
   Future<bool> downloadModel() async {
     try {
-      AppLogger.instance
-          .info('MagicEntry', 'Downloading Danube 3 from HuggingFace...');
-      await ModelDownloadService.instance.ensureModelReady(kModelDownloadUrl);
+      final choice = ModelDownloadService.instance.selectedModel;
+      AppLogger.instance.info(
+          'MagicEntry', 'Downloading ${choice.label} from HuggingFace...');
+      await ModelDownloadService.instance.ensureModelReady(choice.downloadUrl);
       ref.read(modelNeedsDownloadProvider.notifier).state = false;
       // Mettre à jour le statut global
       ref.invalidate(modelDownloadStatusProvider);
@@ -73,8 +75,7 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       // ── Étape 0 : Charger les habitudes utilisateur ──
       final habits = await habitsRepo.lookupForText(input);
       if (habits.isNotEmpty) {
-        AppLogger.instance
-            .info('MagicEntry', 'Habits found: $habits');
+        AppLogger.instance.info('MagicEntry', 'Habits found: $habits');
       }
 
       // ── Étape 1 : Essayer de charger le modèle si pas encore fait ──
@@ -91,20 +92,20 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
           } else {
             // Charger le modèle existant
             AppLogger.instance
-                .info('MagicEntry', 'Lazy-loading Danube 3 model...');
+                .info('MagicEntry', 'Lazy-loading Qwen2.5 model...');
             await llamaService.loadModel(modelPath);
             ref.read(llamaReadyProvider.notifier).state = true;
             AppLogger.instance
-                .info('MagicEntry', 'Danube 3 model loaded successfully');
+                .info('MagicEntry', 'Qwen2.5 model loaded successfully');
           }
         } catch (e) {
           AppLogger.instance.error('MagicEntry', 'Model load failed: $e', e);
         }
       }
 
-      // ── Étape 2 : Inférence LLM (Danube 3) — source unique quand modèle dispo ──
+      // ── Étape 2 : Inférence LLM (Qwen2.5) — source unique quand modèle dispo ──
       if (llamaService.isModelLoaded) {
-        AppLogger.instance.info('MagicEntry', 'Calling Danube 3 for: "$input"');
+        AppLogger.instance.info('MagicEntry', 'Calling Qwen2.5 for: "$input"');
 
         // Construire le contexte des habitudes pour le LLM
         String? habitsContext;
@@ -117,13 +118,12 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
 
         final iaResult =
             await llamaService.infer(input, habitsContext: habitsContext);
-        AppLogger.instance.info('MagicEntry', 'Danube 3 raw result: $iaResult');
+        AppLogger.instance.info('MagicEntry', 'Qwen2.5 raw result: $iaResult');
         if (iaResult != null) {
           // Appliquer les habitudes comme fallback sur les champs null
           final enriched = _applyHabitsToJson(iaResult, habits);
-          final event =
-              MagicEntryService.buildFromIaJson(enriched, input,
-                  defaultSource: defaultSource);
+          final event = MagicEntryService.buildFromIaJson(enriched, input,
+              defaultSource: defaultSource);
           if (event != null) {
             stopwatch.stop();
             AppLogger.instance.info('MagicEntry',
@@ -136,24 +136,24 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
         AppLogger.instance.info('MagicEntry',
             'LLM returned unusable result, falling back to regex');
       } else {
-        AppLogger.instance.info('MagicEntry',
-            'Model not loaded — using regex only');
+        AppLogger.instance
+            .info('MagicEntry', 'Model not loaded — using regex only');
       }
 
       // ── Étape 3 : Fallback regex (uniquement si LLM indisponible ou échoué) ──
-      final partial =
-          MagicEntryService.parsePartialRegex(input, habits: habits,
-              defaultSource: defaultSource);
+      final partial = MagicEntryService.parsePartialRegex(input,
+          habits: habits, defaultSource: defaultSource);
       stopwatch.stop();
       AppLogger.instance.info('MagicEntry',
           'Regex fallback in ${stopwatch.elapsedMilliseconds}ms — title="${partial?.title}"');
       state = AsyncData(partial);
       return partial;
-    } catch (e) {
+    } catch (e, stack) {
       stopwatch.stop();
+      debugPrint('[MagicEntry] CRASH: $e\n$stack');
       AppLogger.instance.error('MagicEntry',
           'Parse failed in ${stopwatch.elapsedMilliseconds}ms', e);
-      state = AsyncError(e, StackTrace.current);
+      state = AsyncError(e, stack);
       return null;
     }
   }
@@ -227,11 +227,38 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
   /// Extrait les mots-clés significatifs d'un texte (>= 4 chars, pas stop words).
   static List<String> _extractKeywords(String text) {
     const stopWords = {
-      'aller', 'faire', 'voir', 'avec', 'pour', 'dans', 'chez',
-      'mais', 'donc', 'puis', 'aussi', 'tout', 'tous', 'cette',
-      'demain', 'matin', 'soir', 'aujourd', 'après', 'avant',
-      'faut', 'penser', 'comme', 'être', 'avoir', 'très',
-      'bien', 'plus', 'encore', 'déjà', 'toujours', 'jamais',
+      'aller',
+      'faire',
+      'voir',
+      'avec',
+      'pour',
+      'dans',
+      'chez',
+      'mais',
+      'donc',
+      'puis',
+      'aussi',
+      'tout',
+      'tous',
+      'cette',
+      'demain',
+      'matin',
+      'soir',
+      'aujourd',
+      'après',
+      'avant',
+      'faut',
+      'penser',
+      'comme',
+      'être',
+      'avoir',
+      'très',
+      'bien',
+      'plus',
+      'encore',
+      'déjà',
+      'toujours',
+      'jamais',
     };
     return text
         .replaceAll(RegExp(r'[^a-zàâäéèêëïîôùûç\s-]'), ' ')
@@ -324,11 +351,11 @@ class MagicEntryService {
     caseSensitive: false,
   );
 
-  /// Durée : "pendant 2h", "pendant 30 minutes" (réservé pour usage futur)
-  // static final _durationPattern = RegExp(
-  //   r'(?:pendant|durée\s*:?\s*)\s*(\d+)\s*(?:h(?:eures?)?|min(?:utes?)?)',
-  //   caseSensitive: false,
-  // );
+  /// Durée : "pendant 2h", "pendant 30 minutes", "pendant 1h30"
+  static final _durationPattern = RegExp(
+    r'(?:pendant|durée\s*:?\s*)\s*(\d+)\s*(?:h(?:eures?)?(?:\s*(\d+)\s*(?:min(?:utes?)?)?)?|min(?:utes?)?)',
+    caseSensitive: false,
+  );
 
   // ──────────────────────────────────────────────────────────────
   // Parse methods
@@ -364,6 +391,11 @@ class MagicEntryService {
   }
 
   /// Construit un EventModel depuis le JSON retourné par l'IA.
+  ///
+  /// **Approche hybride** :
+  /// - LLM → titre, description, lieu, catégorie, participants (sémantique)
+  /// - Regex Dart → date, heures, moments, durée (déterministe, fiable)
+  /// Le LLM 500M hallucine trop sur les calculs temporels.
   static EventModel? buildFromIaJson(
       Map<String, dynamic> json, String originalInput,
       {String defaultSource = 'infomaniak'}) {
@@ -371,58 +403,21 @@ class MagicEntryService {
       final rawTitle = json['title'] as String?;
       if (rawTitle == null || rawTitle.isEmpty) return null;
 
-      // Extraire le lieu tôt pour le fallback titre intelligent
+      // ── Champs sémantiques (LLM) ──
       final locationRaw = json['location'] as String?;
-      final location =
+      String? location =
           (locationRaw != null && locationRaw != 'null') ? locationRaw : null;
+      // Nettoyer les mots temporels qui fuient dans le lieu
+      if (location != null) {
+        location = _cleanTemporalFromLocation(location);
+        if (location.isEmpty) location = null;
+      }
       final title = _smartTitle(rawTitle, location: location);
       if (title.isEmpty) return null;
 
-      // Date — priorité aux mots relatifs détectés dans le TEXTE ORIGINAL
-      // Le LLM 500M échoue souvent à calculer "demain" → ISO correct,
-      // donc on résout les dates relatives côté Dart.
-      DateTime? startDate;
-      final dateFromInput = _extractRelativeDateFromInput(originalInput);
-      if (dateFromInput != null) {
-        // Le texte utilisateur contient "demain", "après-demain", un jour, etc.
-        // → on fait confiance au calcul Dart, pas au LLM
-        startDate = dateFromInput;
-      } else {
-        final dateStr = json['date'] as String?;
-        if (dateStr != null && dateStr != 'null') {
-          startDate = DateTime.tryParse(dateStr);
-          if (startDate == null) {
-            startDate = _tryResolveRelativeDate(dateStr);
-          }
-        }
-      }
-      startDate ??= DateTime.now();
+      final category = json['category'] as String?;
+      final description = json['description'] as String?;
 
-      // Heures
-      int? startHour;
-      int? startMinute;
-      int? endHour;
-      int? endMinute;
-
-      final startTimeStr = json['startTime'] as String?;
-      if (startTimeStr != null && startTimeStr != 'null') {
-        final parts = startTimeStr.split(':');
-        if (parts.length >= 2) {
-          startHour = int.tryParse(parts[0]);
-          startMinute = int.tryParse(parts[1]);
-        }
-      }
-
-      final endTimeStr = json['endTime'] as String?;
-      if (endTimeStr != null && endTimeStr != 'null') {
-        final parts = endTimeStr.split(':');
-        if (parts.length >= 2) {
-          endHour = int.tryParse(parts[0]);
-          endMinute = int.tryParse(parts[1]);
-        }
-      }
-
-      // Participants
       final participants = <String>[];
       final rawParticipants = json['participants'];
       if (rawParticipants is List) {
@@ -431,18 +426,19 @@ class MagicEntryService {
         }
       }
 
-      final category = json['category'] as String?;
-      final description = json['description'] as String?;
+      // ── Champs temporels (regex Dart — JAMAIS le LLM) ──
+      // On extrait date, moment, heures, durée directement du texte original
+      final regexParsed = _extractTemporalFromInput(originalInput);
 
       return _buildEventModel({
         'title': title,
         'description':
             (description != null && description != 'null') ? description : null,
-        'startDate': startDate,
-        'startHour': startHour,
-        'startMinute': startMinute,
-        'endHour': endHour,
-        'endMinute': endMinute,
+        'startDate': regexParsed['startDate'],
+        'startHour': regexParsed['startHour'],
+        'startMinute': regexParsed['startMinute'],
+        'endHour': regexParsed['endHour'],
+        'endMinute': regexParsed['endMinute'],
         'location': location,
         'category': (category != null && category != 'null') ? category : null,
         'participants': participants,
@@ -451,6 +447,179 @@ class MagicEntryService {
       AppLogger.instance.error('MagicEntry', 'buildFromIaJson failed', e);
       return null;
     }
+  }
+
+  /// Extrait TOUS les champs temporels d'un texte via regex Dart.
+  /// Utilisé par le path hybride (LLM titre/lieu + regex dates/heures).
+  static Map<String, dynamic> _extractTemporalFromInput(String input) {
+    String remaining = input;
+    DateTime? startDate;
+    int? startHour;
+    int? startMinute;
+    int? endHour;
+    int? endMinute;
+
+    // ── Durée (pendant 40min, pendant 2h...) ──
+    int? durationMinutes;
+    final durationMatch = _durationPattern.firstMatch(remaining);
+    if (durationMatch != null) {
+      final mainVal = int.tryParse(durationMatch.group(1)!) ?? 0;
+      final fullMatch = durationMatch.group(0)!.toLowerCase();
+      if (fullMatch.contains('h')) {
+        durationMinutes = mainVal * 60;
+        final extraMin = durationMatch.group(2);
+        if (extraMin != null) {
+          durationMinutes =
+              (durationMinutes ?? 0) + (int.tryParse(extraMin) ?? 0);
+        }
+      } else {
+        durationMinutes = mainVal;
+      }
+      remaining = remaining.replaceFirst(durationMatch.group(0)!, '').trim();
+    }
+
+    // ── Plage horaire (de 14h à 16h) ──
+    final rangeMatch = _timeRangePattern.firstMatch(remaining);
+    if (rangeMatch != null) {
+      startHour = int.tryParse(rangeMatch.group(1)!);
+      startMinute = int.tryParse(rangeMatch.group(2) ?? '0') ?? 0;
+      endHour = int.tryParse(rangeMatch.group(3)!);
+      endMinute = int.tryParse(rangeMatch.group(4) ?? '0') ?? 0;
+      remaining = remaining.replaceFirst(rangeMatch.group(0)!, '').trim();
+    }
+
+    // ── Heures isolées (20h00, 14:30, 9h) ──
+    if (startHour == null) {
+      final timeMatches = _timePattern.allMatches(remaining).toList();
+      if (timeMatches.isNotEmpty) {
+        startHour = int.parse(timeMatches[0].group(1)!);
+        startMinute = int.parse(timeMatches[0].group(2)!);
+        if (timeMatches.length >= 2) {
+          endHour = int.parse(timeMatches[1].group(1)!);
+          endMinute = int.parse(timeMatches[1].group(2)!);
+        }
+      }
+      if (startHour == null) {
+        final simpleMatch = _simpleTimePattern.firstMatch(remaining);
+        if (simpleMatch != null) {
+          startHour = int.parse(simpleMatch.group(1)!);
+          startMinute = 0;
+        }
+      }
+      remaining = remaining
+          .replaceAll(_timePattern, '')
+          .replaceAll(_simpleTimePattern, '')
+          .trim();
+    }
+
+    // ── "prochain" (lundi prochain) ──
+    final prochainMatch = _prochainPattern.firstMatch(remaining);
+    if (prochainMatch != null) {
+      startDate =
+          _resolveRelativeDate(prochainMatch.group(1)!, forceNext: true);
+      remaining = remaining.replaceFirst(prochainMatch.group(0)!, '').trim();
+    }
+
+    // ── Date relative (demain, lundi...) ──
+    if (startDate == null) {
+      final dateRelMatch = _dateRelativePattern.firstMatch(remaining);
+      if (dateRelMatch != null) {
+        startDate = _resolveRelativeDate(dateRelMatch.group(1)!);
+        remaining = remaining.replaceFirst(dateRelMatch.group(0)!, '').trim();
+      }
+    }
+
+    // ── Moments de la journée (matin, soir...) ──
+    final momentMatch = _momentPattern.firstMatch(remaining);
+    if (momentMatch != null) {
+      final moment = momentMatch.group(0)!.toLowerCase();
+      if (startDate == null) {
+        final now = DateTime.now();
+        startDate = DateTime(now.year, now.month, now.day);
+      }
+      if (startHour == null) {
+        if (moment.contains('matin')) {
+          startHour = 9;
+          startMinute = 0;
+          endHour ??= 12;
+          endMinute ??= 0;
+        } else if (moment.contains('après') || moment.contains('après-midi')) {
+          startHour = 14;
+          startMinute = 0;
+          endHour ??= 17;
+          endMinute ??= 0;
+        } else if (moment.contains('soir')) {
+          startHour = 19;
+          startMinute = 0;
+          endHour ??= 21;
+          endMinute ??= 0;
+        } else if (moment.contains('nuit')) {
+          startHour = 22;
+          startMinute = 0;
+        }
+      }
+    }
+
+    // ── Date absolue (15/03) ──
+    if (startDate == null) {
+      final dateAbsMatch = _dateAbsolutePattern.firstMatch(remaining);
+      if (dateAbsMatch != null) {
+        final day = int.parse(dateAbsMatch.group(1)!);
+        final month = int.parse(dateAbsMatch.group(2)!);
+        final yearStr = dateAbsMatch.group(3);
+        final year = yearStr != null
+            ? (yearStr.length == 2
+                ? 2000 + int.parse(yearStr)
+                : int.parse(yearStr))
+            : DateTime.now().year;
+        startDate = DateTime(year, month, day);
+      }
+    }
+
+    startDate ??= DateTime.now();
+
+    // ── Appliquer la durée ──
+    if (durationMinutes != null && startHour != null && endHour == null) {
+      final startTotal = startHour * 60 + (startMinute ?? 0);
+      final endTotal = startTotal + durationMinutes;
+      endHour = (endTotal ~/ 60).clamp(0, 23);
+      endMinute = endTotal % 60;
+    }
+
+    return {
+      'startDate': startDate,
+      'startHour': startHour,
+      'startMinute': startMinute,
+      'endHour': endHour,
+      'endMinute': endMinute,
+    };
+  }
+
+  /// Supprime les mots temporels qui ont fui dans le lieu (ex: "demainmatin").
+  static String _cleanTemporalFromLocation(String loc) {
+    var cleaned = loc;
+    // Mots temporels collés ou séparés
+    cleaned = cleaned.replaceAll(
+      RegExp(
+        r'\b(?:demain\s*matin|demain\s*soir|demain\s*après[- ]?midi|'
+        r'demain|après[- ]?demain|aujourd.?hui|'
+        r'ce\s+matin|ce\s+soir|cet\s+après[- ]?midi|cette\s+nuit|'
+        r'matin|soir|après[- ]?midi|nuit|midi|matinée|soirée|'
+        r'lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|'
+        r'prochain|prochaine|'
+        r'pendant\s+\d+\s*(?:h(?:eures?)?|min(?:utes?)?)?|'
+        r'\d+\s*(?:h\d*|min(?:utes?)?))\b',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    // Nettoyer espaces multiples
+    cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+    // Capitaliser
+    if (cleaned.isNotEmpty) {
+      cleaned = cleaned[0].toUpperCase() + cleaned.substring(1);
+    }
+    return cleaned;
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -501,6 +670,27 @@ class MagicEntryService {
       startDate =
           _resolveRelativeDate(prochainMatch.group(1)!, forceNext: true);
       remaining = remaining.replaceFirst(prochainMatch.group(0)!, '').trim();
+    }
+
+    // ── 4b. Durée (pendant 30min, pendant 2h, pendant 1h30) ──
+    int? durationMinutes;
+    final durationMatch = _durationPattern.firstMatch(remaining);
+    if (durationMatch != null) {
+      final mainVal = int.tryParse(durationMatch.group(1)!) ?? 0;
+      final fullMatch = durationMatch.group(0)!.toLowerCase();
+      if (fullMatch.contains('h')) {
+        // "pendant 2h" ou "pendant 1h30"
+        durationMinutes = mainVal * 60;
+        final extraMin = durationMatch.group(2);
+        if (extraMin != null) {
+          durationMinutes =
+              (durationMinutes ?? 0) + (int.tryParse(extraMin) ?? 0);
+        }
+      } else {
+        // "pendant 30min"
+        durationMinutes = mainVal;
+      }
+      remaining = remaining.replaceFirst(durationMatch.group(0)!, '').trim();
     }
 
     // ── 5. Plages horaires (de 14h à 16h, 14h-16h) ──
@@ -647,6 +837,14 @@ class MagicEntryService {
     // ── 12. Titre intelligent (nettoyage + fallback lieu) ──
     remaining = _smartTitle(remaining, location: location);
 
+    // ── 12b. Appliquer la durée si on a un startHour mais pas de endHour ──
+    if (durationMinutes != null && startHour != null && endHour == null) {
+      final startTotal = startHour * 60 + (startMinute ?? 0);
+      final endTotal = startTotal + durationMinutes;
+      endHour = (endTotal ~/ 60).clamp(0, 23);
+      endMinute = endTotal % 60;
+    }
+
     return {
       'title': remaining.isNotEmpty ? remaining : null,
       'description': description,
@@ -658,6 +856,7 @@ class MagicEntryService {
       'endHour': endHour,
       'endMinute': endMinute,
       'location': location,
+      'durationMinutes': durationMinutes,
     };
   }
 
@@ -765,7 +964,8 @@ class MagicEntryService {
 
     // Si titre trop long (>5 mots), c'est probablement du texte brut copié
     // → ne garder que les 3 premiers mots significatifs
-    final words = title.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final words =
+        title.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     if (words.length > 5) {
       title = words.take(3).join(' ');
     }
@@ -787,55 +987,6 @@ class MagicEntryService {
     }
 
     return title;
-  }
-
-  /// Extrait et résout une date relative directement depuis le texte utilisateur.
-  /// Prioritaire sur la date LLM car le modèle 500M échoue souvent en calcul.
-  static DateTime? _extractRelativeDateFromInput(String input) {
-    final lc = input.toLowerCase();
-
-    // Ordre important : "après-demain" avant "demain"
-    if (lc.contains('après-demain') || lc.contains('après demain') || lc.contains('apres-demain') || lc.contains('apres demain')) {
-      return _resolveRelativeDate('après-demain');
-    }
-    if (lc.contains('demain')) {
-      return _resolveRelativeDate('demain');
-    }
-    if (lc.contains("aujourd'hui") || lc.contains('aujourdhui')) {
-      return _resolveRelativeDate("aujourd'hui");
-    }
-
-    // Jours de la semaine : "lundi prochain", "mardi", etc.
-    final dayWithProchain = RegExp(
-        r'(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+prochain');
-    final dayMatch = dayWithProchain.firstMatch(lc);
-    if (dayMatch != null) {
-      return _resolveRelativeDate(dayMatch.group(1)!, forceNext: true);
-    }
-
-    // Jours simples
-    final daySimple = RegExp(
-        r'\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b');
-    final simpleDayMatch = daySimple.firstMatch(lc);
-    if (simpleDayMatch != null) {
-      return _resolveRelativeDate(simpleDayMatch.group(1)!);
-    }
-
-    return null;
-  }
-
-  /// Tente de résoudre une date relative retournée par le LLM.
-  /// Retourne null si le texte n'est pas reconnu comme date relative.
-  static DateTime? _tryResolveRelativeDate(String dateStr) {
-    final lc = dateStr.toLowerCase().trim();
-    // Mots relatifs connus
-    final knownRelative = RegExp(
-        r"^(demain|après[- ]?demain|aujourd'?hui|"
-        r"lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$");
-    if (knownRelative.hasMatch(lc)) {
-      return _resolveRelativeDate(lc);
-    }
-    return null;
   }
 
   static DateTime _resolveRelativeDate(String word, {bool forceNext = false}) {

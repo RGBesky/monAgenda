@@ -16,8 +16,10 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/magic_feedback_repository.dart';
 import '../../../services/model_download_service.dart';
 import '../../../services/magic_entry_service.dart';
+import '../../../services/llama_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'connections_settings_screen.dart';
 import 'tags_settings_screen.dart';
@@ -370,6 +372,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   List<Widget> _buildAiContent(BuildContext context) {
     return [
+      // ── Choix du modèle IA ──
+      _buildSection(
+        context,
+        title: 'Choix du modèle',
+        hugeIcon: HugeIcons.strokeRoundedAiBrain01,
+        children: [
+          Consumer(
+            builder: (context, ref, _) {
+              final selected = ModelDownloadService.instance.selectedModel;
+              return Column(
+                children: MagicModelChoice.values.map((choice) {
+                  final isSelected = choice == selected;
+                  return RadioListTile<MagicModelChoice>(
+                    value: choice,
+                    groupValue: selected,
+                    title: Text(choice.label),
+                    subtitle: Text(choice.subtitle),
+                    secondary: isSelected
+                        ? const HugeIcon(
+                            icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                            color: Colors.green,
+                            size: 22)
+                        : null,
+                    onChanged: (val) async {
+                      if (val == null) return;
+                      ModelDownloadService.instance.selectedModel = val;
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('magic_model_choice', val.name);
+                      // Force le rechargement du modèle au prochain usage
+                      await LlamaService.instance.dispose();
+                      ref.invalidate(modelDownloadStatusProvider);
+                      (context as Element).markNeedsBuild();
+                    },
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+
       // ── Statut du modèle IA ──
       _buildSection(
         context,
@@ -472,6 +515,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       future: ModelDownloadService.instance.modelSizeMb,
       builder: (context, snapshot) {
         final sizeMb = snapshot.data;
+        final choice = ModelDownloadService.instance.selectedModel;
         return Column(
           children: [
             ListTile(
@@ -479,10 +523,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   icon: HugeIcons.strokeRoundedCheckmarkCircle01,
                   color: Colors.green,
                   size: 22),
-              title: const Text('H2O Danube 3 (500M)'),
+              title: Text(choice.label),
               subtitle: Text(
                 'Installé${sizeMb != null ? ' · ${sizeMb.toStringAsFixed(0)} Mo' : ''}\n'
-                'Inférence 100% locale · CPU',
+                'Inférence 100% locale · CPU · Multilingue (FR)',
               ),
             ),
             ListTile(
@@ -507,13 +551,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          const ListTile(
-            leading: SizedBox(
+          ListTile(
+            leading: const SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(strokeWidth: 2)),
-            title: Text('Téléchargement en cours…'),
-            subtitle: Text('H2O Danube 3 · ~300 Mo'),
+            title: const Text('Téléchargement en cours…'),
+            subtitle: Text(
+                '${ModelDownloadService.instance.selectedModel.label} · ~${ModelDownloadService.instance.selectedModel.approxSizeMb} Mo'),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -540,14 +585,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildModelNotInstalled(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
-        const ListTile(
-          leading: HugeIcon(
+        ListTile(
+          leading: const HugeIcon(
               icon: HugeIcons.strokeRoundedDownload02,
               color: Color(0xFFFFBD98),
               size: 22),
-          title: Text('H2O Danube 3 (500M)'),
+          title: Text(ModelDownloadService.instance.selectedModel.label),
           subtitle: Text(
-            'Non installé · ~300 Mo\n'
+            'Non installé · ~${ModelDownloadService.instance.selectedModel.approxSizeMb} Mo\n'
             'Requis pour la saisie magique avancée.\n'
             'Sans modèle, seul le parsing basique (regex) est utilisé.',
           ),
@@ -604,11 +649,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         icon: const Icon(Icons.smart_toy_outlined,
             color: Color(0xFFFFBD98), size: 40),
         title: const Text('Télécharger le modèle IA ?'),
-        content: const Text(
-          'H2O Danube 3 (500M, quantifié Q4_K_M)\n'
-          '~300 Mo à télécharger depuis HuggingFace.\n\n'
-          'Le modèle permet la compréhension avancée du langage naturel '
-          'pour la saisie magique. Tout reste 100% local.',
+        content: Text(
+          '${ModelDownloadService.instance.selectedModel.label} (Q4_K_M)\n'
+          '~${ModelDownloadService.instance.selectedModel.approxSizeMb} Mo à télécharger depuis HuggingFace.\n\n'
+          'Modèle Qwen2.5 multilingue (français natif) optimisé pour '
+          'l\'extraction JSON structurée. Tout reste 100% local.',
         ),
         actions: [
           TextButton(
@@ -651,8 +696,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Supprimer le modèle IA ?'),
         content: const Text(
-          'Le modèle sera supprimé du disque (~300 Mo libérés).\n'
-          'Vous pourrez le re-télécharger à tout moment.',
+          'Tous les modèles IA seront supprimés du disque.\n'
+          'Vous pourrez les re-télécharger à tout moment.',
         ),
         actions: [
           TextButton(

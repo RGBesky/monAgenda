@@ -1,12 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../core/models/event_model.dart';
 import '../../core/database/magic_feedback_repository.dart';
 import '../../services/magic_entry_service.dart';
 import '../../services/model_download_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../events/screens/event_form_screen.dart';
 
 /// Écran de Saisie Magique — NLP local.
@@ -52,31 +54,87 @@ class _MagicEntryScreenState extends ConsumerState<MagicEntryScreen> {
   Widget _buildSpotlight(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black54,
-      body: GestureDetector(
-        onTap: () => Navigator.pop(context),
-        child: Center(
-          child: GestureDetector(
-            onTap: () {}, // Empêche la propagation
-            child: Container(
-              width: 560,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildInputField(context),
-                  if (_parsing) _buildShimmer(context),
-                ],
+      body: KeyboardListener(
+        focusNode: FocusNode(),
+        autofocus: true,
+        onKeyEvent: (event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            Navigator.pop(context);
+          }
+        },
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Center(
+            child: GestureDetector(
+              onTap: () {}, // Empêche la propagation
+              child: Container(
+                width: 560,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header : titre + bouton fermer
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.auto_awesome,
+                          size: 16,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.7),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Saisie Magique',
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.5),
+                                    letterSpacing: 0.5,
+                                  ),
+                        ),
+                        const Spacer(),
+                        Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(6),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => Navigator.pop(context),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.4),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInputField(context),
+                    if (_parsing) _buildShimmer(context),
+                  ],
+                ),
               ),
             ),
           ),
@@ -217,64 +275,87 @@ class _MagicEntryScreenState extends ConsumerState<MagicEntryScreen> {
   /// Propose le téléchargement du modèle IA après un premier parsing regex.
   void _showDownloadProposal(
       BuildContext context, String input, EventModel? regexResult) {
+    var chosen = ModelDownloadService.instance.selectedModel;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.smart_toy_outlined,
-            color: Color(0xFFFFBD98), size: 40),
-        title: const Text('Modèle IA non installé'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Le modèle Danube 3 permet une compréhension bien plus '
-              'précise de vos événements (dates relatives, lieux, participants…).',
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '~300 Mo à télécharger depuis HuggingFace.\n'
-              'Le traitement reste 100% local sur votre appareil.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.6),
-                  ),
-            ),
-            if (regexResult != null) ...[
-              const SizedBox(height: 12),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.smart_toy_outlined,
+              color: Color(0xFFFFBD98), size: 40),
+          title: const Text('Modèle IA non installé'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Un modèle IA local permet une compréhension bien plus '
+                'précise de vos événements (lieux, participants…).',
+              ),
+              const SizedBox(height: 16),
+              Text('Choisissez votre modèle :',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              ...MagicModelChoice.values
+                  .map((m) => RadioListTile<MagicModelChoice>(
+                        title: Text(m.label),
+                        subtitle: Text('${m.subtitle} · ~${m.approxSizeMb} Mo'),
+                        value: m,
+                        groupValue: chosen,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (v) {
+                          if (v != null) setDialogState(() => chosen = v);
+                        },
+                      )),
+              const SizedBox(height: 8),
               Text(
-                'En attendant, un résultat a été obtenu par analyse basique.',
+                'Téléchargement depuis HuggingFace.\n'
+                '100% local, aucune donnée envoyée.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.6),
                     ),
               ),
+              if (regexResult != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'En attendant, un résultat a été obtenu par analyse basique.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
+                ),
+              ],
             ],
+          ),
+          actions: [
+            if (regexResult != null)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _navigateToForm(regexResult, input);
+                },
+                child: const Text('Utiliser le résultat basique'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Plus tard'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                // Persister le choix
+                ModelDownloadService.instance.selectedModel = chosen;
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('magic_model_choice', chosen.name);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _startModelDownload(input);
+              },
+              icon: const Icon(Icons.download, size: 18),
+              label: Text('Télécharger ${chosen.label}'),
+            ),
           ],
         ),
-        actions: [
-          if (regexResult != null)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _navigateToForm(regexResult, input);
-              },
-              child: const Text('Utiliser le résultat basique'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Plus tard'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _startModelDownload(input);
-            },
-            icon: const Icon(Icons.download, size: 18),
-            label: const Text('Télécharger'),
-          ),
-        ],
       ),
     );
   }
@@ -427,7 +508,7 @@ class _ModelDownloadDialogState extends ConsumerState<_ModelDownloadDialog> {
             ),
             const SizedBox(height: 12),
             Text(
-              'H2O Danube 3 · ~300 Mo\n100% local, aucune donnée envoyée.',
+              '${ModelDownloadService.instance.selectedModel.label} · ~${ModelDownloadService.instance.selectedModel.approxSizeMb} Mo\n100% local, aucune donnée envoyée.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context)
                         .colorScheme

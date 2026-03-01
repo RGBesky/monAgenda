@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
@@ -10,6 +11,9 @@ import 'ics_service.dart';
 import 'notification_service.dart';
 import 'widget_service.dart';
 import 'logger_service.dart';
+
+/// Callback pour signaler une erreur serveur (429/500/503/timeout).
+typedef ServerErrorCallback = void Function(String message);
 
 enum SyncResult { success, partialSuccess, failure, offline }
 
@@ -26,6 +30,9 @@ class SyncEngine {
   final _syncStreamController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get syncStream => _syncStreamController.stream;
 
+  /// Callback optionnel pour notifier le provider d'erreur serveur.
+  ServerErrorCallback? onServerError;
+
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
@@ -35,6 +42,7 @@ class SyncEngine {
     required NotionService notion,
     required IcsService ics,
     required NotificationService notifications,
+    this.onServerError,
   })  : _db = db,
         _infomaniak = infomaniak,
         _notion = notion,
@@ -65,6 +73,9 @@ class SyncEngine {
       } catch (e) {
         success = false;
         errors['Infomaniak'] = e.toString();
+        if (_isServerError(e)) {
+          onServerError?.call(_serverErrorMessage(e));
+        }
         await _db.upsertSyncState(SyncStateModel(
           source: AppConstants.sourceInfomaniak,
           status: SyncStatus.error,
@@ -116,6 +127,9 @@ class SyncEngine {
       } catch (e) {
         success = false;
         errors['Notion'] = e.toString();
+        if (_isServerError(e)) {
+          onServerError?.call(_serverErrorMessage(e));
+        }
         final notionDbs = await _db.getNotionDatabases();
         for (final db in notionDbs) {
           await _db.upsertSyncState(SyncStateModel(
@@ -571,5 +585,34 @@ class SyncEngine {
 
   void dispose() {
     _syncStreamController.close();
+  }
+
+  // ── Détection d'erreurs serveur (mutualisée) ──────────────────────────
+
+  /// Détecte si l'erreur est liée au serveur (429, 500, 503, timeout).
+  bool _isServerError(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 429 || code == 500 || code == 503) return true;
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        return true;
+      }
+    }
+    if (e is TimeoutException) return true;
+    return false;
+  }
+
+  /// Génère un message d'erreur lisible pour les erreurs serveur.
+  String _serverErrorMessage(Object e) {
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 429) return 'Serveur surchargé (429 — trop de requêtes)';
+      if (code == 500) return 'Erreur interne du serveur (500)';
+      if (code == 503) return 'Serveur indisponible (503)';
+      return 'Délai de connexion dépassé';
+    }
+    return 'Synchronisation en erreur (timeout)';
   }
 }

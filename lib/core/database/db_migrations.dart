@@ -4,7 +4,7 @@
 /// + ajouter une entrée dans [kMigrations]. Ne jamais modifier une migration existante.
 library;
 
-const int kCurrentDbVersion = 12;
+const int kCurrentDbVersion = 13;
 
 /// Chaque clé = numéro de version cible.
 /// Chaque valeur = liste de DDL à exécuter pour passer de (version - 1) à version.
@@ -57,5 +57,18 @@ final Map<int, List<String>> kMigrations = {
       last_verified TEXT NOT NULL
     )""",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_cert_pins_host ON cert_pins(host)",
+  ],
+  // --- V13 : Rattrapage — s'assurer que magic_habits existe (V11 pouvait être sautée) ---
+  13: [
+    """CREATE TABLE IF NOT EXISTS magic_habits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL,
+      field_name TEXT NOT NULL,
+      field_value TEXT NOT NULL,
+      usage_count INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )""",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_magic_habits_keyword_field ON magic_habits(keyword, field_name)",
   ],
 };

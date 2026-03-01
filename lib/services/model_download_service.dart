@@ -8,16 +8,56 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'logger_service.dart';
 
-/// SHA-256 attendu du modèle GGUF H2O Danube 3 500M Q4_K_M.
-const String kModelSha256 =
-    '021f78849c5670ecb2aa4cd7c5972eee0a3c9e41e33e5902c408a2ab989f0b43';
+/// Choix du modèle IA pour la Saisie Magique.
+/// Qwen2.5 (Alibaba) — multilingue (29 langues dont FR), optimisé JSON structuré.
+enum MagicModelChoice {
+  /// Qwen2.5-0.5B-Instruct Q4_K_M (~491 Mo) — léger, tourne partout.
+  qwen05b,
 
-/// Nom du fichier modèle sur disque.
-const String kModelFileName = 'magic_model.gguf';
+  /// Qwen2.5-1.5B-Instruct Q4_K_M (~1.12 Go) — meilleure qualité.
+  qwen15b,
+}
 
-/// URL de téléchargement par défaut (HuggingFace, repo officiel h2oai).
-const String kModelDownloadUrl =
-    'https://huggingface.co/h2oai/h2o-danube3-500m-chat-GGUF/resolve/main/h2o-danube3-500m-chat-Q4_K_M.gguf';
+extension MagicModelChoiceExt on MagicModelChoice {
+  String get fileName => switch (this) {
+        MagicModelChoice.qwen05b => 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
+        MagicModelChoice.qwen15b => 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+      };
+
+  String get downloadUrl => switch (this) {
+        MagicModelChoice.qwen05b =>
+          'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+        MagicModelChoice.qwen15b =>
+          'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+      };
+
+  String get sha256 => switch (this) {
+        // SHA-256 will be verified on first download — skip until known
+        MagicModelChoice.qwen05b => 'PLACEHOLDER_QWEN05B',
+        MagicModelChoice.qwen15b => 'PLACEHOLDER_QWEN15B',
+      };
+
+  String get label => switch (this) {
+        MagicModelChoice.qwen05b => 'Qwen 2.5 (0.5B)',
+        MagicModelChoice.qwen15b => 'Qwen 2.5 (1.5B)',
+      };
+
+  String get subtitle => switch (this) {
+        MagicModelChoice.qwen05b => '~491 Mo · Rapide · Recommandé',
+        MagicModelChoice.qwen15b =>
+          '~1.1 Go · Meilleure qualité · Desktop / 8 Go+ RAM',
+      };
+
+  int get approxSizeMb => switch (this) {
+        MagicModelChoice.qwen05b => 491,
+        MagicModelChoice.qwen15b => 1120,
+      };
+
+  static MagicModelChoice fromString(String s) => switch (s) {
+        'qwen15b' => MagicModelChoice.qwen15b,
+        _ => MagicModelChoice.qwen05b,
+      };
+}
 
 /// Exception d'intégrité du modèle.
 class ModelIntegrityException implements Exception {
@@ -69,10 +109,13 @@ class ModelDownloadNotifier extends AsyncNotifier<ModelStatus> {
   }
 
   Future<void> deleteModel() async {
-    final localPath = await ModelDownloadService.instance.modelPath;
-    final file = File(localPath);
-    if (await file.exists()) {
-      await file.delete();
+    // Delete all known model files
+    for (final choice in MagicModelChoice.values) {
+      final path = await ModelDownloadService.instance.modelPathFor(choice);
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
     }
     state = const AsyncData(ModelStatus.notDownloaded);
   }
@@ -83,19 +126,37 @@ class ModelDownloadService {
   static final ModelDownloadService instance = ModelDownloadService._();
   ModelDownloadService._();
 
+  /// Modèle sélectionné par l'utilisateur.
+  MagicModelChoice selectedModel = MagicModelChoice.qwen05b;
+
   final Dio _dio = Dio();
   final StreamController<double> _progressController =
       StreamController<double>.broadcast();
 
   Stream<double> get progressStream => _progressController.stream;
 
-  Future<String> get modelPath async {
+  /// Chemin du modèle actuellement sélectionné.
+  Future<String> get modelPath => modelPathFor(selectedModel);
+
+  /// Chemin pour un modèle spécifique.
+  Future<String> modelPathFor(MagicModelChoice choice) async {
     final appDir = await getApplicationSupportDirectory();
     final modelsDir = Directory('${appDir.path}/models');
     if (!await modelsDir.exists()) {
       await modelsDir.create(recursive: true);
     }
-    return '${modelsDir.path}/$kModelFileName';
+    return '${modelsDir.path}/${choice.fileName}';
+  }
+
+  /// Supprime l'ancien modèle legacy s'il existe (migration v3).
+  Future<void> cleanupLegacyModel() async {
+    final appDir = await getApplicationSupportDirectory();
+    final legacyFile = File('${appDir.path}/models/magic_model.gguf');
+    if (await legacyFile.exists()) {
+      await legacyFile.delete();
+      AppLogger.instance
+          .info('ModelDownload', 'Deleted legacy model (magic_model.gguf)');
+    }
   }
 
   /// Retourne le chemin local du modèle prêt à l'emploi.
@@ -106,7 +167,8 @@ class ModelDownloadService {
 
     // Vérifier si le fichier existe et son hash
     if (await file.exists()) {
-      final hashOk = await _verifySha256InIsolate(localPath);
+      final hashOk =
+          await _verifySha256InIsolate(localPath, selectedModel.sha256);
       if (hashOk) return localPath;
       // Hash invalide → supprimer et re-télécharger
       await file.delete();
@@ -118,7 +180,8 @@ class ModelDownloadService {
     await _downloadWithResume(downloadUrl, localPath);
 
     // Vérifier l'intégrité
-    final hashOk = await _verifySha256InIsolate(localPath);
+    final hashOk =
+        await _verifySha256InIsolate(localPath, selectedModel.sha256);
     if (!hashOk) {
       await File(localPath).delete();
       throw const ModelIntegrityException(
@@ -174,14 +237,14 @@ class ModelDownloadService {
   }
 
   /// Vérifie le SHA-256 du fichier dans un Isolate pour ne pas bloquer le UI.
-  Future<bool> _verifySha256InIsolate(String path) async {
+  Future<bool> _verifySha256InIsolate(String path, String expectedHash) async {
     // Skip si placeholder hash
-    if (kModelSha256.startsWith('PLACEHOLDER')) return true;
+    if (expectedHash.startsWith('PLACEHOLDER')) return true;
 
     return await Isolate.run(() async {
       final file = File(path);
       final digest = await sha256.bind(file.openRead()).first;
-      return digest.toString() == kModelSha256;
+      return digest.toString() == expectedHash;
     });
   }
 

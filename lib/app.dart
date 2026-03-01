@@ -16,6 +16,7 @@ import 'features/magic/magic_entry_screen.dart';
 import 'features/search/screens/search_screen.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
+import 'core/models/event_model.dart';
 
 /// Raccourcis clavier Desktop — données publiques pour affichage dans Settings.
 class AppShellShortcuts {
@@ -486,6 +487,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(autoSyncOnConnectivityProvider);
     // V2 : Fallback périodique pour Linux (connectivity_plus parfois muet)
     ref.watch(periodicSyncRetryProvider);
+
+    // V3 : Afficher un SnackBar lorsqu'un conflit ETag est résolu
+    ref.listen<EventModel?>(etagConflictProvider, (prev, next) {
+      if (next != null) {
+        final messenger =
+            UnifiedCalendarApp.scaffoldMessengerKey.currentState;
+        messenger?.showSnackBar(
+          SnackBar(
+            content: Text(
+              'Conflit résolu — version serveur appliquée pour «${next.title}»',
+            ),
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        // Remettre à null après affichage
+        ref.read(etagConflictProvider.notifier).state = null;
+      }
+    });
 
     final isOffline = ref.watch(isOfflineProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;

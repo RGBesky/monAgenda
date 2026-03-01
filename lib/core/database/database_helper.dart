@@ -592,6 +592,18 @@ class DatabaseHelper {
     return _firstIntValue(result);
   }
 
+  /// Vérifie si la table FTS5 events_fts existe.
+  Future<bool> _hasFtsTable(Database db) async {
+    try {
+      final r = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='events_fts'",
+      );
+      return r.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<List<EventModel>> searchEvents({
     String? keyword,
     List<int>? tagIds,
@@ -603,14 +615,23 @@ class DatabaseHelper {
     final conditions = <String>['is_deleted = 0'];
     final args = <dynamic>[];
 
-    // V3 : Utiliser FTS5 pour la recherche textuelle au lieu de LIKE '%mot%'
+    // V3 : FTS5 avec fallback LIKE si la table FTS n'existe pas
     if (keyword != null && keyword.isNotEmpty) {
-      // Échapper les caractères spéciaux FTS5
-      final safeKeyword = keyword.replaceAll('"', '""');
-      conditions.add(
-        'id IN (SELECT rowid FROM events_fts WHERE events_fts MATCH ?)',
-      );
-      args.add('"$safeKeyword"');
+      final hasFts = await _hasFtsTable(db);
+      if (hasFts) {
+        final safeKeyword = keyword.replaceAll('"', '""');
+        conditions.add(
+          'id IN (SELECT rowid FROM events_fts WHERE events_fts MATCH ?)',
+        );
+        args.add('"$safeKeyword"');
+      } else {
+        // Fallback LIKE pour les 3 champs indexés par FTS
+        conditions.add(
+          '(title LIKE ? OR description LIKE ? OR location LIKE ?)',
+        );
+        final like = '%$keyword%';
+        args.addAll([like, like, like]);
+      }
     }
     if (startDate != null) {
       conditions.add('start_date >= ?');
@@ -647,13 +668,30 @@ class DatabaseHelper {
     Database db,
     List<Map<String, dynamic>> maps,
   ) async {
-    final events = <EventModel>[];
-    for (final map in maps) {
-      final event = EventModel.fromMap(map);
-      final tags = await getTagsByEventId(event.id!);
-      events.add(event.copyWith(tags: tags));
+    if (maps.isEmpty) return [];
+
+    final events = maps.map(EventModel.fromMap).toList();
+    final eventIds = events.map((e) => e.id!).toList();
+
+    // Batch : 1 seule requête pour tous les tags au lieu de N
+    final placeholders = List.filled(eventIds.length, '?').join(',');
+    final tagMaps = await db.rawQuery('''
+      SELECT et.event_id, t.* FROM ${AppConstants.tableTags} t
+      INNER JOIN ${AppConstants.tableEventTags} et ON et.tag_id = t.id
+      WHERE et.event_id IN ($placeholders)
+      ORDER BY t.type ASC, t.sort_order ASC
+    ''', eventIds);
+
+    // Grouper par event_id
+    final tagsByEventId = <int, List<TagModel>>{};
+    for (final row in tagMaps) {
+      final eventId = row['event_id'] as int;
+      tagsByEventId.putIfAbsent(eventId, () => []).add(TagModel.fromMap(row));
     }
-    return events;
+
+    return events
+        .map((e) => e.copyWith(tags: tagsByEventId[e.id!] ?? []))
+        .toList();
   }
 
   Future<EventModel?> getEventByRemoteId(String remoteId, String source) async {
