@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/magic_habits_repository.dart';
 import '../core/models/event_model.dart';
+import '../providers/settings_provider.dart';
 import '../services/logger_service.dart';
 import '../services/llama_service.dart';
 import '../services/model_download_service.dart';
@@ -58,6 +59,17 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       final llamaService = ref.read(llamaServiceProvider);
       final habitsRepo = ref.read(magicHabitsRepositoryProvider);
 
+      // Déterminer la source par défaut selon la config utilisateur
+      final settings = ref.read(settingsProvider).valueOrNull;
+      final String defaultSource;
+      if (settings != null && settings.isInfomaniakConfigured) {
+        defaultSource = AppConstants.sourceInfomaniak;
+      } else if (settings != null && settings.isNotionConfigured) {
+        defaultSource = AppConstants.sourceNotion;
+      } else {
+        defaultSource = AppConstants.sourceInfomaniak;
+      }
+
       // ── Étape 0 : Charger les habitudes utilisateur ──
       final habits = await habitsRepo.lookupForText(input);
       if (habits.isNotEmpty) {
@@ -110,7 +122,8 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
           // Appliquer les habitudes comme fallback sur les champs null
           final enriched = _applyHabitsToJson(iaResult, habits);
           final event =
-              MagicEntryService.buildFromIaJson(enriched, input);
+              MagicEntryService.buildFromIaJson(enriched, input,
+                  defaultSource: defaultSource);
           if (event != null) {
             stopwatch.stop();
             AppLogger.instance.info('MagicEntry',
@@ -129,7 +142,8 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
 
       // ── Étape 3 : Fallback regex (uniquement si LLM indisponible ou échoué) ──
       final partial =
-          MagicEntryService.parsePartialRegex(input, habits: habits);
+          MagicEntryService.parsePartialRegex(input, habits: habits,
+              defaultSource: defaultSource);
       stopwatch.stop();
       AppLogger.instance.info('MagicEntry',
           'Regex fallback in ${stopwatch.elapsedMilliseconds}ms — title="${partial?.title}"');
@@ -322,7 +336,8 @@ class MagicEntryService {
 
   /// Parse complet : retourne un EventModel si title + date sont extraits.
   static EventModel? parseWithRegex(String input,
-      {Map<String, String> habits = const {}}) {
+      {Map<String, String> habits = const {},
+      String defaultSource = 'infomaniak'}) {
     final parsed = _extractAll(input);
     // Appliquer les habitudes sur les champs null
     _applyHabitsToParsed(parsed, habits);
@@ -330,12 +345,13 @@ class MagicEntryService {
     if (title == null || title.isEmpty || parsed['startDate'] == null) {
       return null;
     }
-    return _buildEventModel(parsed);
+    return _buildEventModel(parsed, defaultSource: defaultSource);
   }
 
   /// Parse partiel : retourne un EventModel avec ce qu'on a pu extraire.
   static EventModel? parsePartialRegex(String input,
-      {Map<String, String> habits = const {}}) {
+      {Map<String, String> habits = const {},
+      String defaultSource = 'infomaniak'}) {
     final parsed = _extractAll(input);
     // Appliquer les habitudes sur les champs null
     _applyHabitsToParsed(parsed, habits);
@@ -344,12 +360,13 @@ class MagicEntryService {
       // Dernier recours : utiliser l'input brut comme titre
       parsed['title'] = _cleanTitle(input);
     }
-    return _buildEventModel(parsed);
+    return _buildEventModel(parsed, defaultSource: defaultSource);
   }
 
   /// Construit un EventModel depuis le JSON retourné par l'IA.
   static EventModel? buildFromIaJson(
-      Map<String, dynamic> json, String originalInput) {
+      Map<String, dynamic> json, String originalInput,
+      {String defaultSource = 'infomaniak'}) {
     try {
       final rawTitle = json['title'] as String?;
       if (rawTitle == null || rawTitle.isEmpty) return null;
@@ -429,7 +446,7 @@ class MagicEntryService {
         'location': location,
         'category': (category != null && category != 'null') ? category : null,
         'participants': participants,
-      });
+      }, defaultSource: defaultSource);
     } catch (e) {
       AppLogger.instance.error('MagicEntry', 'buildFromIaJson failed', e);
       return null;
@@ -900,7 +917,8 @@ class MagicEntryService {
   // Construction du modèle
   // ──────────────────────────────────────────────────────────────
 
-  static EventModel _buildEventModel(Map<String, dynamic> parsed) {
+  static EventModel _buildEventModel(Map<String, dynamic> parsed,
+      {String defaultSource = 'infomaniak'}) {
     final now = DateTime.now();
     DateTime startDate = parsed['startDate'] as DateTime? ??
         DateTime(now.year, now.month, now.day);
@@ -950,8 +968,9 @@ class MagicEntryService {
             ))
         .toList();
 
+    // Déterminer la source par défaut (passée en paramètre depuis la couche Notifier)
     return EventModel(
-      source: AppConstants.sourceInfomaniak,
+      source: defaultSource,
       type: startHour != null ? EventType.appointment : EventType.allDay,
       title: (parsed['title'] as String?) ?? 'Nouvel événement',
       startDate: startDateTime,

@@ -251,5 +251,32 @@ class EventModel extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, remoteId, source, title, startDate, endDate];
+  List<Object?> get props => [
+        id,
+        remoteId,
+        source,
+        type,
+        title,
+        startDate,
+        endDate,
+        isAllDay,
+        location,
+        description,
+        participants,
+        tagIds,
+        tags,
+        rrule,
+        recurrenceId,
+        calendarId,
+        notionPageId,
+        icsSubscriptionId,
+        status,
+        reminderMinutes,
+        isDeleted,
+        createdAt,
+        updatedAt,
+        syncedAt,
+        etag,
+        smartAttachments,
+      ];
 }

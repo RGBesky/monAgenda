@@ -7,6 +7,7 @@ import '../core/constants/app_constants.dart';
 import '../services/background_worker_service.dart';
 import '../services/sync_queue_worker.dart';
 import '../services/logger_service.dart';
+import '../services/widget_service.dart';
 
 /// Plage de dates pour le chargement des événements.
 class DateRange {
@@ -114,6 +115,8 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
     }
     // V2 : reprogrammer les notifications en background
     BackgroundWorkerService.rescheduleNow();
+    // Rafraîchir le widget Android
+    WidgetService.updateWidget();
     return id;
   }
 
@@ -138,6 +141,8 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
     }
     // V2 : reprogrammer les notifications en background
     BackgroundWorkerService.rescheduleNow();
+    // Rafraîchir le widget Android
+    WidgetService.updateWidget();
   }
 
   Future<void> deleteEvent(int id) async {
@@ -149,6 +154,8 @@ class EventsNotifier extends AsyncNotifier<List<EventModel>> {
 
     // V2 : reprogrammer les notifications en background
     BackgroundWorkerService.rescheduleNow();
+    // Rafraîchir le widget Android
+    WidgetService.updateWidget();
   }
 
   void refresh() {

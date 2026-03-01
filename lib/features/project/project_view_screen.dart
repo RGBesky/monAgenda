@@ -28,7 +28,21 @@ class NotionTaskModel {
     required this.databaseId,
   });
 
-  NotionTaskModel copyWith({DateTime? assignedDate}) => this;
+  NotionTaskModel copyWith({
+    String? id,
+    String? title,
+    String? category,
+    Color? color,
+    String? databaseId,
+  }) {
+    return NotionTaskModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      category: category ?? this.category,
+      color: color ?? this.color,
+      databaseId: databaseId ?? this.databaseId,
+    );
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────
