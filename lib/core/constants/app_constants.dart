@@ -57,30 +57,30 @@ class AppConstants {
   // Taille des logos source (px)
   static const double sourceLogoSize = 18.0;
 
-  // Tags prédéfinis — palette Notion
+  // Tags prédéfinis — palette Stabilo Boss × Paper Mate Flair
   static const List<Map<String, dynamic>> defaultCategories = [
-    {'name': 'Travail', 'color': '#007AFF'},
-    {'name': 'Perso', 'color': '#34C759'},
-    {'name': 'Santé', 'color': '#FF3B30'},
-    {'name': 'Famille', 'color': '#FF9500'},
-    {'name': 'Sport', 'color': '#30B0C7'},
-    {'name': 'Social', 'color': '#AF52DE'},
-    {'name': 'Formation', 'color': '#FFCC00'},
-    {'name': 'Administratif', 'color': '#8E8E93'},
+    {'name': 'Travail', 'color': '#42A5F5'},      // blueMedium
+    {'name': 'Perso', 'color': '#9CD8A8'},         // greenPastel
+    {'name': 'Santé', 'color': '#66BB6A'},         // greenMedium
+    {'name': 'Famille', 'color': '#CCA0DC'},       // violetPastel
+    {'name': 'Sport', 'color': '#26C6DA'},         // cyanMedium
+    {'name': 'Social', 'color': '#F06292'},        // pinkMedium
+    {'name': 'Formation', 'color': '#FFEE58'},     // yellowMedium
+    {'name': 'Administratif', 'color': '#E6D2A8'}, // neutralPale
   ];
 
   static const List<Map<String, dynamic>> defaultPriorities = [
-    {'name': 'Urgent', 'color': '#FF3B30', 'level': 1},
-    {'name': 'Haute', 'color': '#FF9500', 'level': 2},
-    {'name': 'Normale', 'color': '#34C759', 'level': 3},
-    {'name': 'Basse', 'color': '#8E8E93', 'level': 4},
+    {'name': 'Urgent', 'color': '#E53935', 'level': 1},   // redVif
+    {'name': 'Haute', 'color': '#FB8C00', 'level': 2},    // orangeVif
+    {'name': 'Normale', 'color': '#1E88E5', 'level': 3},  // blueVif
+    {'name': 'Basse', 'color': '#82D2CC', 'level': 4},    // cyanPastel
   ];
 
   static const List<Map<String, dynamic>> defaultStatuses = [
-    {'name': 'À faire', 'color': '#8ABBE6'},
-    {'name': 'En cours', 'color': '#EAE08C'},
-    {'name': 'Fait', 'color': '#82D2CC'},
-    {'name': 'Annulé', 'color': '#F2A5B8'},
+    {'name': 'À faire', 'color': '#8ABBE6'},   // bluePastel
+    {'name': 'En cours', 'color': '#FFEE58'},   // yellowMedium
+    {'name': 'Fait', 'color': '#82D2CC'},       // cyanPastel
+    {'name': 'Annulé', 'color': '#F2A5B8'},     // pinkPastel
   ];
 
   // Vues calendrier

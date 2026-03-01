@@ -6,48 +6,9 @@ import '../../../core/models/tag_model.dart';
 import '../../../core/widgets/settings_logo_header.dart';
 import '../../../providers/tags_provider.dart';
 
-/// Palette organisée en 5 rangées de 6 — couleurs vives, modernes, lisibles.
-const List<Color> _paletteColors = [
-  // ─ Row 1 : Rouges → Violets
-  Color(0xFFFF3B30), // Rouge vif
-  Color(0xFFFF6B6B), // Corail
-  Color(0xFFE84393), // Rose fuchsia
-  Color(0xFFAF52DE), // Violet
-  Color(0xFF6C5CE7), // Indigo
-  Color(0xFF5856D6), // Bleu indigo
-
-  // ─ Row 2 : Bleus → Turquoises
-  Color(0xFF007AFF), // Bleu Apple
-  Color(0xFF0984E3), // Bleu océan
-  Color(0xFF00B4D8), // Cyan
-  Color(0xFF00C7BE), // Turquoise
-  Color(0xFF30B0C7), // Sarcelle
-  Color(0xFF0077B6), // Bleu marine
-
-  // ─ Row 3 : Verts
-  Color(0xFF34C759), // Vert Apple
-  Color(0xFF00B894), // Émeraude
-  Color(0xFF2ECC71), // Vert prairie
-  Color(0xFF55A630), // Vert olive
-  Color(0xFF8AC926), // Lime
-  Color(0xFF7CB342), // Vert sauge
-
-  // ─ Row 4 : Jaunes → Oranges
-  Color(0xFFFFCC00), // Jaune soleil
-  Color(0xFFFFC43D), // Ambre
-  Color(0xFFFF9500), // Orange Apple
-  Color(0xFFFF7043), // Tangerine
-  Color(0xFFE17055), // Terre cuite
-  Color(0xFFA2845E), // Marron chaud
-
-  // ─ Row 5 : Neutres + Pastels
-  Color(0xFF8E8E93), // Gris Apple
-  Color(0xFFB0BEC5), // Gris bleuté
-  Color(0xFF636E72), // Ardoise
-  Color(0xFF2D3436), // Charbon
-  Color(0xFF8ABBE6), // Pastel bleu
-  Color(0xFFF2A5B8), // Pastel rose
-];
+/// Palette 100 couleurs Stabilo Boss × Paper Mate Flair.
+/// Grille 10 colonnes × 10 rangées (néon → fluo → acidulé → vif → medium → doux → pastel → pastel doux → pâle → glacé).
+const List<Color> _paletteColors = AppColors.palette100;
 
 class TagsSettingsScreen extends ConsumerWidget {
   const TagsSettingsScreen({super.key});
@@ -251,58 +212,80 @@ class TagsSettingsScreen extends ConsumerWidget {
                               ),
                               title: const Text('Choisir une couleur'),
                               content: SizedBox(
-                                width: 280,
-                                child: Wrap(
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: _paletteColors.map((c) {
-                                    final isSelected =
-                                        c.toARGB32() == tempColor.toARGB32();
-                                    return GestureDetector(
-                                      onTap: () {
-                                        setPickerState(() => tempColor = c);
-                                      },
-                                      child: AnimatedContainer(
-                                        duration:
-                                            const Duration(milliseconds: 150),
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: c,
-                                          shape: BoxShape.circle,
-                                          border: isSelected
-                                              ? Border.all(
-                                                  color:
-                                                      c.computeLuminance() > 0.5
-                                                          ? Colors.black54
-                                                          : Colors.white,
-                                                  width: 3,
-                                                )
-                                              : null,
-                                          boxShadow: isSelected
-                                              ? [
-                                                  BoxShadow(
-                                                    color: c.withValues(
-                                                        alpha: 0.5),
-                                                    blurRadius: 8,
-                                                    spreadRadius: 1,
-                                                  ),
-                                                ]
-                                              : null,
+                                width: 420,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Labels nuances
+                                    Row(
+                                      children: const [
+                                        _ColorFamilyLabel('Néon'),
+                                        Spacer(),
+                                        _ColorFamilyLabel('Glacé'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    // Grille 10 familles × 10 nuances
+                                    // Transposée : chaque ligne = 1 famille (rouge→neutre)
+                                    // Chaque colonne = 1 nuance (néon→glacé)
+                                    ...List.generate(10, (family) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 4),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: List.generate(10, (shade) {
+                                            final c = _paletteColors[shade * 10 + family];
+                                            final isSelected = c.toARGB32() == tempColor.toARGB32();
+                                            return GestureDetector(
+                                              onTap: () {
+                                                setPickerState(() => tempColor = c);
+                                              },
+                                              child: AnimatedContainer(
+                                                duration: const Duration(milliseconds: 150),
+                                                width: 30,
+                                                height: 30,
+                                                decoration: BoxDecoration(
+                                                  color: c,
+                                                  shape: BoxShape.circle,
+                                                  border: isSelected
+                                                      ? Border.all(
+                                                          color: c.computeLuminance() > 0.5
+                                                              ? Colors.black54
+                                                              : Colors.white,
+                                                          width: 3,
+                                                        )
+                                                      : Border.all(
+                                                          color: c.computeLuminance() > 0.85
+                                                              ? Colors.grey.withValues(alpha: 0.3)
+                                                              : Colors.transparent,
+                                                          width: 1,
+                                                        ),
+                                                  boxShadow: isSelected
+                                                      ? [
+                                                          BoxShadow(
+                                                            color: c.withValues(alpha: 0.5),
+                                                            blurRadius: 8,
+                                                            spreadRadius: 1,
+                                                          ),
+                                                        ]
+                                                      : null,
+                                                ),
+                                                child: isSelected
+                                                    ? Icon(
+                                                        Icons.check_rounded,
+                                                        color: c.computeLuminance() > 0.5
+                                                            ? Colors.black87
+                                                            : Colors.white,
+                                                        size: 14,
+                                                      )
+                                                    : null,
+                                              ),
+                                            );
+                                          }),
                                         ),
-                                        child: isSelected
-                                            ? Icon(
-                                                Icons.check_rounded,
-                                                color:
-                                                    c.computeLuminance() > 0.5
-                                                        ? Colors.black87
-                                                        : Colors.white,
-                                                size: 20,
-                                              )
-                                            : null,
-                                      ),
-                                    );
-                                  }).toList(),
+                                      );
+                                    }),
+                                  ],
                                 ),
                               ),
                               actions: [
@@ -409,5 +392,23 @@ class TagsSettingsScreen extends ConsumerWidget {
     if (confirmed == true && tag.id != null) {
       await ref.read(tagsNotifierProvider.notifier).deleteTag(tag.id!);
     }
+  }
+}
+
+/// Petit label pour les en-têtes du nuancier.
+class _ColorFamilyLabel extends StatelessWidget {
+  final String text;
+  const _ColorFamilyLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
   }
 }

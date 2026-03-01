@@ -1085,7 +1085,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       logo: SourceLogos.infomaniak(size: 28),
                       label: 'Rendez-vous',
                       sublabel: 'Infomaniak',
-                      color: AppColors.stabiloBlue,
+                      color: AppColors.bluePastel,
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -1107,7 +1107,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       logo: SourceLogos.notion(size: 28, isDark: isDark),
                       label: 'Tâche',
                       sublabel: 'Notion',
-                      color: AppColors.stabiloLilac,
+                      color: AppColors.violetPastel,
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
