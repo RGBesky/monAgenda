@@ -160,6 +160,23 @@ class _AppearanceSettingsScreenState
                 ],
               ),
             ),
+            // Toggle AMOLED — visible uniquement en mode sombre
+            if (settings.theme == AppConstants.themeDark ||
+                (settings.theme == AppConstants.themeAuto &&
+                    MediaQuery.platformBrightnessOf(context) ==
+                        Brightness.dark))
+              SwitchListTile(
+                title: const Text('Noir véritable (AMOLED)'),
+                subtitle: const Text(
+                  'Fond pur noir — idéal pour écrans OLED',
+                ),
+                value: settings.amoledMode,
+                onChanged: (val) async {
+                  await ref
+                      .read(settingsProvider.notifier)
+                      .setAmoledMode(val);
+                },
+              ),
             const Divider(height: 1),
 
             // Vue par défaut

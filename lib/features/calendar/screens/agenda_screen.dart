@@ -989,15 +989,19 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Label du jour
-              Text(
-                _dayLabel,
-                style: TextStyle(
-                  fontSize: isToday ? 18 : 16,
-                  fontWeight: FontWeight.w700,
-                  color: isToday
-                      ? Theme.of(context).colorScheme.primary
-                      : textColor,
-                  letterSpacing: -0.3,
+              Flexible(
+                child: Text(
+                  _dayLabel,
+                  style: TextStyle(
+                    fontSize: isToday ? 18 : 16,
+                    fontWeight: FontWeight.w700,
+                    color: isToday
+                        ? Theme.of(context).colorScheme.primary
+                        : textColor,
+                    letterSpacing: -0.3,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               // Pastille numéro du jour si aujourd'hui
@@ -1026,11 +1030,15 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
                 WeatherHeader.weatherIcon(weather!.weatherCode, isDark,
                     size: 20),
                 const SizedBox(width: 6),
-                Text(
-                  weather!.description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: subColor,
+                Flexible(
+                  child: Text(
+                    weather!.description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: subColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 6),

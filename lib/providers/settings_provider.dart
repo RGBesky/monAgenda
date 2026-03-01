@@ -14,6 +14,7 @@ class AppSettings {
   final String? infomaniakCalendarUrl;
   final String? notionApiKey;
   final String theme;
+  final bool amoledMode;
   final String defaultView;
   final String firstDayOfWeek;
   final int defaultReminderMinutes;
@@ -41,6 +42,7 @@ class AppSettings {
     this.infomaniakCalendarUrl,
     this.notionApiKey,
     this.theme = AppConstants.themeAuto,
+    this.amoledMode = false,
     this.defaultView = AppConstants.viewWeek,
     this.firstDayOfWeek = AppConstants.firstDayMonday,
     this.defaultReminderMinutes = AppConstants.defaultReminderMinutes,
@@ -66,6 +68,7 @@ class AppSettings {
     String? infomaniakCalendarUrl,
     String? notionApiKey,
     String? theme,
+    bool? amoledMode,
     String? defaultView,
     String? firstDayOfWeek,
     int? defaultReminderMinutes,
@@ -92,6 +95,7 @@ class AppSettings {
           infomaniakCalendarUrl ?? this.infomaniakCalendarUrl,
       notionApiKey: notionApiKey ?? this.notionApiKey,
       theme: theme ?? this.theme,
+      amoledMode: amoledMode ?? this.amoledMode,
       defaultView: defaultView ?? this.defaultView,
       firstDayOfWeek: firstDayOfWeek ?? this.firstDayOfWeek,
       defaultReminderMinutes:
@@ -281,6 +285,7 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
       infomaniakCalendarUrl: infomaniakCalendarUrl,
       notionApiKey: notionApiKey,
       theme: prefs.getString('theme') ?? AppConstants.themeAuto,
+      amoledMode: prefs.getBool('amoled_mode') ?? false,
       defaultView: prefs.getString('default_view') ?? AppConstants.viewWeek,
       firstDayOfWeek:
           prefs.getString('first_day') ?? AppConstants.firstDayMonday,
@@ -376,6 +381,10 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
 
   Future<void> setTheme(String theme) async {
     await updatePreference('theme', theme);
+  }
+
+  Future<void> setAmoledMode(bool enabled) async {
+    await updatePreference('amoled_mode', enabled);
   }
 
   Future<void> setDefaultView(String view) async {

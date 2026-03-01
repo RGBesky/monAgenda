@@ -28,6 +28,7 @@ import 'appearance_settings_screen.dart';
 import 'backup_settings_screen.dart';
 import 'import_config_screen.dart';
 import 'system_logs_screen.dart';
+import '../../../core/widgets/source_logos.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -154,11 +155,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         hugeIcon: HugeIcons.strokeRoundedLink01,
         children: [
           ListTile(
-            leading: Image.asset(
-              'assets/logos/infomaniak_32x32.png',
-              width: 22,
-              height: 22,
-            ),
+            leading: SourceLogos.infomaniak(size: 22),
             title: const Text('Infomaniak'),
             subtitle: Text(
               settings?.isInfomaniakConfigured == true
@@ -188,10 +185,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           ListTile(
-            leading: Image.asset(
-              'assets/logos/notion_32x32.png',
-              width: 22,
-              height: 22,
+            leading: SourceLogos.notion(
+              size: 22,
+              isDark: Theme.of(context).brightness == Brightness.dark,
             ),
             title: const Text('Notion'),
             subtitle: Text(
@@ -1169,13 +1165,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             size: 18,
           ),
           const SizedBox(width: 8),
-          Text(
-            isError ? 'Dernière sync échouée' : 'Synchronisé il y a peu',
-            style: TextStyle(
-              color: isError
-                  ? Theme.of(context).colorScheme.onErrorContainer
-                  : Theme.of(context).colorScheme.onPrimaryContainer,
-              fontSize: 13,
+          Expanded(
+            child: Text(
+              isError ? 'Dernière sync échouée' : 'Synchronisé il y a peu',
+              style: TextStyle(
+                color: isError
+                    ? Theme.of(context).colorScheme.onErrorContainer
+                    : Theme.of(context).colorScheme.onPrimaryContainer,
+                fontSize: 13,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -1202,13 +1202,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 color: Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 6),
-              Text(
-                title.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.primary,
-                  letterSpacing: 0.5,
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                    letterSpacing: 0.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

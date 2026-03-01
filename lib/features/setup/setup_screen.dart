@@ -67,6 +67,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   .textTheme
                   .headlineSmall
                   ?.copyWith(fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
             Text(
@@ -77,6 +80,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                         .onSurface
                         .withValues(alpha: 0.6),
                   ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 24),
             // Indicateur 3 dots

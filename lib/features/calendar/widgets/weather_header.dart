@@ -48,30 +48,34 @@ class WeatherHeader extends StatelessWidget {
           weatherIcon(today.weatherCode, isDark, size: 28),
           const SizedBox(width: 12),
           // Températures
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${today.temperatureMax.round()}° / ${today.temperatureMin.round()}°',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                  height: 1.2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${today.temperatureMax.round()}° / ${today.temperatureMin.round()}°',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                    height: 1.2,
+                  ),
                 ),
-              ),
-              Text(
-                today.description,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: subColor,
-                  height: 1.2,
+                Text(
+                  today.description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: subColor,
+                    height: 1.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           // Ville
           HugeIcon(
             icon: HugeIcons.strokeRoundedLocation01,
@@ -79,12 +83,16 @@ class WeatherHeader extends StatelessWidget {
             size: 13,
           ),
           const SizedBox(width: 3),
-          Text(
-            cityName,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: subColor,
+          Flexible(
+            child: Text(
+              cityName,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: subColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

@@ -204,16 +204,20 @@ class _SystemLogsScreenState extends ConsumerState<SystemLogsScreen> {
                           : const Color(0xFF787774),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '$_totalLogCount / ${DatabaseHelper.maxLogEntries} logs en base',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: _totalLogCount > 800
-                        ? const Color(0xFFFF9500)
-                        : isDark
-                            ? const Color(0xFF9B9A97)
-                            : const Color(0xFF787774),
+                Expanded(
+                  child: Text(
+                    '$_totalLogCount / ${DatabaseHelper.maxLogEntries} logs en base',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: _totalLogCount > 800
+                          ? const Color(0xFFFF9500)
+                          : isDark
+                              ? const Color(0xFF9B9A97)
+                              : const Color(0xFF787774),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const Spacer(),

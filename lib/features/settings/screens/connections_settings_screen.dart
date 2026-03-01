@@ -309,6 +309,8 @@ class _ConnectionsSettingsScreenState
             fontWeight: FontWeight.w500,
             color: db.isEnabled ? null : Colors.grey,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
           db.isEnabled ? 'Activée' : 'Désactivée',
@@ -535,8 +537,12 @@ class _ConnectionsSettingsScreenState
             }
 
             return AlertDialog(
-              title: Text('Mappings — ${db.name}',
-                  style: const TextStyle(fontSize: 16)),
+              title: Text(
+                'Mappings — ${db.name}',
+                style: const TextStyle(fontSize: 16),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
               content: SizedBox(
                 width: 380,
                 child: SingleChildScrollView(

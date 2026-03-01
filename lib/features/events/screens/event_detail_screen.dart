@@ -246,13 +246,17 @@ class EventDetailScreen extends ConsumerWidget {
               size: 14,
               color: subColor),
           const SizedBox(width: 6),
-          Text(
-            same
-                ? CalendarDateUtils.formatDisplayDate(event.startDate)
-                : '${CalendarDateUtils.formatDisplayDate(event.startDate)} → '
-                    '${CalendarDateUtils.formatDisplayDate(event.endDate)}',
-            style: TextStyle(
-                fontSize: 13, color: subColor, fontWeight: FontWeight.w500),
+          Expanded(
+            child: Text(
+              same
+                  ? CalendarDateUtils.formatDisplayDate(event.startDate)
+                  : '${CalendarDateUtils.formatDisplayDate(event.startDate)} → '
+                      '${CalendarDateUtils.formatDisplayDate(event.endDate)}',
+              style: TextStyle(
+                  fontSize: 13, color: subColor, fontWeight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       );
@@ -311,12 +315,16 @@ class EventDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            stTag.name,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: statusColor,
+          Flexible(
+            child: Text(
+              stTag.name,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -335,39 +343,46 @@ class EventDetailScreen extends ConsumerWidget {
         final color = isDark && rawColor.computeLuminance() < 0.3
             ? Color.lerp(rawColor, Colors.white, 0.4)!
             : rawColor;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                tag.name,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                 ),
-              ),
-              Text(
-                '  ${tag.isPriority ? 'Priorité' : 'Catégorie'}',
-                style: TextStyle(
-                  color: color.withValues(alpha: 0.6),
-                  fontSize: 10,
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    tag.name,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  '  ${tag.isPriority ? 'Priorité' : 'Catégorie'}',
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.6),
+                    fontSize: 10,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ],
+          ),
           ),
         );
       }).toList(),

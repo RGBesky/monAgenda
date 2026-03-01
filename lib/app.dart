@@ -54,7 +54,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
         debugShowCheckedModeBanner: false,
         themeMode: settings.themeMode,
         theme: _buildLightTheme(),
-        darkTheme: _buildDarkTheme(),
+        darkTheme: _buildDarkTheme(settings.amoledMode),
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -249,44 +249,67 @@ class UnifiedCalendarApp extends ConsumerWidget {
           ),
         ),
       ),
+      scrollbarTheme: const ScrollbarThemeData(
+        thickness: WidgetStatePropertyAll(6),
+        radius: Radius.circular(3),
+        thumbColor: WidgetStatePropertyAll(Color(0xFFD0CFC9)),
+      ),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16),
+        minVerticalPadding: 10,
+        dense: true,
+        visualDensity: VisualDensity.compact,
+      ),
     );
   }
 
-  ThemeData _buildDarkTheme() {
-    const colorScheme = ColorScheme(
+  ThemeData _buildDarkTheme(bool isAmoled) {
+    final scaffoldBg = isAmoled ? const Color(0xFF000000) : const Color(0xFF191919);
+    final surfaceColor = isAmoled ? const Color(0xFF0A0A0A) : const Color(0xFF202020);
+    final cardColor = isAmoled ? const Color(0xFF0F0F0F) : const Color(0xFF252525);
+    final appBarBg = isAmoled ? const Color(0xFF000000) : const Color(0xFF202020);
+    final navBarBg = isAmoled ? const Color(0xFF000000) : const Color(0xFF202020);
+    final inputFill = isAmoled ? const Color(0xFF141414) : const Color(0xFF282828);
+    final searchBarBg = isAmoled ? const Color(0xFF141414) : const Color(0xFF282828);
+    final surfaceContainerLow = isAmoled ? const Color(0xFF0D0D0D) : const Color(0xFF232323);
+    final surfaceContainer = isAmoled ? const Color(0xFF121212) : const Color(0xFF282828);
+    final surfaceContainerHigh = isAmoled ? const Color(0xFF1A1A1A) : const Color(0xFF303030);
+    final surfaceContainerHighest = isAmoled ? const Color(0xFF222222) : const Color(0xFF373737);
+
+    final colorScheme = ColorScheme(
       brightness: Brightness.dark,
-      primary: Color(0xFF0A84FF),
+      primary: const Color(0xFF0A84FF),
       onPrimary: Colors.white,
-      primaryContainer: Color(0xFF003566),
-      onPrimaryContainer: Color(0xFF8FC5FF),
-      secondary: Color(0xFF6AAB73),
+      primaryContainer: const Color(0xFF003566),
+      onPrimaryContainer: const Color(0xFF8FC5FF),
+      secondary: const Color(0xFF6AAB73),
       onSecondary: Colors.white,
-      secondaryContainer: Color(0xFF2A4A30),
-      onSecondaryContainer: Color(0xFFA8D5AE),
-      tertiary: Color(0xFFB08AD8),
+      secondaryContainer: const Color(0xFF2A4A30),
+      onSecondaryContainer: const Color(0xFFA8D5AE),
+      tertiary: const Color(0xFFB08AD8),
       onTertiary: Colors.white,
-      tertiaryContainer: Color(0xFF3D2A55),
-      onTertiaryContainer: Color(0xFFD4BFE8),
-      error: Color(0xFFF07070),
+      tertiaryContainer: const Color(0xFF3D2A55),
+      onTertiaryContainer: const Color(0xFFD4BFE8),
+      error: const Color(0xFFF07070),
       onError: Colors.white,
-      errorContainer: Color(0xFF4A1A1A),
-      onErrorContainer: Color(0xFFF5B0B0),
-      surface: Color(0xFF202020),
-      onSurface: Color(0xFFE8E7E4),
-      onSurfaceVariant: Color(0xFF9B9A97),
-      outline: Color(0xFF373737),
-      outlineVariant: Color(0xFF2D2D2D),
-      shadow: Color(0x40000000),
-      surfaceContainerHighest: Color(0xFF373737),
-      surfaceContainerHigh: Color(0xFF303030),
-      surfaceContainerLow: Color(0xFF232323),
-      surfaceContainer: Color(0xFF282828),
+      errorContainer: const Color(0xFF4A1A1A),
+      onErrorContainer: const Color(0xFFF5B0B0),
+      surface: surfaceColor,
+      onSurface: const Color(0xFFE8E7E4),
+      onSurfaceVariant: const Color(0xFF9B9A97),
+      outline: const Color(0xFF373737),
+      outlineVariant: const Color(0xFF2D2D2D),
+      shadow: const Color(0x40000000),
+      surfaceContainerHighest: surfaceContainerHighest,
+      surfaceContainerHigh: surfaceContainerHigh,
+      surfaceContainerLow: surfaceContainerLow,
+      surfaceContainer: surfaceContainer,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFF191919),
+      scaffoldBackgroundColor: scaffoldBg,
       textTheme:
           GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
         displayLarge: const TextStyle(
@@ -316,21 +339,21 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: const Color(0xFF252525),
+        color: cardColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: Color(0xFF373737), width: 0.5),
         ),
         margin: EdgeInsets.zero,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0.5,
-        backgroundColor: Color(0xFF202020),
-        foregroundColor: Color(0xFFE8E7E4),
+        backgroundColor: appBarBg,
+        foregroundColor: const Color(0xFFE8E7E4),
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: TextStyle(
+        titleTextStyle: const TextStyle(
           fontFamily: 'Inter',
           fontSize: 16,
           fontWeight: FontWeight.w600,
@@ -344,7 +367,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
-        backgroundColor: const Color(0xFF202020),
+        backgroundColor: navBarBg,
         surfaceTintColor: Colors.transparent,
         indicatorColor: const Color(0xFF0A84FF).withValues(alpha: 0.15),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -409,7 +432,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF282828),
+        fillColor: inputFill,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF373737), width: 0.5),
@@ -427,7 +450,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: WidgetStateProperty.all(0),
-        backgroundColor: WidgetStateProperty.all(const Color(0xFF282828)),
+        backgroundColor: WidgetStateProperty.all(searchBarBg),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -454,6 +477,19 @@ class UnifiedCalendarApp extends ConsumerWidget {
           }
           return const Color(0xFF5A5A5A); // bordure visible
         }),
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        thickness: const WidgetStatePropertyAll(6),
+        radius: const Radius.circular(3),
+        thumbColor: WidgetStatePropertyAll(
+          isAmoled ? const Color(0xFF444444) : const Color(0xFF555555),
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 16),
+        minVerticalPadding: 10,
+        dense: true,
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -497,6 +533,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           SnackBar(
             content: Text(
               'Conflit résolu — version serveur appliquée pour «${next.title}»',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
             duration: const Duration(seconds: 5),
             behavior: SnackBarBehavior.floating,
@@ -1066,6 +1104,9 @@ class _QuickAddButton extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: isDark ? color : AppColors.textOnStabilo(color),
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 2),
             Text(
@@ -1076,6 +1117,9 @@ class _QuickAddButton extends StatelessWidget {
                 color: (isDark ? color : AppColors.textOnStabilo(color))
                     .withValues(alpha: 0.7),
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
