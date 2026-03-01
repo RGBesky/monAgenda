@@ -89,7 +89,8 @@ class DatabaseHelper {
         dbPath,
         options: OpenDatabaseOptions(singleInstance: false),
       );
-      await plainDb.rawQuery("ATTACH DATABASE '$encPath' AS encrypted KEY '$key'");
+      await plainDb
+          .rawQuery("ATTACH DATABASE '$encPath' AS encrypted KEY '$key'");
       await plainDb.rawQuery("SELECT sqlcipher_export('encrypted')");
       await plainDb.rawQuery("DETACH DATABASE encrypted");
       await plainDb.close();
@@ -1190,5 +1191,6 @@ class DatabaseHelper {
   Future<void> close() async {
     final db = await database;
     await db.close();
+    _database = null;
   }
 }

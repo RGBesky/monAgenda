@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -186,14 +185,6 @@ class AppSettings {
     return CryptoUtils.encryptToExportString(jsonStr, password);
   }
 
-  /// [LEGACY - V1] Encode non-chiffré (gzip + base64). Conservé pour migration.
-  @Deprecated('Utiliser toEncryptedExportString() pour la V2')
-  String toExportString() {
-    final jsonStr = jsonEncode(toExportJson());
-    final compressed = gzip.encode(utf8.encode(jsonStr));
-    return base64Encode(compressed);
-  }
-
   /// Déchiffre un export string AES-256 en AppSettings.
   static AppSettings fromEncryptedExportString(
       String encoded, String password) {
@@ -225,15 +216,6 @@ class AppSettings {
     final jsonStr = CryptoUtils.decryptFromExportString(encoded, password);
     final json = jsonDecode(jsonStr) as Map<String, dynamic>;
     return parseExportedTags(json);
-  }
-
-  /// [LEGACY - V1] Décode un export string non-chiffré. Conservé pour migration.
-  @Deprecated('Utiliser fromEncryptedExportString() pour la V2')
-  static AppSettings fromExportString(String encoded) {
-    final compressed = base64Decode(encoded);
-    final jsonStr = utf8.decode(gzip.decode(compressed));
-    final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-    return fromExportJson(json);
   }
 
   /// Reconstruit depuis un JSON exporté.

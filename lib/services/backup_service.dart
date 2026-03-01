@@ -329,8 +329,7 @@ class BackupService {
 
     try {
       // Tester l'API externe de share kDrive
-      final testUrl =
-          '${AppConstants.kDriveDepositApiBase}/$uuid/file';
+      final testUrl = '${AppConstants.kDriveDepositApiBase}/$uuid/file';
       final response = await dio.get(testUrl);
       final ok = response.statusCode == 200 || response.statusCode == 207;
       AppLogger.instance.info(
