@@ -79,7 +79,6 @@ dependencies:
   shimmer: ^3.0.0
   cached_network_image: ^3.4.1
   sqflite_common_ffi: ^2.4.0+2
-  sqlite3_flutter_libs: ^0.6.0+eol
   hugeicons: ^1.1.5
   qr_flutter: ^4.1.0
 

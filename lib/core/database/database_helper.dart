@@ -76,9 +76,9 @@ class DatabaseHelper {
     }
 
     // Mobile : base chiffrée via SQLCipher
+    final dbKey = await _getDbEncryptionKey();
     final dbPath = await sqlcipher.getDatabasesPath();
     final path = join(dbPath, AppConstants.dbName);
-    final dbKey = await _getDbEncryptionKey();
     return sqlcipher.openDatabase(
       path,
       password: dbKey,
