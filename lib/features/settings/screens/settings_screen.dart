@@ -155,7 +155,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         hugeIcon: HugeIcons.strokeRoundedLink01,
         children: [
           ListTile(
-            leading: SourceLogos.infomaniak(size: 22),
+            leading: SourceLogos.infomaniak(size: 24),
             title: const Text('Infomaniak'),
             subtitle: Text(
               settings?.isInfomaniakConfigured == true
@@ -186,7 +186,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           ListTile(
             leading: SourceLogos.notion(
-              size: 22,
+              size: 24,
               isDark: Theme.of(context).brightness == Brightness.dark,
             ),
             title: const Text('Notion'),

@@ -19,6 +19,7 @@ import '../../events/screens/event_form_screen.dart';
 import '../../search/screens/search_screen.dart';
 import '../widgets/unified_event_card.dart';
 import '../widgets/weather_header.dart';
+import '../../../core/widgets/source_logos.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
@@ -387,6 +388,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                   children: [
                     // ── Infomaniak (togglable) ──
                     _buildSourceRow(
+                      logo: SourceLogos.infomaniak(size: 20),
                       icon: HugeIcons.strokeRoundedCloud,
                       color: AppColors.sourceInfomaniak,
                       label: 'Infomaniak',
@@ -414,6 +416,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: _buildSourceRow(
+                          logo: SourceLogos.notion(size: 20, isDark: isDark),
                           icon: HugeIcons.strokeRoundedDatabase,
                           color: isDark
                               ? const Color(0xFF9B9A97)
@@ -469,6 +472,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     required bool enabled,
     required ValueChanged<bool>? onChanged,
     required bool isDark,
+    Widget? logo,
   }) {
     return Material(
       color: Colors.transparent,
@@ -493,7 +497,10 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              HugeIcon(icon: icon, color: color, size: 18),
+              if (logo != null)
+                SizedBox(width: 18, height: 18, child: logo)
+              else
+                HugeIcon(icon: icon, color: color, size: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(

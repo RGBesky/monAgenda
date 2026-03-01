@@ -17,6 +17,9 @@ import 'features/search/screens/search_screen.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'core/models/event_model.dart';
+import 'core/widgets/source_logos.dart';
+import 'providers/events_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Raccourcis clavier Desktop — données publiques pour affichage dans Settings.
 class AppShellShortcuts {
@@ -72,182 +75,235 @@ class UnifiedCalendarApp extends ConsumerWidget {
   ThemeData _buildLightTheme() {
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
-      primary: Color(0xFF007AFF),
+      primary: Color(0xFF2383E2), // Bleu Notion
       onPrimary: Colors.white,
-      primaryContainer: Color(0xFFD0E4FF),
-      onPrimaryContainer: Color(0xFF003D99),
-      secondary: Color(0xFF6AAB73),
+      primaryContainer: Color(0xFFE8F0FE),
+      onPrimaryContainer: Color(0xFF174EA6),
+      secondary: Color(0xFF0F7B6C), // Vert Notion
       onSecondary: Colors.white,
-      secondaryContainer: Color(0xFFDCEFDF),
-      onSecondaryContainer: Color(0xFF3D6B44),
+      secondaryContainer: Color(0xFFDBEDDB),
+      onSecondaryContainer: Color(0xFF0A5C51),
       tertiary: Color(0xFF9065C0),
       onTertiary: Colors.white,
-      tertiaryContainer: Color(0xFFEDE4F5),
+      tertiaryContainer: Color(0xFFF3EEFB),
       onTertiaryContainer: Color(0xFF5C3D80),
-      error: Color(0xFFE03E3E),
+      error: Color(0xFFEB5757), // Rouge Notion
       onError: Colors.white,
       errorContainer: Color(0xFFFCE4E4),
       onErrorContainer: Color(0xFF8B2020),
       surface: Color(0xFFFFFFFF),
-      onSurface: Color(0xFF37352F),
-      onSurfaceVariant: Color(0xFF787774),
-      outline: Color(0xFFE3E2DE),
-      outlineVariant: Color(0xFFF1F0ED),
-      shadow: Color(0x0A000000),
-      surfaceContainerHighest: Color(0xFFF1F0ED),
-      surfaceContainerHigh: Color(0xFFF4F3F0),
-      surfaceContainerLow: Color(0xFFFAFAF8),
-      surfaceContainer: Color(0xFFF7F6F3),
+      onSurface: Color(0xFF37352F), // Noir Notion
+      onSurfaceVariant: Color(0xFF6B6B6B),
+      outline: Color(0xFFEBEBE9), // Bordure Notion très subtile
+      outlineVariant: Color(0xFFF5F5F3),
+      shadow: Color(0x05000000), // Ombre quasi-invisible
+      surfaceContainerHighest: Color(0xFFF0F0EE),
+      surfaceContainerHigh: Color(0xFFF7F6F3),
+      surfaceContainerLow: Color(0xFFFCFCFB),
+      surfaceContainer: Color(0xFFFAFAF8),
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFFF7F6F3),
+      scaffoldBackgroundColor: const Color(0xFFFFFFFF), // Fond blanc pur Notion
       textTheme: GoogleFonts.interTextTheme().copyWith(
         displayLarge: const TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF37352F)),
+            color: Color(0xFF191919), // Très noir pour max lisibilité
+            letterSpacing: -0.3),
         titleLarge: const TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF37352F)),
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF191919),
+            letterSpacing: -0.2),
         bodyLarge: const TextStyle(
-            fontSize: 15,
+            fontSize: 16, // Plus gros pour lisibilité
             fontWeight: FontWeight.w400,
-            color: Color(0xFF37352F)),
+            color: Color(0xFF37352F),
+            height: 1.5), // Line-height Notion
         bodyMedium: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w400,
-            color: Color(0xFF37352F)),
+            color: Color(0xFF37352F),
+            height: 1.5),
         labelLarge: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF787774)),
+            color: Color(0xFF6B6B6B)),
         bodySmall: const TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF787774)),
+            color: Color(0xFF9B9A97)),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         color: Colors.white,
+        shadowColor: Colors.transparent, // Zéro ombre — style Notion
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
+          borderRadius: BorderRadius.circular(3), // Radius Notion = 3px
+          side: const BorderSide(color: Color(0xFFEBEBE9), width: 0.5),
         ),
         margin: EdgeInsets.zero,
       ),
       appBarTheme: const AppBarTheme(
         centerTitle: false,
         elevation: 0,
-        scrolledUnderElevation: 0.5,
-        backgroundColor: Color(0xFFF7F6F3),
+        scrolledUnderElevation: 0, // Jamais d'ombre — Notion
+        backgroundColor: Color(0xFFFFFFFF), // Blanc pur
         foregroundColor: Color(0xFF37352F),
         surfaceTintColor: Colors.transparent,
         titleTextStyle: TextStyle(
           fontFamily: 'Inter',
           fontSize: 16,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w600, // Semi-bold Notion
           color: Color(0xFF37352F),
+          letterSpacing: -0.1,
         ),
       ),
       dividerTheme: const DividerThemeData(
-        color: Color(0xFFE3E2DE),
-        thickness: 0.5,
+        color: Color(0xFFF0F0EE), // Divider quasi-invisible Notion
+        thickness: 1,
         space: 0,
       ),
       navigationBarTheme: NavigationBarThemeData(
         elevation: 0,
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: const Color(0xFF007AFF).withValues(alpha: 0.12),
+        indicatorColor: const Color(0xFF2383E2).withValues(alpha: 0.08),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF007AFF),
+              color: Color(0xFF2383E2), // Bleu Notion
             );
           }
           return const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF787774),
+            color: Color(0xFF9B9A97), // Gris secondaire Notion
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: Color(0xFF007AFF), size: 22);
+            return const IconThemeData(color: Color(0xFF2383E2), size: 22);
           }
-          return const IconThemeData(color: Color(0xFF787774), size: 22);
+          return const IconThemeData(color: Color(0xFF9B9A97), size: 22);
         }),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: const Color(0xFF007AFF),
+        backgroundColor: const Color(0xFF2383E2), // Bleu Notion
         foregroundColor: Colors.white,
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0, // Pas d'ombre
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         showCloseIcon: true,
         backgroundColor: const Color(0xFF37352F),
         contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
-        actionTextColor: const Color(0xFF69AEFF),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        actionTextColor: const Color(0xFF6CB4EE),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
           elevation: 0,
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          side: const BorderSide(color: Color(0xFFE3E2DE)),
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          side: const BorderSide(color: Color(0xFFE0DFDB)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFFF7F6F3),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
+          borderRadius: BorderRadius.circular(4), // Radius Notion
+          borderSide: const BorderSide(color: Color(0xFFE0DFDB), width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
+          borderRadius: BorderRadius.circular(4),
+          borderSide: const BorderSide(color: Color(0xFFE0DFDB), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF007AFF), width: 1.5),
+          borderRadius: BorderRadius.circular(4),
+          borderSide: const BorderSide(color: Color(0xFF2383E2), width: 2),
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        hintStyle: const TextStyle(
+          color: Color(0xFFC4C4C0), // Placeholder gris clair Notion
+          fontSize: 14,
+        ),
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: WidgetStateProperty.all(0),
-        backgroundColor: WidgetStateProperty.all(const Color(0xFFF1F0ED)),
+        backgroundColor: WidgetStateProperty.all(const Color(0xFFF7F6F3)),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(color: Color(0xFFE3E2DE), width: 0.5),
+            borderRadius: BorderRadius.circular(4), // Notion
+            side: const BorderSide(color: Color(0xFFE0DFDB), width: 1),
           ),
         ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.white;
+          }
+          return const Color(0xFFC4C4C0);
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF2383E2); // Bleu Notion
+          }
+          return const Color(0xFFE0DFDB);
+        }),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.transparent;
+          }
+          return const Color(0xFFD3D3CF);
+        }),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4), // Notion = petit radius
+          side: const BorderSide(color: Color(0xFFEBEBE9), width: 0.5),
+        ),
+        titleTextStyle: const TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF37352F),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: const Color(0xFFF7F6F3), // Fond puce Notion
+        labelStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF37352F),
+        ),
+        side: BorderSide.none, // Pas de bordure chips Notion
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       ),
       scrollbarTheme: const ScrollbarThemeData(
         thickness: WidgetStatePropertyAll(6),
@@ -264,17 +320,28 @@ class UnifiedCalendarApp extends ConsumerWidget {
   }
 
   ThemeData _buildDarkTheme(bool isAmoled) {
-    final scaffoldBg = isAmoled ? const Color(0xFF000000) : const Color(0xFF191919);
-    final surfaceColor = isAmoled ? const Color(0xFF0A0A0A) : const Color(0xFF202020);
-    final cardColor = isAmoled ? const Color(0xFF0F0F0F) : const Color(0xFF252525);
-    final appBarBg = isAmoled ? const Color(0xFF000000) : const Color(0xFF202020);
-    final navBarBg = isAmoled ? const Color(0xFF000000) : const Color(0xFF202020);
-    final inputFill = isAmoled ? const Color(0xFF141414) : const Color(0xFF282828);
-    final searchBarBg = isAmoled ? const Color(0xFF141414) : const Color(0xFF282828);
-    final surfaceContainerLow = isAmoled ? const Color(0xFF0D0D0D) : const Color(0xFF232323);
-    final surfaceContainer = isAmoled ? const Color(0xFF121212) : const Color(0xFF282828);
-    final surfaceContainerHigh = isAmoled ? const Color(0xFF1A1A1A) : const Color(0xFF303030);
-    final surfaceContainerHighest = isAmoled ? const Color(0xFF222222) : const Color(0xFF373737);
+    final scaffoldBg =
+        isAmoled ? const Color(0xFF000000) : const Color(0xFF191919);
+    final surfaceColor =
+        isAmoled ? const Color(0xFF0A0A0A) : const Color(0xFF202020);
+    final cardColor =
+        isAmoled ? const Color(0xFF0F0F0F) : const Color(0xFF252525);
+    final appBarBg =
+        isAmoled ? const Color(0xFF000000) : const Color(0xFF202020);
+    final navBarBg =
+        isAmoled ? const Color(0xFF000000) : const Color(0xFF202020);
+    final inputFill =
+        isAmoled ? const Color(0xFF141414) : const Color(0xFF282828);
+    final searchBarBg =
+        isAmoled ? const Color(0xFF141414) : const Color(0xFF282828);
+    final surfaceContainerLow =
+        isAmoled ? const Color(0xFF0D0D0D) : const Color(0xFF232323);
+    final surfaceContainer =
+        isAmoled ? const Color(0xFF121212) : const Color(0xFF282828);
+    final surfaceContainerHigh =
+        isAmoled ? const Color(0xFF1A1A1A) : const Color(0xFF303030);
+    final surfaceContainerHighest =
+        isAmoled ? const Color(0xFF222222) : const Color(0xFF373737);
 
     final colorScheme = ColorScheme(
       brightness: Brightness.dark,
@@ -527,8 +594,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // V3 : Afficher un SnackBar lorsqu'un conflit ETag est résolu
     ref.listen<EventModel?>(etagConflictProvider, (prev, next) {
       if (next != null) {
-        final messenger =
-            UnifiedCalendarApp.scaffoldMessengerKey.currentState;
+        final messenger = UnifiedCalendarApp.scaffoldMessengerKey.currentState;
         messenger?.showSnackBar(
           SnackBar(
             content: Text(
@@ -611,20 +677,25 @@ class _AppShellState extends ConsumerState<AppShell> {
       indicatorColor: selectedColor.withValues(alpha: 0.12),
       labelType: NavigationRailLabelType.all,
       trailing: Expanded(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Opacity(
-              opacity: 0.7,
-              child: Image.asset(
-                'logo_pack/logo_color_48x48.png',
-                width: 32,
-                height: 32,
-                filterQuality: FilterQuality.medium,
+        child: Column(
+          children: [
+            const Spacer(),
+            // ── Boutons sources (Infomaniak + BDD Notion) ──
+            _buildSourceButtons(isDark),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Opacity(
+                opacity: 0.7,
+                child: Image.asset(
+                  'logo_pack/logo_color_48x48.png',
+                  width: 32,
+                  height: 32,
+                  filterQuality: FilterQuality.medium,
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
       leading: Padding(
@@ -703,6 +774,116 @@ class _AppShellState extends ConsumerState<AppShell> {
                   color: unselectedColor)),
         ),
       ],
+    );
+  }
+
+  /// Boutons sources dans le rail : 1 Infomaniak + 1 par BDD Notion.
+  /// Si > 3 BDD Notion, les premières sont affichées + un bouton "..." ouvre un popup.
+  Widget _buildSourceButtons(bool isDark) {
+    final settingsAsync = ref.watch(settingsProvider);
+    final settings = settingsAsync.valueOrNull;
+    final notionDbsAsync = ref.watch(notionDatabasesProvider);
+    final notionDbs = notionDbsAsync.valueOrNull ?? [];
+
+    final hasInfomaniak = settings?.isInfomaniakConfigured ?? false;
+    final hasNotion = notionDbs.isNotEmpty;
+
+    if (!hasInfomaniak && !hasNotion) return const SizedBox.shrink();
+
+    const maxVisibleDbs = 3;
+    final visibleDbs = notionDbs.take(maxVisibleDbs).toList();
+    final overflowDbs = notionDbs.length > maxVisibleDbs
+        ? notionDbs.sublist(maxVisibleDbs)
+        : <dynamic>[];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Séparateur discret
+          Divider(
+            color: isDark ? Colors.white12 : const Color(0xFFE8E8E8),
+            height: 1,
+            indent: 4,
+            endIndent: 4,
+          ),
+          const SizedBox(height: 8),
+
+          // Bouton Infomaniak
+          if (hasInfomaniak)
+            _SourceRailButton(
+              logo: SourceLogos.infomaniak(size: 22),
+              label: 'Infomaniak',
+              isDark: isDark,
+              onTap: () => _openUrl('https://mail.infomaniak.com/'),
+            ),
+
+          // Boutons BDD Notion visibles
+          ...visibleDbs.map((db) => _SourceRailButton(
+                logo: SourceLogos.notion(size: 22, isDark: isDark),
+                label: db.name,
+                isDark: isDark,
+                onTap: () => _openUrl(
+                    'https://www.notion.so/${db.notionId.replaceAll('-', '')}'),
+              )),
+
+          // Bouton overflow si > maxVisibleDbs
+          if (overflowDbs.isNotEmpty)
+            _SourceRailButton(
+              logo: SourceLogos.notion(size: 18, isDark: isDark),
+              label: '+${overflowDbs.length}',
+              isDark: isDark,
+              onTap: () => _showOverflowNotionDbs(context, isDark, overflowDbs),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _showOverflowNotionDbs(
+      BuildContext context, bool isDark, List<dynamic> dbs) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Bases Notion',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : const Color(0xFF191919),
+                ),
+              ),
+            ),
+            ...dbs.map((db) => ListTile(
+                  leading: SourceLogos.notion(size: 24, isDark: isDark),
+                  title: Text(db.name),
+                  trailing: const Icon(Icons.open_in_new, size: 16),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openUrl(
+                        'https://www.notion.so/${db.notionId.replaceAll('-', '')}');
+                  },
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 
@@ -901,6 +1082,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   Expanded(
                     child: _QuickAddButton(
                       icon: HugeIcons.strokeRoundedCalendar03,
+                      logo: SourceLogos.infomaniak(size: 28),
                       label: 'Rendez-vous',
                       sublabel: 'Infomaniak',
                       color: AppColors.stabiloBlue,
@@ -922,6 +1104,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   Expanded(
                     child: _QuickAddButton(
                       icon: HugeIcons.strokeRoundedTask01,
+                      logo: SourceLogos.notion(size: 28, isDark: isDark),
                       label: 'Tâche',
                       sublabel: 'Notion',
                       color: AppColors.stabiloLilac,
@@ -1028,6 +1211,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           TextButton(
@@ -1059,6 +1244,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 // ── Bouton du Quick Add Sheet ─────────────────────────────────────────────
 class _QuickAddButton extends StatelessWidget {
   final dynamic icon;
+  final Widget? logo;
   final String label;
   final String sublabel;
   final Color color;
@@ -1066,6 +1252,7 @@ class _QuickAddButton extends StatelessWidget {
 
   const _QuickAddButton({
     required this.icon,
+    this.logo,
     required this.label,
     required this.sublabel,
     required this.color,
@@ -1091,11 +1278,14 @@ class _QuickAddButton extends StatelessWidget {
         ),
         child: Column(
           children: [
-            HugeIcon(
-              icon: icon,
-              color: isDark ? color : AppColors.textOnStabilo(color),
-              size: 32,
-            ),
+            if (logo != null)
+              SizedBox(width: 32, height: 32, child: Center(child: logo!))
+            else
+              HugeIcon(
+                icon: icon,
+                color: isDark ? color : AppColors.textOnStabilo(color),
+                size: 32,
+              ),
             const SizedBox(height: 8),
             Text(
               label,
@@ -1122,6 +1312,63 @@ class _QuickAddButton extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bouton source compact pour le NavigationRail.
+class _SourceRailButton extends StatelessWidget {
+  final Widget logo;
+  final String label;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _SourceRailButton({
+    required this.logo,
+    required this.label,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Container(
+            width: 64,
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : const Color(0xFFF5F5F5),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                logo,
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : const Color(0xFF666666),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -156,6 +156,27 @@ class EventDetailScreen extends ConsumerWidget {
           if (Platform.isLinux || Platform.isMacOS || Platform.isWindows)
             _buildMeetingNoteButton(context, ref),
 
+          // ── Bouton "Ouvrir dans la source" ──────────────
+          if (event.isFromNotion && event.notionPageId != null) ...[
+            const SizedBox(height: 12),
+            _buildOpenInSourceButton(
+              context,
+              logo: SourceLogos.notion(size: 20, isDark: isDark),
+              label: 'Ouvrir dans Notion',
+              url:
+                  'https://www.notion.so/${event.notionPageId!.replaceAll('-', '')}',
+            ),
+          ],
+          if (event.isFromInfomaniak) ...[
+            const SizedBox(height: 12),
+            _buildOpenInSourceButton(
+              context,
+              logo: SourceLogos.infomaniak(size: 20),
+              label: 'Ouvrir dans Infomaniak',
+              url: 'https://mail.infomaniak.com/',
+            ),
+          ],
+
           Divider(color: Theme.of(context).colorScheme.outline, height: 32),
           _buildMetadata(context, subColor),
 
@@ -350,7 +371,8 @@ class EventDetailScreen extends ConsumerWidget {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+              border:
+                  Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -358,7 +380,8 @@ class EventDetailScreen extends ConsumerWidget {
                 Container(
                   width: 7,
                   height: 7,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  decoration:
+                      BoxDecoration(color: color, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
                 Flexible(
@@ -378,11 +401,11 @@ class EventDetailScreen extends ConsumerWidget {
                   style: TextStyle(
                     color: color.withValues(alpha: 0.6),
                     fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -557,6 +580,53 @@ class EventDetailScreen extends ConsumerWidget {
     return 'Récurrent';
   }
 
+  // ── Bouton "Ouvrir dans la source" ────────────────────────────
+  Widget _buildOpenInSourceButton(
+    BuildContext context, {
+    required Widget logo,
+    required String label,
+    required String url,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return OutlinedButton(
+      onPressed: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 44),
+        side: BorderSide(
+          color: isDark ? Colors.white24 : const Color(0xFFDDDDDD),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          logo,
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : const Color(0xFF191919),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(
+            Icons.open_in_new,
+            size: 14,
+            color: isDark ? Colors.white54 : const Color(0xFF999999),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Meeting Note Notion (Desktop) ─────────────────────────────
   Widget _buildMeetingNoteButton(BuildContext context, WidgetRef ref) {
     final meetingService = ref.watch(notionMeetingServiceProvider);
@@ -690,8 +760,7 @@ class EventDetailScreen extends ConsumerWidget {
 
   void _removeAttachment(WidgetRef ref, String path) {
     final updated = event.copyWith(
-      smartAttachments:
-          event.smartAttachments.where((p) => p != path).toList(),
+      smartAttachments: event.smartAttachments.where((p) => p != path).toList(),
     );
     ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
   }

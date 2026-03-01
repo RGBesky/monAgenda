@@ -55,7 +55,7 @@ class AppConstants {
   static const int cacheDurationHours = 24;
 
   // Taille des logos source (px)
-  static const double sourceLogoSize = 16.0;
+  static const double sourceLogoSize = 18.0;
 
   // Tags prédéfinis — palette Notion
   static const List<Map<String, dynamic>> defaultCategories = [

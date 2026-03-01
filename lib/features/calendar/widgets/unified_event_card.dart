@@ -77,26 +77,30 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
     final categoryTags = event.categoryTags;
     if (categoryTags.isNotEmpty) {
       final tagColor = AppColors.fromHex(categoryTags.first.colorHex);
-      // Si la couleur est déjà "Stabilo-like" (très clair), l'utiliser directement.
       final luminance = tagColor.computeLuminance();
       if (luminance > 0.5) {
-        return tagColor.withValues(alpha: isDark ? 0.15 : 0.6);
+        // Déjà pastel → alpha très léger pour fond blanc lisible
+        return tagColor.withValues(alpha: isDark ? 0.15 : 0.18);
       }
       return isDark
           ? tagColor.withValues(alpha: 0.15)
-          : Color.lerp(tagColor, Colors.white, 0.82)!;
+          : Color.lerp(tagColor, Colors.white, 0.92)!; // Quasi-blanc teinté
     }
-    // Sans tag : fond neutre
-    return isDark ? AppColors.darkSurface : AppColors.lightSurface;
+    // Sans tag : fond blanc pur
+    return isDark ? AppColors.darkSurface : Colors.white;
   }
 
   // ── Couleur du texte de la carte ──────────────────────────
   Color _textColor(bool isDark) {
-    return isDark ? AppColors.darkText : AppColors.lightText;
+    return isDark
+        ? AppColors.darkText
+        : const Color(0xFF191919); // Noir profond pour max lisibilité
   }
 
   Color _subColor(bool isDark) {
-    return isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    return isDark
+        ? AppColors.darkTextSecondary
+        : const Color(0xFF6B6B6B); // Gris Notion secondaire
   }
 
   @override
@@ -116,15 +120,22 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(3), // Radius Notion
             child: Container(
               decoration: BoxDecoration(
                 color: cardBg,
                 border: Border(
-                  left: BorderSide(color: priorityColor, width: 6),
-                  top: BorderSide(color: borderColor, width: 0.5),
-                  right: BorderSide(color: borderColor, width: 0.5),
-                  bottom: BorderSide(color: borderColor, width: 0.5),
+                  left: BorderSide(
+                      color: priorityColor, width: 4), // Bordure gauche fine
+                  top: BorderSide(
+                      color: isDark ? borderColor : const Color(0xFFEBEBE9),
+                      width: 0.5),
+                  right: BorderSide(
+                      color: isDark ? borderColor : const Color(0xFFEBEBE9),
+                      width: 0.5),
+                  bottom: BorderSide(
+                      color: isDark ? borderColor : const Color(0xFFEBEBE9),
+                      width: 0.5),
                 ),
               ),
               child: Padding(
@@ -195,9 +206,12 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
             event.title,
             style: TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w600,
+              fontWeight: isDark
+                  ? FontWeight.w600
+                  : FontWeight.w700, // Plus gras en clair
               color: textColor,
-              height: 1.3,
+              height: 1.4,
+              letterSpacing: -0.1,
               decoration: isCompleted ? TextDecoration.lineThrough : null,
               decorationColor: textColor.withValues(alpha: 0.5),
             ),
@@ -206,39 +220,45 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
           ),
         ),
         const SizedBox(width: 8),
-        // Icône source
-        _buildSourceIcon(isDark),
+        // Icône source (constrainte pour éviter overflow)
+        Flexible(
+          flex: 0,
+          child: _buildSourceIcon(isDark),
+        ),
       ],
     );
   }
 
   Widget _buildSourceIcon(bool isDark) {
     if (event.isFromNotion) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SourceLogos.notion(size: 16, isDark: isDark),
-          if (widget.notionDbName != null) ...[
-            const SizedBox(width: 3),
-            Flexible(
-              child: Text(
-                widget.notionDbName!,
-                style: TextStyle(
-                  fontSize: 9,
-                  color: isDark
-                      ? const Color(0xFF9B9A97)
-                      : const Color(0xFF37352F).withValues(alpha: 0.6),
-                  fontWeight: FontWeight.w500,
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 100),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SourceLogos.notion(size: 18, isDark: isDark),
+            if (widget.notionDbName != null) ...[
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
+                  widget.notionDbName!,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: isDark
+                        ? const Color(0xFF9B9A97)
+                        : const Color(0xFF37352F).withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       );
     } else if (event.isFromInfomaniak) {
-      return SourceLogos.infomaniak(size: 16);
+      return SourceLogos.infomaniak(size: 18);
     } else {
       final color = AppColors.sourceIcs.withValues(alpha: 0.8);
       return HugeIcon(
@@ -283,14 +303,15 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
 
   Widget _buildCategoryChip(TagModel tag, bool isDark) {
     final tagColor = AppColors.fromHex(tag.colorHex);
-    // Utiliser la couleur Stabilo correspondante si le tag a une couleur vive
     final chiColor = _stabilizerColor(tagColor);
     return _EventChip(
       label: tag.name,
       bgColor: isDark
           ? chiColor.withValues(alpha: 0.2)
-          : chiColor.withValues(alpha: 0.9),
-      textColor: isDark ? chiColor : AppColors.textOnStabilo(chiColor),
+          : chiColor.withValues(alpha: 0.55), // Plus doux, lisible
+      textColor: isDark
+          ? chiColor
+          : const Color(0xFF37352F), // Texte toujours noir Notion
     );
   }
 
@@ -313,8 +334,10 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
     final stabilo = _stabilizerColor(chipColor);
     return _EventChip(
       label: tag.name,
-      bgColor: isDark ? stabilo.withValues(alpha: 0.25) : stabilo,
-      textColor: isDark ? stabilo : AppColors.textOnStabilo(stabilo),
+      bgColor: isDark
+          ? stabilo.withValues(alpha: 0.25)
+          : stabilo.withValues(alpha: 0.55),
+      textColor: isDark ? stabilo : const Color(0xFF37352F),
     );
   }
 
@@ -415,7 +438,7 @@ class _EventChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(3), // Radius Notion
       ),
       child: Text(
         label,

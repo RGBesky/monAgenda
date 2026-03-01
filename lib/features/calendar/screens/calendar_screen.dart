@@ -18,6 +18,7 @@ import '../../../services/weather_service.dart';
 import '../../events/screens/event_detail_screen.dart';
 import '../../events/screens/event_form_screen.dart';
 import '../widgets/weather_header.dart';
+import '../../../core/widgets/source_logos.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
@@ -335,6 +336,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   children: [
                     // ── Infomaniak (toujours visible, non masquable) ──
                     _buildSourceRow(
+                      logo: SourceLogos.infomaniak(size: 20),
                       icon: HugeIcons.strokeRoundedCloud,
                       color: AppColors.sourceInfomaniak,
                       label: 'Infomaniak',
@@ -351,6 +353,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: _buildSourceRow(
+                          logo: SourceLogos.notion(size: 20, isDark: isDark),
                           icon: HugeIcons.strokeRoundedDatabase,
                           color: AppColors.sourceNotion,
                           label: db.name,
@@ -404,6 +407,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     required bool enabled,
     required ValueChanged<bool>? onChanged,
     required bool isDark,
+    Widget? logo,
   }) {
     return Material(
       color: Colors.transparent,
@@ -428,7 +432,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              HugeIcon(icon: icon, color: color, size: 18),
+              if (logo != null)
+                SizedBox(width: 18, height: 18, child: logo)
+              else
+                HugeIcon(icon: icon, color: color, size: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -719,11 +726,20 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   if (apt is EventModel) {
                     final event = apt;
                     final color = _getCategoryColor(event);
-                    final icon = _categoryIcon(event);
-                    return HugeIcon(
-                      icon: icon,
-                      color: isDark ? color.withValues(alpha: 0.9) : color,
-                      size: 13,
+                    // Vrais logos source en vue mois (13px)
+                    if (event.isFromNotion) {
+                      return SourceLogos.notion(size: 14, isDark: isDark);
+                    } else if (event.isFromInfomaniak) {
+                      return SourceLogos.infomaniak(size: 14);
+                    }
+                    // Fallback : dot coloré catégorie pour .ics
+                    return Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isDark ? color.withValues(alpha: 0.9) : color,
+                        shape: BoxShape.circle,
+                      ),
                     );
                   }
                   // Fallback pour Appointment brut
@@ -770,10 +786,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final accent = _getCategoryColor(event);
     final bg = isDark
         ? accent.withValues(alpha: 0.15)
-        : Color.lerp(accent, Colors.white, 0.78)!;
-    final titleColor = isDark ? AppColors.darkText : AppColors.lightText;
+        : Color.lerp(accent, Colors.white, 0.92)!; // Quasi-blanc teinté Notion
+    final titleColor = isDark ? AppColors.darkText : const Color(0xFF191919);
     final subColor =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+        isDark ? AppColors.darkTextSecondary : const Color(0xFF6B6B6B);
 
     // Bordure gauche = PRIORITÉ (Design System §4.1 : 1/4 de la cellule)
     // Pour les all-day (bandeau fin), on réduit la bordure
@@ -894,7 +910,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ),
           ),
           const SizedBox(width: 4),
-          _sourceIcon(event, isDark, 12),
+          _sourceIcon(event, isDark, 14),
           if (event.categoryTags.isNotEmpty) ...[
             const SizedBox(width: 4),
             _compactCategoryDot(event, isDark),
@@ -942,7 +958,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ),
           ),
           const SizedBox(width: 4),
-          _sourceIcon(event, isDark, 12),
+          _sourceIcon(event, isDark, 14),
           if (!event.isAllDay && w > 100) ...[
             const SizedBox(width: 4),
             Text(
@@ -984,7 +1000,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ),
               ),
               const SizedBox(width: 4),
-              _sourceIcon(event, isDark, 12),
+              _sourceIcon(event, isDark, 14),
             ],
           ),
           const SizedBox(height: 1),
@@ -1070,23 +1086,20 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
   }
 
-  /// Icône source (Design System §4.1 : toujours visible, 16px)
+  /// Icône source (Design System §4.1 : toujours visible, vrais logos PNG)
   Widget _sourceIcon(EventModel event, bool isDark, double size) {
-    dynamic icon;
-    Color color;
     if (event.isFromNotion) {
-      icon = HugeIcons.strokeRoundedTask01;
-      color = isDark
-          ? Colors.white.withValues(alpha: 0.6)
-          : const Color(0xFF37352F).withValues(alpha: 0.5);
+      return SourceLogos.notion(size: size, isDark: isDark);
     } else if (event.isFromInfomaniak) {
-      icon = HugeIcons.strokeRoundedCalendar03;
-      color = AppColors.sourceInfomaniak.withValues(alpha: 0.8);
+      return SourceLogos.infomaniak(size: size);
     } else {
-      icon = HugeIcons.strokeRoundedCalendar01;
-      color = AppColors.sourceIcs.withValues(alpha: 0.8);
+      final color = AppColors.sourceIcs.withValues(alpha: 0.8);
+      return HugeIcon(
+        icon: HugeIcons.strokeRoundedCalendar01,
+        color: color,
+        size: size,
+      );
     }
-    return HugeIcon(icon: icon, color: color, size: size);
   }
 
   /// Chips catégorie + statut (Design System §4.1)

@@ -178,9 +178,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
               prefixIcon: const Icon(Icons.lock_outline),
               filled: true,
               suffixIcon: IconButton(
-                icon: Icon(_obscurePassword
-                    ? Icons.visibility_off
-                    : Icons.visibility),
+                icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility),
                 onPressed: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
               ),
@@ -345,9 +344,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             ),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: _testingInfomaniak || _testingNotion
-                ? null
-                : () => _runTests(),
+            onPressed:
+                _testingInfomaniak || _testingNotion ? null : () => _runTests(),
             icon: _testingInfomaniak || _testingNotion
                 ? const SizedBox(
                     width: 18,

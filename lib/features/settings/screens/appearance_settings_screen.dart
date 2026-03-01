@@ -172,9 +172,7 @@ class _AppearanceSettingsScreenState
                 ),
                 value: settings.amoledMode,
                 onChanged: (val) async {
-                  await ref
-                      .read(settingsProvider.notifier)
-                      .setAmoledMode(val);
+                  await ref.read(settingsProvider.notifier).setAmoledMode(val);
                 },
               ),
             const Divider(height: 1),
