@@ -103,3 +103,9 @@ flutter:
   assets:
     - assets/logos/
     - logo_pack/
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name: sqlcipher

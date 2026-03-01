@@ -50,7 +50,12 @@ cd monAgenda
 - Flutter 3.x
 - Dart 3.x
 - Pour Android : Android SDK API 26+
-- Pour Linux : GTK3, CMake
+- Pour Linux : GTK3, CMake, **libsqlcipher1** (chiffrement DB)
+
+#### Installer SQLCipher (Linux)
+```bash
+sudo apt install -y libsqlcipher1 libsqlcipher-dev
+```
 
 ### Dépendances
 ```bash
@@ -139,9 +144,18 @@ Ce projet utilise `syncfusion_flutter_calendar`. Pour un usage personnel gratuit
 Les logos sources (Infomaniak "ik", Notion "N") sont utilisés à des fins personnelles uniquement. Vérifiez les CGU de chaque service avant distribution publique.
 
 ### Sécurité
+- **Base de données chiffrée** : SQLCipher sur mobile (via `sqflite_sqlcipher`) et sur desktop (via `libsqlcipher1` système)
 - Tokens stockés via `flutter_secure_storage` (Android Keystore / libsecret)
 - Sauvegarde chiffrée AES-256 (mot de passe requis)
+- Certificate pinning TOFU (Trust on First Use) pour Infomaniak et Notion
 - Aucun serveur tiers — données entre l'appli et Infomaniak/Notion uniquement
+
+### Packaging .deb
+Pour distribuer en `.deb`, déclarer la dépendance dans le fichier `debian/control` :
+```
+Depends: libsqlcipher1 (>= 4.5)
+```
+Installer avec `apt install ./monagenda.deb` (résout les dépendances automatiquement).
 
 ## Licence
 Usage personnel uniquement (V1).

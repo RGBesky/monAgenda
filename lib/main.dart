@@ -55,6 +55,7 @@ void main() async {
   };
 
   // Sur desktop (Linux, macOS, Windows), utiliser sqflite_common_ffi
+  // SQLCipher est chargé automatiquement via hooks/user_defines dans pubspec.yaml
   if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;

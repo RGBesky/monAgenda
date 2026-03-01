@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -55,22 +56,96 @@ class DatabaseHelper {
     return existing ?? await _generateAndStoreKey();
   }
 
+  /// Migre une DB desktop existante non chiffrée vers SQLCipher.
+  /// Utilise sqlcipher_export pour convertir sans perte de données.
+  /// Ne fait rien si la DB est déjà chiffrée ou n'existe pas.
+  Future<void> _migrateToEncryptedIfNeeded(String dbPath, String key) async {
+    final dbFile = File(dbPath);
+    if (!dbFile.existsSync()) return; // Pas de DB → onCreate la créera chiffrée
+
+    // Tester si la DB est déjà chiffrée : essayer de l'ouvrir sans clé
+    // Si ça échoue c'est déjà chiffré → rien à faire
+    try {
+      final testDb = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          readOnly: true,
+          singleInstance: false,
+        ),
+      );
+      // Si on arrive ici, la DB est non chiffrée (lisible sans clé)
+      // Lire le user_version pour le restaurer après migration
+      final versionResult = await testDb.rawQuery('PRAGMA user_version');
+      final currentVersion = _firstIntValue(versionResult);
+      await testDb.close();
+
+      // Chemin temporaire pour la DB chiffrée
+      final encPath = '$dbPath.enc';
+      final encFile = File(encPath);
+      if (encFile.existsSync()) encFile.deleteSync();
+
+      // Ouvrir la DB non chiffrée et exporter vers une chiffrée
+      final plainDb = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      await plainDb.rawQuery("ATTACH DATABASE '$encPath' AS encrypted KEY '$key'");
+      await plainDb.rawQuery("SELECT sqlcipher_export('encrypted')");
+      await plainDb.rawQuery("DETACH DATABASE encrypted");
+      await plainDb.close();
+
+      // Remplacer l'ancienne DB par la chiffrée
+      final backupPath = '$dbPath.bak';
+      dbFile.renameSync(backupPath);
+      File(encPath).renameSync(dbPath);
+
+      // Restaurer le user_version dans la DB chiffrée
+      final newDb = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          singleInstance: false,
+          onConfigure: (db) async {
+            await db.rawQuery("PRAGMA key = '$key'");
+          },
+        ),
+      );
+      await newDb.execute('PRAGMA user_version = $currentVersion');
+      await newDb.close();
+
+      // Supprimer le backup
+      final bakFile = File(backupPath);
+      if (bakFile.existsSync()) bakFile.deleteSync();
+
+      debugPrint('[DB] ✅ Migration SQLCipher desktop réussie');
+    } catch (_) {
+      // La DB n'est pas lisible sans clé → déjà chiffrée, rien à faire
+      debugPrint('[DB] DB déjà chiffrée ou inaccessible, pas de migration');
+    }
+  }
+
   Future<Database> _initDatabase() async {
-    // Sur desktop (Linux/macOS/Windows), sqflite_common_ffi ne supporte pas
-    // SQLCipher nativement ; le password est utilisé sur mobile uniquement.
     final bool isDesktop =
         Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
     if (isDesktop) {
-      // Utilise databaseFactory globale (databaseFactoryFfi assignée dans main.dart)
+      // Desktop : SQLCipher via libsqlcipher.so.1 (chargé dans main.dart)
+      final dbKey = await _getDbEncryptionKey();
       final dbPath = await databaseFactory.getDatabasesPath();
       final path = join(dbPath, AppConstants.dbName);
+
+      // Migrer la DB existante non chiffrée si nécessaire
+      await _migrateToEncryptedIfNeeded(path, dbKey);
+
       return databaseFactory.openDatabase(
         path,
         options: OpenDatabaseOptions(
           version: kCurrentDbVersion,
           onCreate: _onCreate,
           onUpgrade: _onUpgrade,
+          onConfigure: (db) async {
+            // Clé SQLCipher AVANT toute lecture (user_version, etc.)
+            await db.rawQuery("PRAGMA key = '$dbKey'");
+          },
         ),
       );
     }
