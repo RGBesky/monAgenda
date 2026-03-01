@@ -11,6 +11,7 @@ import 'services/notification_service.dart';
 import 'services/background_worker_service.dart';
 import 'services/logger_service.dart';
 import 'services/llama_service.dart';
+import 'core/database/database_helper.dart';
 import 'app.dart';
 
 /// Observer global des providers Riverpod.
@@ -74,6 +75,10 @@ void main() async {
 
   // ── V3 : Initialiser le chemin de la bibliothèque llama.cpp ──
   LlamaService.initLibraryPath();
+
+  // ── Nettoyage automatique des logs au démarrage ──
+  // Supprime les logs > 7 jours + trim à 1000 max
+  DatabaseHelper.instance.startupLogCleanup();
 
   runApp(
     ProviderScope(

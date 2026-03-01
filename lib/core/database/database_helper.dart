@@ -867,7 +867,13 @@ class DatabaseHelper {
   // SYSTEM LOGS (V2 - Gestion erreurs silencieuses)
   // ============================================================
 
-  /// Ajoute un log système.
+  /// Limite max de logs en BDD. Au-delà, les plus anciens sont purgés.
+  static const int maxLogEntries = 1000;
+
+  /// Compteur d'insertions pour déclencher le trim périodique.
+  int _logInsertCount = 0;
+
+  /// Ajoute un log système avec auto-trim (purge les anciens si > maxLogEntries).
   Future<int> insertSystemLog({
     required String level,
     required String source,
@@ -875,7 +881,7 @@ class DatabaseHelper {
     String? details,
   }) async {
     final db = await database;
-    return db.insert(AppConstants.tableSystemLogs, {
+    final id = await db.insert(AppConstants.tableSystemLogs, {
       'level': level,
       'source': source,
       'message': message,
@@ -883,6 +889,15 @@ class DatabaseHelper {
       'created_at': DateTime.now().toIso8601String(),
       'is_read': 0,
     });
+
+    // Auto-trim toutes les 50 insertions pour ne pas checker à chaque fois
+    _logInsertCount++;
+    if (_logInsertCount >= 50) {
+      _logInsertCount = 0;
+      await trimLogs(maxLogEntries);
+    }
+
+    return id;
   }
 
   /// Récupère les logs non lus.
@@ -896,11 +911,32 @@ class DatabaseHelper {
     );
   }
 
-  /// Récupère tous les logs récents (dernières 24h).
-  Future<List<Map<String, dynamic>>> getRecentLogs() async {
+  /// Récupère tous les logs (avec filtre optionnel par niveau).
+  Future<List<Map<String, dynamic>>> getAllLogs({String? levelFilter}) async {
+    final db = await database;
+    return db.query(
+      AppConstants.tableSystemLogs,
+      where: levelFilter != null ? 'level = ?' : null,
+      whereArgs: levelFilter != null ? [levelFilter] : null,
+      orderBy: 'created_at DESC',
+      limit: 500,
+    );
+  }
+
+  /// Récupère tous les logs récents (dernières 24h), avec filtre optionnel.
+  Future<List<Map<String, dynamic>>> getRecentLogs(
+      {String? levelFilter}) async {
     final db = await database;
     final cutoff =
         DateTime.now().subtract(const Duration(hours: 24)).toIso8601String();
+    if (levelFilter != null) {
+      return db.query(
+        AppConstants.tableSystemLogs,
+        where: 'created_at >= ? AND level = ?',
+        whereArgs: [cutoff, levelFilter],
+        orderBy: 'created_at DESC',
+      );
+    }
     return db.query(
       AppConstants.tableSystemLogs,
       where: 'created_at >= ?',
@@ -930,16 +966,51 @@ class DatabaseHelper {
     return _firstIntValue(result);
   }
 
-  /// Nettoie les logs de plus de 7 jours.
-  Future<void> cleanOldLogs() async {
+  /// Nombre total de logs en BDD.
+  Future<int> getLogCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM ${AppConstants.tableSystemLogs}',
+    );
+    return _firstIntValue(result);
+  }
+
+  /// Nettoie les logs de plus de [days] jours (défaut 7).
+  Future<int> cleanOldLogs({int days = 7}) async {
     final db = await database;
     final cutoff =
-        DateTime.now().subtract(const Duration(days: 7)).toIso8601String();
-    await db.delete(
+        DateTime.now().subtract(Duration(days: days)).toIso8601String();
+    return db.delete(
       AppConstants.tableSystemLogs,
       where: 'created_at < ?',
       whereArgs: [cutoff],
     );
+  }
+
+  /// Garde uniquement les [maxEntries] logs les plus récents.
+  Future<int> trimLogs(int maxEntries) async {
+    final db = await database;
+    // Supprime tous ceux dont l'id n'est pas dans les N plus récents
+    return db.rawDelete(
+      'DELETE FROM ${AppConstants.tableSystemLogs} '
+      'WHERE id NOT IN ('
+      '  SELECT id FROM ${AppConstants.tableSystemLogs} '
+      '  ORDER BY created_at DESC LIMIT ?'
+      ')',
+      [maxEntries],
+    );
+  }
+
+  /// Supprime TOUS les logs.
+  Future<int> clearAllLogs() async {
+    final db = await database;
+    return db.delete(AppConstants.tableSystemLogs);
+  }
+
+  /// Purge au démarrage : supprime les vieux logs + trim au max.
+  Future<void> startupLogCleanup() async {
+    await cleanOldLogs();
+    await trimLogs(maxLogEntries);
   }
 
   Future<void> close() async {
