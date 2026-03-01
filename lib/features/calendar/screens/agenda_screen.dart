@@ -16,6 +16,7 @@ import '../../../providers/tags_provider.dart';
 import '../../../services/weather_service.dart';
 import '../../events/widgets/event_detail_popup.dart';
 import '../../events/screens/event_form_screen.dart';
+import '../../search/screens/search_screen.dart';
 import '../widgets/unified_event_card.dart';
 import '../widgets/weather_header.dart';
 
@@ -222,8 +223,13 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             color: Theme.of(context).colorScheme.onSurface,
             size: 22,
           ),
-          onPressed: () {},
-          tooltip: 'Rechercher',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
+            );
+          },
+          tooltip: 'Rechercher (Ctrl+F)',
         ),
         // Bouton sync — couleur selon l'état de connexion
         Consumer(builder: (context, ref, _) {

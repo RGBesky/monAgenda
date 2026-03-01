@@ -13,6 +13,7 @@ import 'features/settings/screens/settings_screen.dart';
 import 'features/setup/setup_screen.dart';
 import 'features/events/screens/event_form_screen.dart';
 import 'features/magic/magic_entry_screen.dart';
+import 'features/search/screens/search_screen.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 
@@ -785,10 +786,12 @@ class _AppShellState extends ConsumerState<AppShell> {
           MaterialPageRoute(builder: (_) => const MagicEntryScreen()),
         );
       },
-      // Ctrl+F → Focus recherche (switch to Agenda tab with search)
+      // Ctrl+F → Ouvrir l'écran de recherche
       const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
-        setState(() => _selectedIndex = 0);
-        // The search bar is in AgendaScreen — switching to it is sufficient
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SearchScreen()),
+        );
       },
       // Escape → Fermer modal/BottomSheet
       const SingleActivator(LogicalKeyboardKey.escape): () {
