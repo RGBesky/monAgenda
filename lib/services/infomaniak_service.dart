@@ -1,13 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
 import '../core/models/tag_model.dart';
-import '../core/security/cert_pins.dart';
+import '../core/security/cert_pin_manager.dart';
 import '../core/utils/date_utils.dart';
 import 'logger_service.dart';
 
@@ -33,30 +30,12 @@ class InfomaniakService {
       : _calDavDio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 30),
-        )) {
-    // V3 : Certificate pinning pour Infomaniak CalDAV
-    (_calDavDio.httpClientAdapter as IOHttpClientAdapter).createHttpClient =
-        () {
-      final client = HttpClient();
-      client.badCertificateCallback =
-          (X509Certificate cert, String host, int port) {
-        // Vérifier uniquement pour les domaines Infomaniak
-        if (host.contains('infomaniak.com')) {
-          final sha256 = crypto.sha256.convert(cert.der).toString();
-          if (!kInfomaniakCertPins.contains(sha256)) {
-            AppLogger.instance.error(
-              'CertPin',
-              'Certificate pinning FAIL on $host : $sha256',
-            );
-            // Note : les pins placeholder acceptent tout en dev.
-            // En production, décommenter le throw ci-dessous :
-            // throw CertificatePinningException('Certificat non reconnu pour $host');
-          }
-        }
-        return false; // Rejeter les certificats invalides
-      };
-      return client;
-    };
+        ));
+
+  /// Vérifie les certificats Infomaniak via CertPinManager (TOFU + auto-rotation).
+  /// À appeler avant la première requête (ex: dans setCredentials ou validateCredentials).
+  Future<bool> verifyCertificates() async {
+    return CertPinManager.instance.verifyInfomaniak();
   }
 
   void setCredentials({

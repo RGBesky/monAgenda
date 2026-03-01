@@ -231,6 +231,23 @@ class DatabaseHelper {
       'CREATE INDEX idx_system_logs_level ON ${AppConstants.tableSystemLogs}(level)',
     );
 
+    // ── V12 : Table cert_pins (auto-rotation TOFU) ──
+    await db.execute('''
+      CREATE TABLE cert_pins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        host TEXT NOT NULL UNIQUE,
+        der_sha256 TEXT NOT NULL,
+        issuer TEXT,
+        subject TEXT,
+        expires_at TEXT,
+        first_seen TEXT NOT NULL,
+        last_verified TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE UNIQUE INDEX idx_cert_pins_host ON cert_pins(host)',
+    );
+
     // Tags par défaut
     await _insertDefaultTags(db);
   }
@@ -1011,6 +1028,88 @@ class DatabaseHelper {
   Future<void> startupLogCleanup() async {
     await cleanOldLogs();
     await trimLogs(maxLogEntries);
+  }
+
+  // ============================================================
+  // CERT PINS (auto-rotation TOFU)
+  // ============================================================
+
+  /// Récupère le pin stocké pour un hôte.
+  Future<Map<String, dynamic>?> getCertPin(String host) async {
+    final db = await database;
+    final rows = await db.query(
+      'cert_pins',
+      where: 'host = ?',
+      whereArgs: [host],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Insère ou met à jour le pin pour un hôte.
+  Future<void> upsertCertPin({
+    required String host,
+    required String derSha256,
+    String? issuer,
+    String? subject,
+    DateTime? expiresAt,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    final existing = await getCertPin(host);
+    if (existing == null) {
+      await db.insert('cert_pins', {
+        'host': host,
+        'der_sha256': derSha256,
+        'issuer': issuer,
+        'subject': subject,
+        'expires_at': expiresAt?.toIso8601String(),
+        'first_seen': now,
+        'last_verified': now,
+      });
+    } else {
+      await db.update(
+        'cert_pins',
+        {
+          'der_sha256': derSha256,
+          'issuer': issuer,
+          'subject': subject,
+          'expires_at': expiresAt?.toIso8601String(),
+          'last_verified': now,
+        },
+        where: 'host = ?',
+        whereArgs: [host],
+      );
+    }
+  }
+
+  /// Met à jour la date de dernière vérification.
+  Future<void> touchCertPin(String host) async {
+    final db = await database;
+    await db.update(
+      'cert_pins',
+      {'last_verified': DateTime.now().toIso8601String()},
+      where: 'host = ?',
+      whereArgs: [host],
+    );
+  }
+
+  /// Récupère tous les pins stockés.
+  Future<List<Map<String, dynamic>>> getAllCertPins() async {
+    final db = await database;
+    return db.query('cert_pins', orderBy: 'host ASC');
+  }
+
+  /// Supprime le pin d'un hôte.
+  Future<void> deleteCertPin(String host) async {
+    final db = await database;
+    await db.delete('cert_pins', where: 'host = ?', whereArgs: [host]);
+  }
+
+  /// Supprime tous les pins.
+  Future<void> clearAllCertPins() async {
+    final db = await database;
+    await db.delete('cert_pins');
   }
 
   Future<void> close() async {
