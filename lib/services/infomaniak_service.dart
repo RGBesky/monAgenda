@@ -686,8 +686,7 @@ class InfomaniakService {
           for (final pn in parsed.priorityNames) {
             final tag = allTags
                 .where((t) =>
-                    t.isPriority &&
-                    t.name.toLowerCase() == pn.toLowerCase())
+                    t.isPriority && t.name.toLowerCase() == pn.toLowerCase())
                 .firstOrNull;
             if (tag?.id != null) {
               matchedTags.add(tag!);
@@ -700,9 +699,8 @@ class InfomaniakService {
         // Statut depuis DESCRIPTION encodée
         for (final sn in parsed.statusNames) {
           final tag = allTags
-              .where((t) =>
-                  t.isStatus &&
-                  t.name.toLowerCase() == sn.toLowerCase())
+              .where(
+                  (t) => t.isStatus && t.name.toLowerCase() == sn.toLowerCase())
               .firstOrNull;
           if (tag?.id != null) {
             matchedTags.add(tag!);
@@ -728,8 +726,7 @@ class InfomaniakService {
         endDate: endDate,
         isAllDay: isAllDay,
         location: location.isNotEmpty ? location.replaceAll('\\,', ',') : null,
-        description:
-            description.isNotEmpty ? description : null,
+        description: description.isNotEmpty ? description : null,
         rrule: rrule.isNotEmpty ? rrule : null,
         calendarId: calendarId,
         etag: etag,

@@ -96,8 +96,7 @@ class CertPinManager {
       }
 
       // Hash SHA-256 du certificat DER complet
-      final derHash =
-          base64.encode(crypto.sha256.convert(cert.der).bytes);
+      final derHash = base64.encode(crypto.sha256.convert(cert.der).bytes);
 
       // Récupérer le pin stocké en BDD
       final storedPin = await _db.getCertPin(host);
