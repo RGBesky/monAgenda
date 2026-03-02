@@ -1732,6 +1732,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // 5. Déterminer les chemins
     final scriptPath = settings?.pythonScriptPath ?? _resolveScriptPath();
+
+    // Validation sécurité du chemin script
+    if (!scriptPath.endsWith('.py') ||
+        scriptPath.contains('..') ||
+        !File(scriptPath).existsSync()) {
+      if (context.mounted) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('Chemin du script Python invalide ou introuvable'),
+          ),
+        );
+      }
+      return;
+    }
+
     final assetsDir = _resolveAssetsDir();
     final dir = await getDownloadsDirectory() ??
         await getApplicationDocumentsDirectory();
