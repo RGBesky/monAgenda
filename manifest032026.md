@@ -511,7 +511,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 | Phase | Description | Tâches | Fait | Reste | Statut |
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
-| **1** | Bugs bloquants & corrections | 18 | 17 | 1 | 🟠 94% |
+| **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
 | **2** | UX / Ergonomie | 18 | 11 | 7 | 🟡 61% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
@@ -526,7 +526,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 
 - [x] **1.15** — Bannière serveur saturé : `serverSyncErrorProvider` + `_buildServerErrorBanner()` orange + bouton "Réessayer" + dismiss ✅ (déjà implémenté)
 - [x] **1.16** — Conflits ETag (HTTP 412) : GET version serveur → override local (last-remote-wins) + SnackBar "Conflit résolu" via `etagConflictProvider` ✅ (déjà implémenté)
-- [ ] **1.19** — ICS import sans déduplication (double import = doublons) — ajouter check UID
+- [x] **1.19** — ICS import déduplication par UID (remoteId + source) — doublons ignorés avec compteur ✅
 
 ### PHASE 2 — UX / ERGONOMIE (7 tâches restantes)
 

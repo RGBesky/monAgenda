@@ -1155,10 +1155,20 @@ class _ConnectionsSettingsScreenState
 
       if (confirmed != true) return;
 
-      // Insertion en base
+      // Insertion en base avec déduplication par UID (remoteId + source)
       final db = DatabaseHelper.instance;
       int imported = 0;
+      int skipped = 0;
       for (final event in events) {
+        // 1.19 : Vérifier si un événement avec le même UID existe déjà
+        if (event.remoteId != null) {
+          final existing =
+              await db.getEventByRemoteId(event.remoteId!, event.source);
+          if (existing != null) {
+            skipped++;
+            continue;
+          }
+        }
         await db.insertEvent(event);
         imported++;
       }
@@ -1167,11 +1177,14 @@ class _ConnectionsSettingsScreenState
       ref.invalidate(eventsInRangeProvider);
 
       if (!context.mounted) return;
+      final msg = StringBuffer(
+        '$imported événement${imported > 1 ? 's' : ''} importé${imported > 1 ? 's' : ''}',
+      );
+      if (skipped > 0) {
+        msg.write(' · $skipped doublon${skipped > 1 ? 's' : ''} ignoré${skipped > 1 ? 's' : ''}');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '$imported événement${imported > 1 ? 's' : ''} importé${imported > 1 ? 's' : ''} avec succès.'),
-        ),
+        SnackBar(content: Text('$msg.')),
       );
     } catch (e) {
       if (!context.mounted) return;
