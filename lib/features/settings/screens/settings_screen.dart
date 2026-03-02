@@ -1476,10 +1476,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ?.hideCurrentSnackBar();
               UnifiedCalendarApp.scaffoldMessengerKey.currentState
                   ?.showSnackBar(
-                SnackBar(
-                  content: Text('Échec pip : ${pipResult.stderr}'),
+                const SnackBar(
+                  content: Text('Échec installation des dépendances Python'),
                 ),
               );
+              AppLogger.instance.error('Settings', 'pip install failed: ${pipResult.stderr}');
             }
             return;
           }
@@ -1795,10 +1796,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       } else {
         final stderr = result.stderr.toString().trim();
         final stdout = result.stdout.toString().trim();
+        AppLogger.instance.error('Settings', 'Python script failed: ${stderr.isNotEmpty ? stderr : stdout}');
         UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text('❌ Erreur : ${stderr.isNotEmpty ? stderr : stdout}'),
-            duration: const Duration(seconds: 6),
+          const SnackBar(
+            content: Text('❌ Erreur lors de la génération du planning'),
+            duration: Duration(seconds: 6),
           ),
         );
       }
