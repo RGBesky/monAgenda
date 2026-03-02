@@ -657,10 +657,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         final end = details.visibleDates.last;
         Future(() {
           if (!mounted) return;
-          ref.read(displayedDateRangeProvider.notifier).state = DateRange(
+          final newRange = DateRange(
             start: start.subtract(const Duration(days: 7)),
             end: end.add(const Duration(days: 7)),
           );
+          // Guard : ne pas muter si même plage → évite boucle infinie
+          // (StateProvider notifie même si valeur ==)
+          final current = ref.read(displayedDateRangeProvider);
+          if (current == newRange) return;
+          ref.read(displayedDateRangeProvider.notifier).state = newRange;
         });
       },
     );
