@@ -35,7 +35,15 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   bool? _notionOk;
   String? _notionError;
 
-  static final _calDavUrlRegExp = RegExp(r'^https://.+/calendar/.+$');
+  // Validation CalDAV : HTTPS + domaine connu ou pattern /calendar/ ou /dav/
+  static final _calDavUrlRegExp = RegExp(
+    r'^https://[a-zA-Z0-9\-\.]+\.(infomaniak\.com|infomaniak\.ch|com|net|org|fr|ch|de|eu|io)'
+    r'(:\d+)?'
+    r'/.*'
+    r'(calendar|dav|cal|ical)'
+    r'/.+$',
+    caseSensitive: false,
+  );
 
   @override
   void dispose() {
