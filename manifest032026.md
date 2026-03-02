@@ -512,7 +512,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 14 | 4 | 🟡 78% |
+| **2** | UX / Ergonomie | 18 | 15 | 3 | 🟠 83% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
@@ -545,7 +545,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 - [x] **2.11** — Bouton "Réinitialiser l'app" — zone danger + double confirmation + suppression DB/prefs/modèle ✅ `51380e6`
 - [x] **2.12** — Bouton "Tester connexion kDrive" — BackupService.testKDriveConnection + feedback visuel ✅ `187a260`
 - [x] **2.13** — Notification tap → navigatorKey global + getEventById + EventDetailScreen ✅ `e9c53db`
-- [ ] **2.14** — Refonte paramètres en 5 sections (Comptes, Notifications, Apparence, IA, Avancé)
+- [x] **2.14** — Refonte paramètres en 5 sections (Comptes, Notifications, Apparence, IA & Modèle, Avancé) + NavigationRail desktop ✅ (déjà implémenté)
 
 **Features V3 :**
 - [ ] **2.17** — Import QR d'événements (pas juste config) — scan → déchiffrement → merge SQLite
