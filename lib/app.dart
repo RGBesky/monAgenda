@@ -42,6 +42,10 @@ class UnifiedCalendarApp extends ConsumerWidget {
   /// même avec des Scaffolds imbriqués.
   static final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
+  /// Clé globale pour le Navigator racine.
+  /// Utilisée par NotificationService pour naviguer vers un événement.
+  static final navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(settingsProvider);
@@ -55,6 +59,7 @@ class UnifiedCalendarApp extends ConsumerWidget {
       ),
       data: (settings) => MaterialApp(
         title: 'monAgenda',
+        navigatorKey: UnifiedCalendarApp.navigatorKey,
         scaffoldMessengerKey: UnifiedCalendarApp.scaffoldMessengerKey,
         debugShowCheckedModeBanner: false,
         themeMode: settings.themeMode,

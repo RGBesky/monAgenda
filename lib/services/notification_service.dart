@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
+import '../app.dart';
+import '../core/database/database_helper.dart';
 import '../core/models/event_model.dart';
 import '../core/utils/date_utils.dart';
+import '../features/events/screens/event_detail_screen.dart';
 import 'logger_service.dart';
 
 /// Service de notifications locales (sans backend requis).
@@ -59,8 +62,43 @@ class NotificationService {
   }
 
   void _onNotificationTapped(NotificationResponse response) {
-    // Navigation vers l'événement via deeplink
-    // Sera géré par le router
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+
+    AppLogger.instance.info('Notification', 'Tapped payload: $payload');
+
+    if (payload.startsWith('event:')) {
+      final idStr = payload.substring('event:'.length);
+      final eventId = int.tryParse(idStr);
+      if (eventId == null) return;
+
+      // Charger l'événement puis naviguer
+      _navigateToEvent(eventId);
+    }
+    // daily_summary → rien de spécial, l'app s'ouvre juste
+  }
+
+  /// Charge un événement par ID et ouvre son écran de détail.
+  Future<void> _navigateToEvent(int eventId) async {
+    try {
+      final event = await DatabaseHelper.instance.getEventById(eventId);
+      if (event == null) {
+        AppLogger.instance
+            .warning('Notification', 'Event #$eventId not found in DB');
+        return;
+      }
+
+      final nav = UnifiedCalendarApp.navigatorKey.currentState;
+      if (nav == null) return;
+
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => EventDetailScreen(event: event),
+        ),
+      );
+    } catch (e) {
+      AppLogger.instance.error('Notification', 'Navigate to event failed', e);
+    }
   }
 
   /// Programme un rappel pour un événement.

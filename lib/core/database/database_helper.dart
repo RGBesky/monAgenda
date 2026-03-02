@@ -559,6 +559,20 @@ class DatabaseHelper {
     }
   }
 
+  /// Récupère un événement par son ID local (clé primaire).
+  Future<EventModel?> getEventById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      AppConstants.tableEvents,
+      where: 'id = ? AND is_deleted = 0',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    final results = await _mapToEventsWithTags(db, maps);
+    return results.firstOrNull;
+  }
+
   Future<List<EventModel>> getEventsByDateRange(
     DateTime start,
     DateTime end,
