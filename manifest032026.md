@@ -554,7 +554,15 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 
 ### PHASE 3 — STOCKAGE SOUVERAIN (zéro fichier local permanent)
 
-- [ ] **3.1** — Audit de tous les fichiers locaux (backup, export, modèle IA)
+- [x] **3.1** — Audit fichiers locaux complet ✅ — 16 opérations d'écriture identifiées :
+  - DB SQLCipher : `getDatabasesPath()` (permanent, cleanup migration OK)
+  - Backup AES-256 : `getApplicationDocumentsDirectory()/kDrive_backup/` (permanent, pas de purge)
+  - Modèle IA GGUF : `getApplicationSupportDirectory()/models/` (permanent, cleanup hash-fail + deleteModel OK)
+  - Exports ICS/CSV/PPTX : `getDownloadsDirectory()` (permanent, écrasement silencieux)
+  - Config JSON export : `getApplicationDocumentsDirectory()/monagenda_config_<ts>.json` (accumulation non bornée)
+  - Feedback CSV export : `getApplicationDocumentsDirectory()/magic_feedback_<ts>.csv` (accumulation non bornée)
+  - Garde temp CSV : `getApplicationCacheDirectory()` (jamais nettoyé)
+  - Risques : configs/feedback s'accumulent sans limite, temp CSV oublié, exports sans gestion erreurs I/O
 - [ ] **3.2** — Upload direct WebDAV vers kDrive (remplacer copier-coller)
 - [ ] **3.3** — Option "Envoyer vers kDrive" pour ICS/CSV
 - [ ] **3.4** — ModelDownloadService complet (SHA-256, progress, reprise HTTP Range)
