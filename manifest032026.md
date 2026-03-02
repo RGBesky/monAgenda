@@ -4,7 +4,7 @@
 > **Auteur :** RGBesky  
 > **Dépôt :** https://github.com/RGBesky/monAgenda  
 > **Date :** 02/03/2026  
-> **HEAD :** `d1c488b` · 61 fichiers Dart · ~27 300 lignes  
+> **HEAD :** `cc608d4` · 61 fichiers Dart · ~27 800 lignes  
 > **Documents archivés :** Tous les anciens documents de référence sont dans `archive/`
 
 ---
@@ -173,6 +173,7 @@ Session de hardening sécurité puis refonte UX complète :
 - Effet surlignage Stabilo sur cartes calendrier — `Border.all(highlighterColor, 2.5px)`, fond blanc (`b567051`)
 - Fix boucle infinie rebuild calendrier — guard égalité `displayedDateRangeProvider` (`d1c488b`)
 - **Audit UI complet** — 44 findings identifiés (14 critiques, 18 moyens, 12 mineurs)
+- Panneau latéral tâches non planifiées + drag & drop vers calendrier (Desktop) (`cc608d4`)
 
 ---
 
@@ -516,7 +517,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ## 9 — ROADMAP
 
 > **Méthodologie :** Étape par étape. Chaque tâche = test + `flutter analyze` + commit atomique.  
-> **Base de référence :** HEAD = `d1c488b`, 61 fichiers Dart, ~27 300 lignes.
+> **Base de référence :** HEAD = `cc608d4`, 61 fichiers Dart, ~27 800 lignes.
 
 ### Récapitulatif de l'avancement
 
@@ -524,7 +525,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 17 | 1 | 🟠 94% |
+| **2** | UX / Ergonomie | 18 | 18 | 0 | ✅ Complète |
 | **3** | Stockage souverain | 5 | 2 | 3 | 🟡 40% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
@@ -548,7 +549,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 
 **Fonctionnalités demandées :**
 - [x] **2.5** — Import ICS direct depuis file picker + parsing + insertion en base ✅ `fa5d06a`
-- [ ] **2.6** — 💻 **Desktop only** — Panneau latéral Todo intégré à `calendar_screen` — liste les événements sans date (`start_date IS NULL` ou `type = 'task'` sans date) — drag & drop depuis ce panneau vers SfCalendar pour assigner date/heure — update `EventModel` + sync queue
+- [x] **2.6** — 💻 **Desktop only** — Panneau latéral Todo intégré à `calendar_screen` — liste les tâches Notion sans date (via `notionProjectTasksProvider`) — bouton toggle AppBar, panneau droit 280px, drag & drop + tap → date/time picker → `assignDate` Notion API → sync auto — cards Notion-like, empty state, feedback SnackBar ✅ `cc608d4`
 - [x] **2.7** — Redimensionnement d'événement par poignée (SfCalendar `allowAppointmentResize: true` + `onAppointmentResizeEnd`) ✅ (déjà implémenté)
 - [x] **2.8** — Logo dans le dock Ubuntu — fr.monagenda.app.desktop + icônes monagenda.png hicolor (16→512px) ✅ (déjà implémenté)
 
@@ -675,7 +676,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ### ORDRE D'EXÉCUTION
 
 ```
-Phase 2 (finir 2.6 Todo) → Phase 6 (audit UI: 6A borderRadius → 6B icons → 6C cards → 6D couleurs → 6E mineurs)
+Phase 2 ✅ Complète → Phase 6 (audit UI: 6A borderRadius → 6B icons → 6C cards → 6D couleurs → 6E mineurs)
 → Phase 5 (IA: GBNF + validateur) → Phase 4 (widget Android)
 → Phase 3 (stockage souverain) → Phase 7 (finitions + optim APK)
 → Phase 8 (docs + tag v3.0.0)
@@ -709,4 +710,4 @@ Tous les anciens documents de référence ont été déplacés dans `archive/` :
 
 ---
 
-*Mis à jour le 02/03/2026. HEAD = `d1c488b`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*
+*Mis à jour le 02/03/2026. HEAD = `cc608d4`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*
