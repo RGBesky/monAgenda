@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
 import '../core/database/magic_habits_repository.dart';
@@ -470,7 +469,7 @@ class MagicEntryService {
         final extraMin = durationMatch.group(2);
         if (extraMin != null) {
           durationMinutes =
-              (durationMinutes ?? 0) + (int.tryParse(extraMin) ?? 0);
+              durationMinutes! + (int.tryParse(extraMin) ?? 0);
         }
       } else {
         durationMinutes = mainVal;
@@ -684,7 +683,7 @@ class MagicEntryService {
         final extraMin = durationMatch.group(2);
         if (extraMin != null) {
           durationMinutes =
-              (durationMinutes ?? 0) + (int.tryParse(extraMin) ?? 0);
+              durationMinutes! + (int.tryParse(extraMin) ?? 0);
         }
       } else {
         // "pendant 30min"
