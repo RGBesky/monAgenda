@@ -164,10 +164,10 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _isLoading ||
-                      _depositLinkController.text.trim().isEmpty
-                  ? null
-                  : _testKDriveConnection,
+              onPressed:
+                  _isLoading || _depositLinkController.text.trim().isEmpty
+                      ? null
+                      : _testKDriveConnection,
               icon: _isTesting
                   ? const SizedBox(
                       width: 16,

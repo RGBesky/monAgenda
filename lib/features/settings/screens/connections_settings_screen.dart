@@ -1123,7 +1123,8 @@ class _ConnectionsSettingsScreenState
       if (events.isEmpty) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aucun événement trouvé dans le fichier.')),
+          const SnackBar(
+              content: Text('Aucun événement trouvé dans le fichier.')),
         );
         return;
       }
@@ -1168,13 +1169,16 @@ class _ConnectionsSettingsScreenState
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$imported événement${imported > 1 ? 's' : ''} importé${imported > 1 ? 's' : ''} avec succès.'),
+          content: Text(
+              '$imported événement${imported > 1 ? 's' : ''} importé${imported > 1 ? 's' : ''} avec succès.'),
         ),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de l\'import : ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}')),
+        SnackBar(
+            content: Text(
+                'Erreur lors de l\'import : ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}')),
       );
     }
   }

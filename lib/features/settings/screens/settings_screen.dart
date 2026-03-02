@@ -2734,8 +2734,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // 4. Supprimer le modèle IA local (si existant)
       try {
         for (final choice in MagicModelChoice.values) {
-          final path =
-              await ModelDownloadService.instance.modelPathFor(choice);
+          final path = await ModelDownloadService.instance.modelPathFor(choice);
           final file = File(path);
           if (await file.exists()) await file.delete();
         }
@@ -2756,8 +2755,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 color: Colors.green,
                 size: 32),
             title: const Text('Réinitialisation terminée'),
-            content:
-                const Text('L\'application va se fermer. Relancez-la manuellement.'),
+            content: const Text(
+                'L\'application va se fermer. Relancez-la manuellement.'),
             actions: [
               FilledButton(
                 onPressed: () => exit(0),
