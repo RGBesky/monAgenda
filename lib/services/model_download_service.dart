@@ -32,9 +32,11 @@ extension MagicModelChoiceExt on MagicModelChoice {
       };
 
   String get sha256 => switch (this) {
-        // SHA-256 will be verified on first download — skip until known
-        MagicModelChoice.qwen05b => 'PLACEHOLDER_QWEN05B',
-        MagicModelChoice.qwen15b => 'PLACEHOLDER_QWEN15B',
+        // SHA-256 (LFS OID) vérifiés depuis HuggingFace API le 02/03/2026
+        MagicModelChoice.qwen05b =>
+          '74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db',
+        MagicModelChoice.qwen15b =>
+          '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',
       };
 
   String get label => switch (this) {
@@ -238,9 +240,6 @@ class ModelDownloadService {
 
   /// Vérifie le SHA-256 du fichier dans un Isolate pour ne pas bloquer le UI.
   Future<bool> _verifySha256InIsolate(String path, String expectedHash) async {
-    // Skip si placeholder hash
-    if (expectedHash.startsWith('PLACEHOLDER')) return true;
-
     return await Isolate.run(() async {
       final file = File(path);
       final digest = await sha256.bind(file.openRead()).first;
