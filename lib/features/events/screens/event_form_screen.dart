@@ -125,7 +125,9 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
                   color: secondaryIconColor,
                   size: 18),
               border: const OutlineInputBorder(),
+              counterText: '',
             ),
+            maxLength: 200,
             textInputAction: TextInputAction.next,
             validator: (v) =>
                 v?.trim().isEmpty == true ? 'Le titre est requis' : null,
@@ -818,6 +820,16 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
     );
 
     if (confirmed == true && email.trim().isNotEmpty) {
+      // Validation email basique
+      final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+      if (!emailRegex.hasMatch(email.trim())) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Adresse email invalide')),
+          );
+        }
+        return;
+      }
       setState(() {
         _participants.add(ParticipantModel(
           email: email.trim(),
