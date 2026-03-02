@@ -103,13 +103,13 @@ class IcsService {
       final isAllDay =
           vevent.contains('DTSTART;VALUE=DATE') && !dtstart.contains('T');
 
-      final startDate = dtstart.isNotEmpty
+      final startDate = (dtstart.isNotEmpty
           ? CalendarDateUtils.fromICalDate(dtstart)
-          : DateTime.now();
+          : null) ?? DateTime.now();
 
       DateTime endDate;
       if (dtend != null && dtend.isNotEmpty) {
-        endDate = CalendarDateUtils.fromICalDate(dtend);
+        endDate = CalendarDateUtils.fromICalDate(dtend) ?? startDate.add(const Duration(hours: 1));
       } else {
         endDate =
             isAllDay ? startDate : startDate.add(const Duration(hours: 1));

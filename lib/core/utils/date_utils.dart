@@ -13,17 +13,22 @@ class CalendarDateUtils {
   static String toICalDateTime(DateTime date) =>
       _isoDateTime.format(date.toUtc());
 
-  static DateTime fromICalDate(String value) {
-    if (value.contains('T')) {
-      return DateTime.parse(
-        value.replaceAll('-', '').replaceAll(':', ''),
-      ).toLocal();
+  static DateTime? fromICalDate(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    try {
+      if (value.contains('T')) {
+        return DateTime.parse(
+          value.replaceAll('-', '').replaceAll(':', ''),
+        ).toLocal();
+      }
+      return DateTime(
+        int.parse(value.substring(0, 4)),
+        int.parse(value.substring(4, 6)),
+        int.parse(value.substring(6, 8)),
+      );
+    } catch (_) {
+      return null;
     }
-    return DateTime(
-      int.parse(value.substring(0, 4)),
-      int.parse(value.substring(4, 6)),
-      int.parse(value.substring(6, 8)),
-    );
   }
 
   static String formatDisplayDate(DateTime date) => _displayDate.format(date);

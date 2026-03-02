@@ -625,12 +625,12 @@ class InfomaniakService {
       final isAllDay = ical.contains('DTSTART;VALUE=DATE') ||
           (dtstart.isNotEmpty && !dtstart.contains('T'));
 
-      final startDate = dtstart.isNotEmpty
+      final startDate = (dtstart.isNotEmpty
           ? CalendarDateUtils.fromICalDate(dtstart)
-          : DateTime.now();
-      final endDate = dtend.isNotEmpty
+          : null) ?? DateTime.now();
+      final endDate = (dtend.isNotEmpty
           ? CalendarDateUtils.fromICalDate(dtend)
-          : startDate.add(const Duration(hours: 1));
+          : null) ?? startDate.add(const Duration(hours: 1));
 
       final location = getValue('LOCATION');
       final rawDescription = getValue('DESCRIPTION');
