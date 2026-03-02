@@ -505,7 +505,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ? DateTime.sunday
             : DateTime.monday; // DateTime.monday = 1, DateTime.sunday = 7
 
-    return SfCalendar(
+    final isScheduleView = currentView == AppConstants.viewAgenda;
+    final calendar = SfCalendar(
       controller: _calendarController,
       view: _getCalendarView(currentView),
       dataSource: dataSource,
@@ -662,6 +663,99 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           );
         });
       },
+    );
+
+    // ── Empty state overlay ──
+    if (events.isEmpty) {
+      if (isScheduleView) {
+        // Schedule view vide = écran blanc → empty state plein écran
+        return _buildCalendarEmptyState(context);
+      }
+      // Week/month/day : grille visible + bandeau subtil
+      return Stack(
+        children: [
+          calendar,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 24,
+            child: Center(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedCalendarRemove02,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant
+                          .withValues(alpha: 0.6),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Aucun événement visible',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return calendar;
+  }
+
+  /// Empty state complet pour la vue planning (schedule) vide.
+  Widget _buildCalendarEmptyState(BuildContext context) {
+    final subColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedCalendar03,
+            color: subColor.withValues(alpha: 0.3),
+            size: 64,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Aucun événement',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: subColor.withValues(alpha: 0.5),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Synchronisez vos calendriers\nou créez un événement.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: subColor.withValues(alpha: 0.4),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
