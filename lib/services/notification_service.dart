@@ -127,7 +127,8 @@ class NotificationService {
     try {
       await _plugin.cancel(id);
     } catch (e) {
-      AppLogger.instance.warning('Notification', 'cancel daily summary failed: $e');
+      AppLogger.instance
+          .warning('Notification', 'cancel daily summary failed: $e');
     }
 
     if (Platform.isLinux) {
@@ -237,7 +238,8 @@ class NotificationService {
           body,
         ]);
       } catch (e) {
-        AppLogger.instance.warning('Notification', 'notify-send fallback failed: $e');
+        AppLogger.instance
+            .warning('Notification', 'notify-send fallback failed: $e');
       }
     }
   }

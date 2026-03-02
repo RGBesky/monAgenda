@@ -46,32 +46,38 @@ class TagsNotifier extends AsyncNotifier<List<TagModel>> {
       // Réinsérer les catégories par défaut
       for (int i = 0; i < AppConstants.defaultCategories.length; i++) {
         final cat = AppConstants.defaultCategories[i];
-        await txn.insert(AppConstants.tableTags, TagModel(
-          type: AppConstants.tagTypeCategory,
-          name: cat['name'] as String,
-          colorHex: cat['color'] as String,
-          infomaniakMapping: cat['name'] as String,
-          sortOrder: i,
-        ).toMap());
+        await txn.insert(
+            AppConstants.tableTags,
+            TagModel(
+              type: AppConstants.tagTypeCategory,
+              name: cat['name'] as String,
+              colorHex: cat['color'] as String,
+              infomaniakMapping: cat['name'] as String,
+              sortOrder: i,
+            ).toMap());
       }
       for (int i = 0; i < AppConstants.defaultPriorities.length; i++) {
         final pri = AppConstants.defaultPriorities[i];
-        await txn.insert(AppConstants.tableTags, TagModel(
-          type: AppConstants.tagTypePriority,
-          name: pri['name'] as String,
-          colorHex: pri['color'] as String,
-          infomaniakMapping: (pri['level'] as int).toString(),
-          sortOrder: pri['level'] as int,
-        ).toMap());
+        await txn.insert(
+            AppConstants.tableTags,
+            TagModel(
+              type: AppConstants.tagTypePriority,
+              name: pri['name'] as String,
+              colorHex: pri['color'] as String,
+              infomaniakMapping: (pri['level'] as int).toString(),
+              sortOrder: pri['level'] as int,
+            ).toMap());
       }
       for (int i = 0; i < AppConstants.defaultStatuses.length; i++) {
         final st = AppConstants.defaultStatuses[i];
-        await txn.insert(AppConstants.tableTags, TagModel(
-          type: AppConstants.tagTypeStatus,
-          name: st['name'] as String,
-          colorHex: st['color'] as String,
-          sortOrder: i,
-        ).toMap());
+        await txn.insert(
+            AppConstants.tableTags,
+            TagModel(
+              type: AppConstants.tagTypeStatus,
+              name: st['name'] as String,
+              colorHex: st['color'] as String,
+              sortOrder: i,
+            ).toMap());
       }
     });
     ref.invalidateSelf();

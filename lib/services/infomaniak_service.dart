@@ -628,11 +628,12 @@ class InfomaniakService {
           (dtstart.isNotEmpty && !dtstart.contains('T'));
 
       final startDate = (dtstart.isNotEmpty
-          ? CalendarDateUtils.fromICalDate(dtstart)
-          : null) ?? DateTime.now();
-      final endDate = (dtend.isNotEmpty
-          ? CalendarDateUtils.fromICalDate(dtend)
-          : null) ?? startDate.add(const Duration(hours: 1));
+              ? CalendarDateUtils.fromICalDate(dtstart)
+              : null) ??
+          DateTime.now();
+      final endDate =
+          (dtend.isNotEmpty ? CalendarDateUtils.fromICalDate(dtend) : null) ??
+              startDate.add(const Duration(hours: 1));
 
       final location = getValue('LOCATION');
       final rawDescription = getValue('DESCRIPTION');

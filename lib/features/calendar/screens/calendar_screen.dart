@@ -1733,7 +1733,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           .read(syncNotifierProvider.notifier)
           .pushEvent(updatedEvent)
           .catchError((e) {
-        AppLogger.instance.warning('CalendarScreen', 'Erreur sync drag&drop: $e');
+        AppLogger.instance
+            .warning('CalendarScreen', 'Erreur sync drag&drop: $e');
       });
     } catch (e) {
       ref.read(eventsNotifierProvider.notifier).refresh();

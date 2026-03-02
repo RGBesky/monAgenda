@@ -403,16 +403,18 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
                   const SizedBox(height: 8),
                   RadioGroup<String>(
                     groupValue: _selectedNotionDbId ?? '',
-                    onChanged: (v) =>
-                        setState(() => _selectedNotionDbId = v),
+                    onChanged: (v) => setState(() => _selectedNotionDbId = v),
                     child: Column(
-                      children: enabledDbs.map((db) => RadioListTile<String>(
-                            title: Text(db.name),
-                            subtitle: Text(db.effectiveSourceId.substring(0, 8)),
-                            value: db.effectiveSourceId,
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                          )).toList(),
+                      children: enabledDbs
+                          .map((db) => RadioListTile<String>(
+                                title: Text(db.name),
+                                subtitle:
+                                    Text(db.effectiveSourceId.substring(0, 8)),
+                                value: db.effectiveSourceId,
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ))
+                          .toList(),
                     ),
                   ),
                 ],
@@ -913,7 +915,8 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       } catch (e) {
         // Le push sera retenté via la sync_queue au prochain sync
         pushError = e.toString();
-        AppLogger.instance.warning('EventForm', 'Push distant échoué (sera retenté) : $e');
+        AppLogger.instance
+            .warning('EventForm', 'Push distant échoué (sera retenté) : $e');
       }
 
       if (mounted) {

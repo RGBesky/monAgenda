@@ -117,10 +117,12 @@ class DatabaseHelper {
       final bakFile = File(backupPath);
       if (bakFile.existsSync()) bakFile.deleteSync();
 
-      AppLogger.instance.info('DatabaseHelper', 'Migration SQLCipher desktop réussie');
+      AppLogger.instance
+          .info('DatabaseHelper', 'Migration SQLCipher desktop réussie');
     } catch (_) {
       // La DB n'est pas lisible sans clé → déjà chiffrée, rien à faire
-      AppLogger.instance.info('DatabaseHelper', 'DB déjà chiffrée ou inaccessible, pas de migration');
+      AppLogger.instance.info('DatabaseHelper',
+          'DB déjà chiffrée ou inaccessible, pas de migration');
     }
   }
 

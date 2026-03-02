@@ -243,7 +243,8 @@ class SyncEngine {
     try {
       await _rescheduleNotifications();
     } catch (e) {
-      AppLogger.instance.warning('SyncEngine', 'Reschedule notifications failed: $e');
+      AppLogger.instance
+          .warning('SyncEngine', 'Reschedule notifications failed: $e');
     }
 
     // Mettre à jour le widget Android
@@ -258,7 +259,8 @@ class SyncEngine {
     try {
       await WidgetService.updateWidget();
     } catch (e) {
-      AppLogger.instance.warning('SyncEngine', 'WidgetService.updateWidget failed: $e');
+      AppLogger.instance
+          .warning('SyncEngine', 'WidgetService.updateWidget failed: $e');
     }
   }
 

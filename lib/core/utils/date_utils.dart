@@ -5,7 +5,8 @@ class CalendarDateUtils {
   static final DateFormat _isoDateTime = DateFormat("yyyyMMdd'T'HHmmss'Z'");
   static final DateFormat _displayDate = DateFormat('d MMMM yyyy', 'fr_FR');
   static final DateFormat _displayTime = DateFormat('HH:mm', 'fr_FR');
-  static final DateFormat _displayDateTime = DateFormat('d MMM yyyy à HH:mm', 'fr_FR');
+  static final DateFormat _displayDateTime =
+      DateFormat('d MMM yyyy à HH:mm', 'fr_FR');
   static final DateFormat _displayShortDate = DateFormat('d MMM', 'fr_FR');
 
   static String toICalDate(DateTime date) => _isoDate.format(date.toUtc());

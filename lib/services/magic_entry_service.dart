@@ -468,8 +468,7 @@ class MagicEntryService {
         durationMinutes = mainVal * 60;
         final extraMin = durationMatch.group(2);
         if (extraMin != null) {
-          durationMinutes =
-              durationMinutes + (int.tryParse(extraMin) ?? 0);
+          durationMinutes = durationMinutes + (int.tryParse(extraMin) ?? 0);
         }
       } else {
         durationMinutes = mainVal;
@@ -682,8 +681,7 @@ class MagicEntryService {
         durationMinutes = mainVal * 60;
         final extraMin = durationMatch.group(2);
         if (extraMin != null) {
-          durationMinutes =
-              durationMinutes + (int.tryParse(extraMin) ?? 0);
+          durationMinutes = durationMinutes + (int.tryParse(extraMin) ?? 0);
         }
       } else {
         // "pendant 30min"

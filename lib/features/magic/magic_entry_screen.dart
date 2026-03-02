@@ -304,7 +304,8 @@ class _MagicEntryScreenState extends ConsumerState<MagicEntryScreen> {
                   children: MagicModelChoice.values
                       .map((m) => RadioListTile<MagicModelChoice>(
                             title: Text(m.label),
-                            subtitle: Text('${m.subtitle} · ~${m.approxSizeMb} Mo'),
+                            subtitle:
+                                Text('${m.subtitle} · ~${m.approxSizeMb} Mo'),
                             value: m,
                             dense: true,
                             contentPadding: EdgeInsets.zero,

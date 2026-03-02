@@ -1293,7 +1293,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'ID,Titre,Début,Fin,Journée entière,Lieu,Source',
       ...events.map((e) {
         final title = _sanitizeCsvCell(e.title).replaceAll('"', '""');
-        final location = _sanitizeCsvCell(e.location ?? '').replaceAll('"', '""');
+        final location =
+            _sanitizeCsvCell(e.location ?? '').replaceAll('"', '""');
         return '${e.id},"$title",${e.startDate},${e.endDate},${e.isAllDay ? 'Oui' : 'Non'},"$location",${e.source}';
       }),
     ];
@@ -1482,7 +1483,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   content: Text('Échec installation des dépendances Python'),
                 ),
               );
-              AppLogger.instance.error('Settings', 'pip install failed: ${pipResult.stderr}');
+              AppLogger.instance
+                  .error('Settings', 'pip install failed: ${pipResult.stderr}');
             }
             return;
           }
@@ -1813,7 +1815,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       } else {
         final stderr = result.stderr.toString().trim();
         final stdout = result.stdout.toString().trim();
-        AppLogger.instance.error('Settings', 'Python script failed: ${stderr.isNotEmpty ? stderr : stdout}');
+        AppLogger.instance.error('Settings',
+            'Python script failed: ${stderr.isNotEmpty ? stderr : stdout}');
         UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
             content: Text('❌ Erreur lors de la génération du planning'),
@@ -1902,7 +1905,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               as String;
         }
       } catch (e) {
-        AppLogger.instance.warning('Settings', 'Nominatim reverse-geocoding failed: $e');
+        AppLogger.instance
+            .warning('Settings', 'Nominatim reverse-geocoding failed: $e');
       } // Garder le nom IP si Nominatim échoue
 
       ref.read(settingsProvider.notifier).updateWeatherLocation(
