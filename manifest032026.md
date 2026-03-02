@@ -4,7 +4,7 @@
 > **Auteur :** RGBesky  
 > **Dépôt :** https://github.com/RGBesky/monAgenda  
 > **Date :** 02/03/2026  
-> **HEAD :** `d300ca8` · 62 fichiers Dart · ~26 000 lignes  
+> **HEAD :** `2488295` · 62 fichiers Dart · ~26 500 lignes  
 > **Documents archivés :** Tous les anciens documents de référence sont dans `archive/`
 
 ---
@@ -356,8 +356,8 @@ lib/
 |---|---|---|
 | Meeting Note Notion (créer/ouvrir compte-rendu) | 💻 | ✅ |
 | Smart Context PDF (attachements fichiers) | 💻 | ✅ |
-| Vue Projet + Time Blocking Drag & Drop | 💻 | ⚠️ (copyWith cassé) |
-| Raccourcis clavier (Ctrl+N/K/F, Échap) | 💻 | ✅ |
+| Vue Projet + Time Blocking Drag & Drop | 💻 | ✅ |
+| Raccourcis clavier (Ctrl+N/K/F/S/,, Échap) | 💻 | ✅ |
 | Export PPT via Python Process.run | 💻 | ✅ |
 
 ---
@@ -512,12 +512,12 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 15 | 3 | 🟠 83% |
-| **2** | UX / Ergonomie | 18 | 6 | 12 | 🟠 33% |
+| **2** | UX / Ergonomie | 18 | 11 | 7 | 🟡 61% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
-| **5** | Intelligence Artificielle | 9 | 3 | 6 | 🟡 33% |
-| **6** | Refonte graphique | 7 | 5 | 2 | 🟢 71% |
-| **7** | Onboarding & finitions | 8 | 1 | 7 | 🔴 12% |
+| **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
+| **6** | Refonte graphique | 7 | 7 | 0 | ✅ Complète |
+| **7** | Onboarding & finitions | 8 | 2 | 6 | 🟠 25% |
 | **8** | Documentation & versioning | 4 | 0 | 4 | 🔴 0% |
 
 ---
@@ -528,23 +528,23 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 - [ ] **1.16** — Conflits ETag (HTTP 412) : GET version serveur → override local (last-remote-wins) → SnackBar orange via `etagConflictProvider`
 - [ ] **1.19** — ICS import sans déduplication (double import = doublons) — ajouter check UID
 
-### PHASE 2 — UX / ERGONOMIE (12 tâches restantes)
+### PHASE 2 — UX / ERGONOMIE (7 tâches restantes)
 
 **Navigation & accès rapides :**
 - [ ] **2.2** — Ctrl+F doit ouvrir SearchScreen (actuellement switch onglet seulement)
-- [ ] **2.3** — Raccourcis clavier manquants : Ctrl+S, Delete, Espace, Tab + tooltips au survol
+- [x] **2.3** — Raccourcis clavier : Ctrl+S (sync) + Ctrl+, (paramètres) + tooltips enrichis ✅ `f71b0fd`
 
 **Fonctionnalités demandées :**
-- [ ] **2.5** — Import ICS direct depuis file picker (ponctuel, pas abonnement)
+- [x] **2.5** — Import ICS direct depuis file picker + parsing + insertion en base ✅ `fa5d06a`
 - [ ] **2.6** — Barre latérale Todo (tâches sans date) + glisser-déposer vers calendrier
 - [ ] **2.7** — Redimensionnement d'événement par poignée (SfCalendar `allowAppointmentResize`)
 - [ ] **2.8** — Logo dans le dock Ubuntu (fichier .desktop + icônes)
 
 **États vides & feedback :**
-- [ ] **2.9** — Empty states soignés partout (jamais d'écran blanc)
-- [ ] **2.11** — Bouton "Réinitialiser l'app" avec double confirmation
-- [ ] **2.12** — Bouton "Tester connexion kDrive" dans les paramètres backup
-- [ ] **2.13** — Notification tap → ouvrir l'événement correspondant
+- [x] **2.9** — Empty states calendrier SfCalendar (schedule: plein écran, week/month/day: bandeau flottant) ✅ `5818df7`
+- [x] **2.11** — Bouton "Réinitialiser l'app" — zone danger + double confirmation + suppression DB/prefs/modèle ✅ `51380e6`
+- [x] **2.12** — Bouton "Tester connexion kDrive" — BackupService.testKDriveConnection + feedback visuel ✅ `187a260`
+- [x] **2.13** — Notification tap → navigatorKey global + getEventById + EventDetailScreen ✅ `e9c53db`
 - [ ] **2.14** — Refonte paramètres en 5 sections (Comptes, Notifications, Apparence, IA, Avancé)
 
 **Features V3 :**
@@ -569,7 +569,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 
 ### PHASE 5 — INTELLIGENCE ARTIFICIELLE
 
-- [ ] **5.1** — Améliorer Regex-first : durées "2h", créneaux "matin/soir", lieux "à/au/chez", mois en lettres
+- [x] **5.1** — Regex-first : mois en lettres ("15 mars", "3 avril 2025", "1er janvier") ajouté ✅ `2488295`
 - [ ] **5.1b** — GBNF grammar enforcement (forcer JSON valide — sans elle, ~30% invalide)
 - [ ] **5.1c** — Validateur post-IA : title non vide, date cohérente, startTime < endTime
 - [ ] **5.2** — Feedback loop : table `magic_feedback`, export CSV, compteur dans Settings
@@ -578,10 +578,10 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 - [ ] **5.6** — Mode conversation libre (parser questions → intentions → query SQLite)
 - [ ] **5.7** — Déchargement mémoire : cycle load → infer → unload (libérer ~1.2 Go RAM)
 
-### PHASE 6 — REFONTE GRAPHIQUE (2 tâches restantes)
+### PHASE 6 — REFONTE GRAPHIQUE ✅ (complète)
 
-- [ ] **6.6** — Micro-animations : FadeTransition EventCards (200ms), SlideTransition BottomSheet (250ms), AnimatedSwitcher sync (300ms)
-- [ ] **6.7** — Respecter `MediaQuery.disableAnimations` (accessibilité)
+- [x] **6.6** — Micro-animations : SlideTransition fluide (320ms easeOut) sur tous les BottomSheets ✅ `ffff9bb`
+- [x] **6.7** — disableAnimations global : BottomSheets + AnimatedSwitcher respectent WidgetsBinding.disableAnimations ✅ `fd3fe57`
 
 ### PHASE 7 — ONBOARDING & FINITIONS
 
@@ -591,7 +591,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 - [ ] **7.4** — Mettre à jour `notionApiVersion` de `'2022-06-28'` vers version stable actuelle
 - [ ] **7.5** — Supprimer `flex_color_scheme` (dans pubspec mais jamais importé)
 - [ ] **7.6** — Remplacer `RadioListTile` deprecated par `Radio.adaptive` + `ListTile`
-- [ ] **7.7** — Supprimer le `IntrinsicHeight` restant dans search_screen.dart (si légitime, documenter pourquoi)
+- [x] **7.7** — IntrinsicHeight supprimé dans search_screen.dart — remplacé par Border(left:) plus performant ✅ `bba1a9a`
 - [ ] **7.8** — Optimisation APK : minifyEnabled, shrinkResources, --split-per-abi (cible <40 Mo)
 
 ### PHASE 8 — DOCUMENTATION & VERSIONING
