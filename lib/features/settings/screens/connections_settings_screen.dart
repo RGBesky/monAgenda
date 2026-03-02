@@ -1,6 +1,8 @@
 import '../../../app.dart';
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
@@ -8,6 +10,8 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/models/ics_subscription_model.dart';
 import '../../../core/models/notion_database_model.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../providers/events_provider.dart';
+import '../../../services/ics_service.dart';
 import '../../../services/infomaniak_service.dart';
 import '../../../services/notion_service.dart';
 import '../../../core/widgets/settings_logo_header.dart';
@@ -773,6 +777,12 @@ class _ConnectionsSettingsScreenState
               icon: const Icon(Icons.add),
               label: const Text('Ajouter un abonnement .ics'),
             ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _importIcsFile(context),
+              icon: const Icon(Icons.file_open_outlined),
+              label: const Text('Importer un fichier .ics'),
+            ),
           ],
         );
       },
@@ -1091,6 +1101,81 @@ class _ConnectionsSettingsScreenState
         ),
       );
       setState(() {});
+    }
+  }
+
+  /// Import ponctuel d'un fichier .ics depuis le disque
+  Future<void> _importIcsFile(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['ics'],
+      dialogTitle: 'Sélectionner un fichier .ics',
+    );
+
+    if (result == null || result.files.isEmpty) return;
+    final filePath = result.files.single.path;
+    if (filePath == null) return;
+
+    try {
+      final content = await File(filePath).readAsString();
+      final events = IcsService.parseIcsFile(content);
+
+      if (events.isEmpty) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucun événement trouvé dans le fichier.')),
+        );
+        return;
+      }
+
+      // Confirmation
+      if (!context.mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Importer des événements'),
+          content: Text(
+            '${events.length} événement${events.length > 1 ? 's' : ''} '
+            'trouvé${events.length > 1 ? 's' : ''} dans le fichier.\n\n'
+            'Voulez-vous les importer ?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Importer'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      // Insertion en base
+      final db = DatabaseHelper.instance;
+      int imported = 0;
+      for (final event in events) {
+        await db.insertEvent(event);
+        imported++;
+      }
+
+      // Rafraîchir
+      ref.invalidate(eventsInRangeProvider);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$imported événement${imported > 1 ? 's' : ''} importé${imported > 1 ? 's' : ''} avec succès.'),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur lors de l\'import : ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}')),
+      );
     }
   }
 }
