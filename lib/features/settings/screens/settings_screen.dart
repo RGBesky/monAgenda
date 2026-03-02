@@ -1248,6 +1248,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  /// Sanitise une cellule CSV pour empêcher l'injection de formule
+  /// (=, +, -, @, \t, \r au début → préfixe single quote).
+  static String _sanitizeCsvCell(String value) {
+    if (value.isNotEmpty && RegExp(r'^[=+\-@\t\r]').hasMatch(value)) {
+      return "'$value";
+    }
+    return value;
+  }
+
   Future<void> _exportIcs(BuildContext context, WidgetRef ref) async {
     final events = await DatabaseHelper.instance.getEventsByDateRange(
       DateTime.now().subtract(const Duration(days: 30)),
@@ -1279,8 +1288,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Générer le CSV manuellement
     final lines = [
       'ID,Titre,Début,Fin,Journée entière,Lieu,Source',
-      ...events.map((e) =>
-          '${e.id},"${e.title.replaceAll('"', '""')}",${e.startDate},${e.endDate},${e.isAllDay ? 'Oui' : 'Non'},"${(e.location ?? '').replaceAll('"', '""')}",${e.source}'),
+      ...events.map((e) {
+        final title = _sanitizeCsvCell(e.title).replaceAll('"', '""');
+        final location = _sanitizeCsvCell(e.location ?? '').replaceAll('"', '""');
+        return '${e.id},"$title",${e.startDate},${e.endDate},${e.isAllDay ? 'Oui' : 'Non'},"$location",${e.source}';
+      }),
     ];
     final csv = lines.join('\n');
 
@@ -1575,8 +1587,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
             }
 
-            final parentCsv = parent.replaceAll('"', '""');
-            final typeCsv = type.replaceAll('"', '""');
+            final parentCsv = _sanitizeCsvCell(parent).replaceAll('"', '""');
+            final typeCsv = _sanitizeCsvCell(type).replaceAll('"', '""');
             csvLines.add('$dateStr,"$parentCsv","$typeCsv"');
           }
 
@@ -1649,8 +1661,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       .firstOrNull ??
                   '');
 
-          final parentCsv = parent.replaceAll('"', '""');
-          final typeCsv = type.replaceAll('"', '""');
+          final parentCsv = _sanitizeCsvCell(parent).replaceAll('"', '""');
+          final typeCsv = _sanitizeCsvCell(type).replaceAll('"', '""');
           csvLines.add('$dateStr,"$parentCsv","$typeCsv"');
         }
       }
