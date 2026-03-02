@@ -4,8 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:dio/dio.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:path/path.dart' show join;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactory;
 import 'dart:convert';
 import 'dart:typed_data';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/platform_utils.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
@@ -501,6 +504,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               );
             },
+          ),
+        ],
+      ),
+
+      // ── Zone de danger ──
+      _buildSection(
+        context,
+        title: 'Zone de danger',
+        hugeIcon: HugeIcons.strokeRoundedAlert02,
+        titleColor: const Color(0xFFFF3B30),
+        children: [
+          ListTile(
+            leading: const HugeIcon(
+                icon: HugeIcons.strokeRoundedDelete04,
+                color: Color(0xFFFF3B30),
+                size: 22),
+            title: const Text('Réinitialiser l\'application',
+                style: TextStyle(color: Color(0xFFFF3B30))),
+            subtitle: const Text(
+                'Supprime toutes les données, paramètres et fichiers locaux'),
+            onTap: () => _confirmResetApp(context, ref),
           ),
         ],
       ),
@@ -1190,7 +1214,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required String title,
     required dynamic hugeIcon,
     required List<Widget> children,
+    Color? titleColor,
   }) {
+    final effectiveColor = titleColor ?? Theme.of(context).colorScheme.primary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1201,7 +1227,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               HugeIcon(
                 icon: hugeIcon,
                 size: 14,
-                color: Theme.of(context).colorScheme.primary,
+                color: effectiveColor,
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -1210,7 +1236,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.primary,
+                    color: effectiveColor,
                     letterSpacing: 0.5,
                   ),
                   maxLines: 1,
@@ -2626,5 +2652,130 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  /// Double confirmation avant réinitialisation complète de l'app.
+  Future<void> _confirmResetApp(BuildContext context, WidgetRef ref) async {
+    // ── Dialogue 1 : avertissement ──
+    final first = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const HugeIcon(
+            icon: HugeIcons.strokeRoundedAlert02,
+            color: Color(0xFFFF3B30),
+            size: 32),
+        title: const Text('Réinitialiser l\'application ?'),
+        content: const Text(
+          'Cette action supprimera définitivement :\n'
+          '• Tous vos événements locaux\n'
+          '• Vos paramètres et préférences\n'
+          '• Vos connexions (Infomaniak, Notion, ICS)\n'
+          '• Les logs et certificats\n\n'
+          'Cette action est irréversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3B30),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continuer'),
+          ),
+        ],
+      ),
+    );
+    if (first != true || !context.mounted) return;
+
+    // ── Dialogue 2 : confirmation finale ──
+    final second = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Êtes-vous absolument sûr ?'),
+        content: const Text(
+          'Tapez sur « Réinitialiser » pour confirmer.\n'
+          'Toutes les données seront perdues.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3B30),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Réinitialiser'),
+          ),
+        ],
+      ),
+    );
+    if (second != true || !context.mounted) return;
+
+    // ── Exécution ──
+    try {
+      // 1. Fermer la DB
+      final db = await DatabaseHelper.instance.database;
+      await db.close();
+
+      // 2. Supprimer le fichier DB
+      final dbDir = await databaseFactory.getDatabasesPath();
+      final dbFile = File(join(dbDir, AppConstants.dbName));
+      if (dbFile.existsSync()) dbFile.deleteSync();
+
+      // 3. Vider SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      // 4. Supprimer le modèle IA local (si existant)
+      try {
+        for (final choice in MagicModelChoice.values) {
+          final path =
+              await ModelDownloadService.instance.modelPathFor(choice);
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        }
+      } catch (_) {
+        // Ignorer si pas de modèle
+      }
+
+      AppLogger.instance.info('Settings', 'Application reset completed');
+
+      if (context.mounted) {
+        // Fermer l'app (sur Desktop, exit ; sur mobile, redémarrage)
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            icon: const HugeIcon(
+                icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                color: Colors.green,
+                size: 32),
+            title: const Text('Réinitialisation terminée'),
+            content:
+                const Text('L\'application va se fermer. Relancez-la manuellement.'),
+            actions: [
+              FilledButton(
+                onPressed: () => exit(0),
+                child: const Text('Fermer l\'application'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        UnifiedCalendarApp.scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la réinitialisation : $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
