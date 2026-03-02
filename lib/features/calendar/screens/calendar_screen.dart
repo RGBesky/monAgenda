@@ -31,6 +31,7 @@ class CalendarScreen extends ConsumerStatefulWidget {
 
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   late CalendarController _calendarController;
+  final GlobalKey _calendarKey = GlobalKey();
   List<WeatherModel> _forecasts = [];
   bool _loadingWeather = false;
   bool _showTodoPanel = false;
@@ -546,6 +547,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
     final isScheduleView = currentView == AppConstants.viewAgenda;
     final calendar = SfCalendar(
+      key: _calendarKey,
       controller: _calendarController,
       view: _getCalendarView(currentView),
       dataSource: dataSource,
@@ -1935,9 +1937,30 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   // ================================================================
 
   /// Enveloppe le calendrier dans un DragTarget pour recevoir des tâches.
+  /// Résout la date directement depuis la position de drop sur le calendrier.
   Widget _wrapWithDragTarget(Widget calendar) {
     return DragTarget<NotionTaskModel>(
-      onAcceptWithDetails: (details) => _onTaskDropped(details.data),
+      onAcceptWithDetails: (details) {
+        // Résoudre la date depuis la position de drop via le SfCalendar
+        DateTime? resolvedDate;
+        final renderObject = _calendarKey.currentContext?.findRenderObject();
+        if (renderObject is RenderBox) {
+          final localOffset = renderObject.globalToLocal(details.offset);
+          final calendarDetails = _calendarController
+              .getCalendarDetailsAtOffset
+              ?.call(localOffset);
+          resolvedDate = calendarDetails?.date;
+        }
+
+        if (resolvedDate != null) {
+          // Drop direct — date résolue depuis la position
+          _assignTaskDirect(details.data, resolvedDate);
+        } else {
+          // Fallback dialog si la position ne peut pas être résolue
+          // (ex: zone header, hors grille)
+          _onTaskTapped(details.data);
+        }
+      },
       builder: (context, candidateData, rejectedData) {
         final isDragging = candidateData.isNotEmpty;
         if (isDragging) {
@@ -1960,26 +1983,16 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
   }
 
-  /// Appelé quand une tâche est déposée sur le calendrier.
-  void _onTaskDropped(NotionTaskModel task) async {
-    final displayDate = _calendarController.displayDate ?? DateTime.now();
-    final selectedDate = ref.read(selectedDateProvider);
-    // Utiliser la date sélectionnée si elle est récente, sinon displayDate
-    final initialDate = selectedDate.difference(DateTime.now()).inDays.abs() < 60
-        ? selectedDate
-        : displayDate;
-
-    final result = await _showScheduleTaskDialog(task, initialDate);
-    if (result == null) return;
-
+  /// Assigne directement une tâche à la date résolue par le drop.
+  void _assignTaskDirect(NotionTaskModel task, DateTime date) async {
     try {
       await ref.read(notionProjectTasksProvider.notifier).assignDate(
             task.id,
             task.databaseId,
-            result,
+            date,
           );
 
-      // Déclencher une sync pour récupérer la tâche comme événement
+      // Sync pour récupérer la tâche comme événement calendrier
       ref.read(syncNotifierProvider.notifier).syncAll().catchError((e) {
         AppLogger.instance
             .warning('CalendarScreen', 'Sync post-assignDate: $e');
@@ -1991,7 +2004,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           ..showSnackBar(
             SnackBar(
               content: Text(
-                '«${task.title}» planifié le ${DateFormat('EEEE d MMMM à HH:mm', 'fr_FR').format(result)}',
+                '«${task.title}» planifié le ${DateFormat('EEEE d MMMM à HH:mm', 'fr_FR').format(date)}',
               ),
               duration: const Duration(seconds: 4),
               behavior: SnackBarBehavior.floating,
@@ -2010,11 +2023,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     }
   }
 
-  /// Dialog pour choisir date et heure avant de planifier la tâche.
-  Future<DateTime?> _showScheduleTaskDialog(
-    NotionTaskModel task,
-    DateTime initialDate,
-  ) async {
+  /// Tap sur une tâche (sans drag) — dialog date/heure en fallback.
+  void _onTaskTapped(NotionTaskModel task) async {
+    final displayDate = _calendarController.displayDate ?? DateTime.now();
+    final selectedDate = ref.read(selectedDateProvider);
+    final initialDate =
+        selectedDate.difference(DateTime.now()).inDays.abs() < 60
+            ? selectedDate
+            : displayDate;
+
     // Étape 1 : choisir la date
     final date = await showDatePicker(
       context: context,
@@ -2024,7 +2041,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       helpText: 'Planifier «${task.title}»',
       locale: const Locale('fr', 'FR'),
     );
-    if (date == null || !mounted) return null;
+    if (date == null || !mounted) return;
 
     // Étape 2 : choisir l'heure
     final time = await showTimePicker(
@@ -2032,9 +2049,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       initialTime: const TimeOfDay(hour: 9, minute: 0),
       helpText: 'Heure de début',
     );
-    if (time == null) return null;
+    if (time == null || !mounted) return;
 
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final result = DateTime(
+        date.year, date.month, date.day, time.hour, time.minute);
+    _assignTaskDirect(task, result);
   }
 
   /// Panneau latéral affichant les tâches Notion sans date.
@@ -2244,7 +2263,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         child: _buildTaskCard(task, isDark),
       ),
       child: GestureDetector(
-        onTap: () => _onTaskDropped(task),
+        onTap: () => _onTaskTapped(task),
         child: _buildTaskCard(task, isDark),
       ),
     );
