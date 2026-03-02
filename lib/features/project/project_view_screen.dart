@@ -6,6 +6,7 @@ import 'package:syncfusion_flutter_calendar/calendar.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/models/event_model.dart';
+import '../../core/models/notion_database_model.dart';
 import '../../providers/events_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/logger_service.dart';
@@ -162,8 +163,17 @@ class NotionProjectTasksNotifier extends AsyncNotifier<List<NotionTaskModel>> {
     state = AsyncData(prev.where((t) => t.id != taskId).toList());
 
     try {
+      // Chercher le bon nom de propriété date dans la config de la BDD
+      final dbs = await ref.read(notionDatabasesProvider.future);
+      final db = dbs.cast<NotionDatabaseModel?>().firstWhere(
+            (d) => d!.effectiveSourceId == databaseId,
+            orElse: () => null,
+          );
+      final dateProperty = db?.startDateProperty ?? 'Date';
+
       final notion = ref.read(notionServiceProvider);
-      await notion.updatePageDate(taskId, date);
+      await notion.updatePageDate(taskId, date,
+          dateProperty: dateProperty);
 
       // Invalider les événements pour rafraîchir le calendrier
       ref.invalidate(eventsInRangeProvider);

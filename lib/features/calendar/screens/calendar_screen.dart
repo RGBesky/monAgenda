@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/database/database_helper.dart';
 import '../../../core/models/event_model.dart';
 import '../../../core/models/notion_database_model.dart';
 import '../../../core/models/tag_model.dart';
@@ -1994,7 +1995,32 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             date,
           );
 
-      // Sync pour récupérer la tâche comme événement calendrier
+      // ── Insertion locale provisoire pour affichage immédiat ──
+      // Le prochain syncAll() écrasera avec les données complètes
+      // (ConflictAlgorithm.replace sur UNIQUE(remote_id, source)).
+      final isAllDay = date.hour == 0 && date.minute == 0;
+      final endDate = isAllDay ? date : date.add(const Duration(hours: 1));
+      final provisionalEvent = EventModel(
+        remoteId: task.id,
+        source: AppConstants.sourceNotion,
+        calendarId: task.databaseId,
+        type: EventType.task,
+        title: task.title,
+        startDate: date,
+        endDate: endDate,
+        isAllDay: isAllDay,
+        notionPageId: task.id,
+        status: task.status,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      await DatabaseHelper.instance.insertEvent(provisionalEvent);
+
+      // Rafraîchir le calendrier immédiatement (lecture DB locale)
+      ref.read(eventsNotifierProvider.notifier).refresh();
+
+      // Sync complète en arrière-plan (écrasera l'event provisoire
+      // avec les données enrichies : description, tags, etc.)
       ref.read(syncNotifierProvider.notifier).syncAll().catchError((e) {
         AppLogger.instance
             .warning('CalendarScreen', 'Sync post-assignDate: $e');

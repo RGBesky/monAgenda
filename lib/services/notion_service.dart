@@ -189,12 +189,29 @@ class NotionService {
     return response.data['id'] as String;
   }
 
-  /// Met à jour la date d'une page Notion (propriété "Date").
-  Future<void> updatePageDate(String pageId, DateTime date) async {
+  /// Met à jour la date d'une page Notion.
+  /// [dateProperty] : nom de la propriété date dans la BDD (défaut 'Date').
+  Future<void> updatePageDate(
+    String pageId,
+    DateTime date, {
+    String dateProperty = 'Date',
+  }) async {
+    // Formater correctement la date pour Notion :
+    // - Heure 00:00 → date seule (YYYY-MM-DD) pour éviter le décalage UTC
+    // - Sinon → ISO 8601 local (sans conversion UTC)
+    final String dateStr;
+    if (date.hour == 0 && date.minute == 0 && date.second == 0) {
+      dateStr =
+          '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    } else {
+      // ISO 8601 local sans Z (Notion interprète correctement)
+      dateStr = date.toIso8601String();
+    }
+
     await _dio.patch('/pages/$pageId', data: {
       'properties': {
-        'Date': {
-          'date': {'start': date.toUtc().toIso8601String()},
+        dateProperty: {
+          'date': {'start': dateStr},
         },
       },
     });
