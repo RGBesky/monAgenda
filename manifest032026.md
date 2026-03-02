@@ -512,7 +512,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 12 | 6 | 🟡 67% |
+| **2** | UX / Ergonomie | 18 | 13 | 5 | 🟡 72% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
@@ -537,7 +537,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 **Fonctionnalités demandées :**
 - [x] **2.5** — Import ICS direct depuis file picker + parsing + insertion en base ✅ `fa5d06a`
 - [ ] **2.6** — Barre latérale Todo (tâches sans date) + glisser-déposer vers calendrier
-- [ ] **2.7** — Redimensionnement d'événement par poignée (SfCalendar `allowAppointmentResize`)
+- [x] **2.7** — Redimensionnement d'événement par poignée (SfCalendar `allowAppointmentResize: true` + `onAppointmentResizeEnd`) ✅ (déjà implémenté)
 - [ ] **2.8** — Logo dans le dock Ubuntu (fichier .desktop + icônes)
 
 **États vides & feedback :**
