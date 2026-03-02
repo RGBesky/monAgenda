@@ -879,58 +879,56 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final w = details.bounds.width;
 
     // ── Couleurs conformes au Design System ──
-    // Fond : catégorie Stabilo pastel (comme UnifiedEventCard)
+    // Effet "surlignage au feutre Stabilo" : fond neutre, bordure tout
+    // autour en couleur catégorie semi-transparente (comme un surligneur
+    // sur du papier). Épaisseur 2.5px, coins arrondis, fond blanc/surface.
     final accent = _getCategoryColor(event);
+    // Fond neutre — le surligneur est sur la BORDURE, pas sur le fond
     final bg = isDark
-        ? accent.withValues(alpha: 0.15)
-        : Color.lerp(accent, Colors.white, 0.92)!; // Quasi-blanc teinté Notion
+        ? Theme.of(context).colorScheme.surfaceContainerHigh
+        : Colors.white;
     final titleColor = isDark ? AppColors.darkText : const Color(0xFF191919);
     final subColor =
         isDark ? AppColors.darkTextSecondary : const Color(0xFF6B6B6B);
 
-    // Bordure gauche = PRIORITÉ (Design System §4.1 : 1/4 de la cellule)
-    // Pour les all-day (bandeau fin), on réduit la bordure
-    final priorityColor = _getPriorityColorForBorder(event);
-    final isEffectiveAllDay = event.isAllDay ||
-        event.endDate.difference(event.startDate).inHours > 23;
-    final borderW = isEffectiveAllDay
-        ? (h * 0.25).clamp(2.0, 6.0)
-        : (w * 0.25).clamp(4.0, 24.0);
-    final contentW = isEffectiveAllDay ? w - 2 : w - borderW;
+    // Bordure surligneur : couleur catégorie avec transparence feutre
+    final highlighterColor = isDark
+        ? accent.withValues(alpha: 0.55)
+        : accent.withValues(alpha: 0.45);
+    // Épaisseur "trait de feutre" : 2.5px standard, 2px pour les tiny
+    final borderW = h < 22 ? 2.0 : 2.5;
+    final contentW = w - borderW * 2;
 
     final radius = h < 16 ? 3.0 : (h < 28 ? 5.0 : 8.0);
 
     // Padding vertical = 2 px (sauf tiny = 1 px)
     final vPad = h < 22 ? 1.0 : 2.0;
     // Hauteur utile réellement disponible pour le contenu
-    final usableH = h - vPad * 2;
+    final usableH = h - vPad * 2 - borderW * 2;
 
     return SizedBox(
       height: h,
       width: w,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: Container(
-          clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(
-            color: bg,
-            border: Border(
-              left: BorderSide(color: priorityColor, width: borderW),
-            ),
-          ),
-          padding: EdgeInsets.symmetric(
-            horizontal: contentW > 30 ? 6 : 3,
-            vertical: vPad,
-          ),
-          // SingleChildScrollView absorbe le surplus vertical
-          // (pas de yellow overflow stripe) ; NeverScrollable empêche
-          // le scroll utilisateur. La largeur reste contrainte → pas
-          // de débordement horizontal.
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: _buildAppointmentContent(
-                event, titleColor, subColor, usableH, contentW, isDark),
-          ),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(radius),
+          // Bordure surligneur TOUT AUTOUR — effet "encadré au Stabilo"
+          border: Border.all(color: highlighterColor, width: borderW),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: contentW > 30 ? 6 : 3,
+          vertical: vPad,
+        ),
+        // SingleChildScrollView absorbe le surplus vertical
+        // (pas de yellow overflow stripe) ; NeverScrollable empêche
+        // le scroll utilisateur. La largeur reste contrainte → pas
+        // de débordement horizontal.
+        child: SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: _buildAppointmentContent(
+              event, titleColor, subColor, usableH, contentW, isDark),
         ),
       ),
     );
@@ -961,14 +959,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         borderRadius: BorderRadius.circular(2),
       ),
     );
-  }
-
-  /// Couleur de la bordure gauche priorité (Design System §4.1)
-  /// Utilise la couleur du tag (colorHex) pour être cohérent avec les chips.
-  Color _getPriorityColorForBorder(EventModel event) {
-    final pri = event.priorityTag;
-    if (pri == null) return AppColors.priorityNormalVivid;
-    return AppColors.fromHex(pri.colorHex);
   }
 
   Widget _buildAppointmentContent(
