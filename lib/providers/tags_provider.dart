@@ -38,46 +38,42 @@ class TagsNotifier extends AsyncNotifier<List<TagModel>> {
 
   Future<void> resetToDefaults() async {
     final db = await DatabaseHelper.instance.database;
-    // Supprimer les liaisons orphelines
-    await db.delete(AppConstants.tableEventTags);
-    // Supprimer tous les tags existants
-    final tags = await DatabaseHelper.instance.getAllTags();
-    for (final tag in tags) {
-      if (tag.id != null) {
-        await DatabaseHelper.instance.deleteTag(tag.id!);
+    await db.transaction((txn) async {
+      // Supprimer les liaisons orphelines
+      await txn.delete(AppConstants.tableEventTags);
+      // Supprimer tous les tags existants
+      await txn.delete(AppConstants.tableTags);
+      // Réinsérer les catégories par défaut
+      for (int i = 0; i < AppConstants.defaultCategories.length; i++) {
+        final cat = AppConstants.defaultCategories[i];
+        await txn.insert(AppConstants.tableTags, TagModel(
+          type: AppConstants.tagTypeCategory,
+          name: cat['name'] as String,
+          colorHex: cat['color'] as String,
+          infomaniakMapping: cat['name'] as String,
+          sortOrder: i,
+        ).toMap());
       }
-    }
-    // Les tags par défaut sont recréés via migration DB
-    // ou on les insère manuellement ici
-    for (int i = 0; i < AppConstants.defaultCategories.length; i++) {
-      final cat = AppConstants.defaultCategories[i];
-      await DatabaseHelper.instance.insertTag(TagModel(
-        type: AppConstants.tagTypeCategory,
-        name: cat['name'] as String,
-        colorHex: cat['color'] as String,
-        infomaniakMapping: cat['name'] as String,
-        sortOrder: i,
-      ));
-    }
-    for (int i = 0; i < AppConstants.defaultPriorities.length; i++) {
-      final pri = AppConstants.defaultPriorities[i];
-      await DatabaseHelper.instance.insertTag(TagModel(
-        type: AppConstants.tagTypePriority,
-        name: pri['name'] as String,
-        colorHex: pri['color'] as String,
-        infomaniakMapping: (pri['level'] as int).toString(),
-        sortOrder: pri['level'] as int,
-      ));
-    }
-    for (int i = 0; i < AppConstants.defaultStatuses.length; i++) {
-      final st = AppConstants.defaultStatuses[i];
-      await DatabaseHelper.instance.insertTag(TagModel(
-        type: AppConstants.tagTypeStatus,
-        name: st['name'] as String,
-        colorHex: st['color'] as String,
-        sortOrder: i,
-      ));
-    }
+      for (int i = 0; i < AppConstants.defaultPriorities.length; i++) {
+        final pri = AppConstants.defaultPriorities[i];
+        await txn.insert(AppConstants.tableTags, TagModel(
+          type: AppConstants.tagTypePriority,
+          name: pri['name'] as String,
+          colorHex: pri['color'] as String,
+          infomaniakMapping: (pri['level'] as int).toString(),
+          sortOrder: pri['level'] as int,
+        ).toMap());
+      }
+      for (int i = 0; i < AppConstants.defaultStatuses.length; i++) {
+        final st = AppConstants.defaultStatuses[i];
+        await txn.insert(AppConstants.tableTags, TagModel(
+          type: AppConstants.tagTypeStatus,
+          name: st['name'] as String,
+          colorHex: st['color'] as String,
+          sortOrder: i,
+        ).toMap());
+      }
+    });
     ref.invalidateSelf();
   }
 }
