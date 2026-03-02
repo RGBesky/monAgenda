@@ -587,12 +587,16 @@ class _AppShellState extends ConsumerState<AppShell>
   ];
 
   /// Controller réutilisable pour les BottomSheets (slide fluide).
-  AnimationController _bottomSheetAnimController() =>
-      AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 320),
-        reverseDuration: const Duration(milliseconds: 260),
-      );
+  /// Respecte disableAnimations (accessibilité : réduire les mouvements).
+  AnimationController _bottomSheetAnimController() {
+    final noAnim = WidgetsBinding.instance.disableAnimations;
+    return AnimationController(
+      vsync: this,
+      duration: noAnim ? Duration.zero : const Duration(milliseconds: 320),
+      reverseDuration:
+          noAnim ? Duration.zero : const Duration(milliseconds: 260),
+    );
+  }
 
   @override
   void initState() {

@@ -39,11 +39,16 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen>
   DateTime _now = DateTime.now();
 
   /// Controller pour les BottomSheets (slide fluide).
-  AnimationController _bottomSheetAnimController() => AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 320),
-        reverseDuration: const Duration(milliseconds: 260),
-      );
+  /// Respecte disableAnimations (accessibilité : réduire les mouvements).
+  AnimationController _bottomSheetAnimController() {
+    final noAnim = WidgetsBinding.instance.disableAnimations;
+    return AnimationController(
+      vsync: this,
+      duration: noAnim ? Duration.zero : const Duration(milliseconds: 320),
+      reverseDuration:
+          noAnim ? Duration.zero : const Duration(milliseconds: 260),
+    );
+  }
 
   @override
   void initState() {
@@ -132,7 +137,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen>
             ),
           // Bandeau d'erreur/info sync (auto-dismiss après 5 s via SyncNotifier)
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
+            duration: WidgetsBinding.instance.disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 350),
             transitionBuilder: (child, anim) => SizeTransition(
               sizeFactor: anim,
               axisAlignment: -1,
