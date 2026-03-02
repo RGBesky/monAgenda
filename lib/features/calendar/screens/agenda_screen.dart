@@ -29,13 +29,21 @@ class AgendaScreen extends ConsumerStatefulWidget {
   ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
 }
 
-class _AgendaScreenState extends ConsumerState<AgendaScreen> {
+class _AgendaScreenState extends ConsumerState<AgendaScreen>
+    with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   List<WeatherModel> _forecasts = [];
   bool _loadingWeather = false;
 
   // Ticker pour mettre à jour "Maintenant"
   DateTime _now = DateTime.now();
+
+  /// Controller pour les BottomSheets (slide fluide).
+  AnimationController _bottomSheetAnimController() => AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 320),
+        reverseDuration: const Duration(milliseconds: 260),
+      );
 
   @override
   void initState() {
@@ -792,6 +800,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
+      transitionAnimationController: _bottomSheetAnimController(),
       backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

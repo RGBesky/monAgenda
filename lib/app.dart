@@ -576,7 +576,8 @@ class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends ConsumerState<AppShell> {
+class _AppShellState extends ConsumerState<AppShell>
+    with TickerProviderStateMixin {
   int _selectedIndex = 0; // 0=To Do, 1=Calendrier, 2=Paramètres
 
   final _screens = const [
@@ -584,6 +585,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     CalendarScreen(),
     SettingsScreen(),
   ];
+
+  /// Controller réutilisable pour les BottomSheets (slide fluide).
+  AnimationController _bottomSheetAnimController() =>
+      AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 320),
+        reverseDuration: const Duration(milliseconds: 260),
+      );
 
   @override
   void initState() {
@@ -859,6 +868,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       BuildContext context, bool isDark, List<dynamic> dbs) {
     showModalBottomSheet(
       context: context,
+      transitionAnimationController: _bottomSheetAnimController(),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
@@ -1066,6 +1076,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _showQuickAddSheet(BuildContext context, bool isDark) {
     showModalBottomSheet(
       context: context,
+      transitionAnimationController: _bottomSheetAnimController(),
       backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
