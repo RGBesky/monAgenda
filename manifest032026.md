@@ -512,7 +512,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 11 | 7 | 🟡 61% |
+| **2** | UX / Ergonomie | 18 | 12 | 6 | 🟡 67% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
@@ -531,7 +531,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 ### PHASE 2 — UX / ERGONOMIE (7 tâches restantes)
 
 **Navigation & accès rapides :**
-- [ ] **2.2** — Ctrl+F doit ouvrir SearchScreen (actuellement switch onglet seulement)
+- [x] **2.2** — Ctrl+F ouvre SearchScreen via Navigator.push (pas juste switch onglet) ✅ (déjà implémenté)
 - [x] **2.3** — Raccourcis clavier : Ctrl+S (sync) + Ctrl+, (paramètres) + tooltips enrichis ✅ `f71b0fd`
 
 **Fonctionnalités demandées :**
