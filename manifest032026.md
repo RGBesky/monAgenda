@@ -335,7 +335,7 @@ lib/
 | Export CSV | 💻 | ✅ |
 | Export PPT (script Python) | 💻 | ✅ |
 | Export QR Code | 🔁 | ✅ |
-| Import QR d'événements (merge) | 🔁 | 🔴 |
+| Import QR d'événements (merge) | 🔁 | ✅ |
 
 ### IA — Saisie Magique
 
@@ -512,7 +512,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 15 | 3 | 🟠 83% |
+| **2** | UX / Ergonomie | 18 | 16 | 2 | 🟠 89% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
@@ -548,7 +548,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 - [x] **2.14** — Refonte paramètres en 5 sections (Comptes, Notifications, Apparence, IA & Modèle, Avancé) + NavigationRail desktop ✅ (déjà implémenté)
 
 **Features V3 :**
-- [ ] **2.17** — Import QR d'événements (pas juste config) — scan → déchiffrement → merge SQLite
+- [x] **2.17** — Import QR d'événements — scan mobile + image desktop → AES-256 decrypt → merge SQLite (insert/update/skip) ✅ (déjà implémenté)
 - [ ] **2.18** — Logos SVG monAgenda (light, dark, splash) + flutter_svg
 
 ### PHASE 3 — STOCKAGE SOUVERAIN (zéro fichier local permanent)
