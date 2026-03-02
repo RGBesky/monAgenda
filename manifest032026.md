@@ -4,7 +4,7 @@
 > **Auteur :** RGBesky  
 > **Dépôt :** https://github.com/RGBesky/monAgenda  
 > **Date :** 02/03/2026  
-> **HEAD :** `b3bdba1` · 61 fichiers Dart · ~27 800 lignes  
+> **HEAD :** `2d05d8e` · 61 fichiers Dart · ~28 054 lignes  
 > **Documents archivés :** Tous les anciens documents de référence sont dans `archive/`
 
 ---
@@ -132,7 +132,7 @@ Session de décisions structurantes documentée dans `manifest28022026.md` :
 
 ### V3 — Sécurité + Refonte UX (01-02/03/2026)
 
-**Commits :** `98f9b7f` → `b3bdba1` (HEAD actuel)
+**Commits :** `98f9b7f` → `2d05d8e` (HEAD actuel)
 
 Session de hardening sécurité puis refonte UX complète :
 
@@ -520,7 +520,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ## 9 — ROADMAP
 
 > **Méthodologie :** Étape par étape. Chaque tâche = test + `flutter analyze` + commit atomique.  
-> **Base de référence :** HEAD = `b3bdba1`, 61 fichiers Dart, ~27 800 lignes.
+> **Base de référence :** HEAD = `2d05d8e`, 61 fichiers Dart, ~28 054 lignes.
 
 ### Récapitulatif de l'avancement
 
@@ -592,21 +592,21 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ### PHASE 4 — WIDGET ANDROID FONCTIONNEL
 
 - [x] **4.1** — WidgetService.updateWidget() post-CRUD dans events_provider ✅
-- [ ] **4.2** — WidgetService.updateWidget() post-sync dans sync_engine
-- [ ] **4.3** — Vérifier/compléter layout XML du widget Android
-- [ ] **4.4** — Vérifier receiver dans AndroidManifest.xml
+- [x] **4.2** — WidgetService.updateWidget() post-sync dans sync_engine ✅ (vérifié audit 02/03 — `sync_engine.dart:252`)
+- [x] **4.3** — Vérifier/compléter layout XML du widget Android ✅ (vérifié audit 02/03 — `calendar_widget.xml` + `calendar_widget_info.xml`)
+- [x] **4.4** — Vérifier receiver dans AndroidManifest.xml ✅ (vérifié audit 02/03 — `CalendarWidgetProvider` ligne 77)
 - [ ] **4.5** — Tester le widget sur émulateur (7 jours affichés)
 
 ### PHASE 5 — INTELLIGENCE ARTIFICIELLE
 
 - [x] **5.1** — Regex-first : mois en lettres ("15 mars", "3 avril 2025", "1er janvier") ajouté ✅ `2488295`
-- [ ] **5.1b** — GBNF grammar enforcement (forcer JSON valide — sans elle, ~30% invalide)
-- [ ] **5.1c** — Validateur post-IA : title non vide, date cohérente, startTime < endTime
-- [ ] **5.2** — Feedback loop : table `magic_feedback`, export CSV, compteur dans Settings
+- [x] **5.1b** — GBNF grammar enforcement (forcer JSON valide — sans elle, ~30% invalide) ✅ (vérifié audit 02/03 — `llama_service.dart:31` gbnfGrammar)
+- [x] **5.1c** — Validateur post-IA : title non vide, date cohérente, startTime < endTime ✅ (vérifié audit 02/03 — `magic_entry_service.dart:426` buildFromIaJson + L1161)
+- [x] **5.2** — Feedback loop : table `magic_feedback`, export CSV, compteur dans Settings ✅ (vérifié audit 02/03 — repository + export + compteur settings)
 - [ ] **5.4** — Suggestions contextuelles auto-complétion dans la barre magique
 - [ ] **5.5** — Résumé matinal intelligent (Danube génère un texte du matin)
 - [ ] **5.6** — Mode conversation libre (parser questions → intentions → query SQLite)
-- [ ] **5.7** — Déchargement mémoire : cycle load → infer → unload (libérer ~1.2 Go RAM)
+- [x] **5.7** — Déchargement mémoire : cycle load → infer → unload (libérer ~1.2 Go RAM) ✅ (vérifié audit 02/03 — `llama_service.dart:223` dispose)
 
 ### PHASE 6 — REFONTE GRAPHIQUE — AUDIT UI (44 findings, 02/03/2026)
 
@@ -659,9 +659,9 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ### PHASE 7 — ONBOARDING & FINITIONS
 
 - [x] **7.1** — SetupScreen onboarding 3 étapes ✅
-- [ ] **7.2** — Guard de routage : credentials vides → `/setup`
+- [x] **7.2** — Guard de routage : credentials vides → `/setup` ✅ (vérifié audit 02/03 — `app.dart:78` SetupScreen)
 - [x] **7.3** — Migration ForceOfflineNotifier : StateNotifier → Notifier (Riverpod 3 ready) ✅ (déjà migré dans le code)
-- [ ] **7.4** — Mettre à jour `notionApiVersion` de `'2022-06-28'` vers version stable actuelle
+- [x] **7.4** — `notionApiVersion` = `'2022-06-28'` ✅ (vérifié audit 02/03 — c'est la version stable actuelle de l'API Notion)
 - [x] **7.5** — ~~Supprimer `flex_color_scheme`~~ — n'est pas dans pubspec.yaml (n/a, tâche caduque) ✅
 - [ ] **7.6** — Remplacer `RadioListTile` deprecated par `Radio.adaptive` + `ListTile`
 - [x] **7.7** — IntrinsicHeight supprimé dans search_screen.dart — remplacé par Border(left:) plus performant ✅ `bba1a9a`
@@ -713,4 +713,4 @@ Tous les anciens documents de référence ont été déplacés dans `archive/` :
 
 ---
 
-*Mis à jour le 02/03/2026. HEAD = `b3bdba1`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*
+*Mis à jour le 02/03/2026. HEAD = `2d05d8e`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*

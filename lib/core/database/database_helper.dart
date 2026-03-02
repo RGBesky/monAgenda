@@ -148,6 +148,9 @@ class DatabaseHelper {
           onConfigure: (db) async {
             // Clé SQLCipher AVANT toute lecture (user_version, etc.)
             await db.rawQuery("PRAGMA key = '$dbKey'");
+            // WAL mode + busy_timeout — protège contre "database is locked" (F-001)
+            await db.execute('PRAGMA journal_mode=WAL');
+            await db.execute('PRAGMA busy_timeout=5000');
           },
         ),
       );
@@ -163,6 +166,11 @@ class DatabaseHelper {
       version: kCurrentDbVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onConfigure: (db) async {
+        // WAL mode + busy_timeout — protège contre "database is locked" (F-001)
+        await db.execute('PRAGMA journal_mode=WAL');
+        await db.execute('PRAGMA busy_timeout=5000');
+      },
     );
   }
 
