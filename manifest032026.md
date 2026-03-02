@@ -314,6 +314,7 @@ lib/
 | Formulaire complet (pickers, chips, tags, récurrence) | 🔁 | ✅ |
 | SnackBars persistants sans blocage navigation | 🔁 | ✅ |
 | Logos PNG Infomaniak/Notion partout | 🔁 | ✅ |
+| Logos SVG monAgenda (light/dark/splash) + flutter_svg | 🔁 | ✅ |
 | Empty states (agenda, search, logs) | 🔁 | ✅ |
 | Météo Open-Meteo (vue jour/semaine) | 🔁 | ✅ |
 
@@ -512,7 +513,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 16 | 2 | 🟠 89% |
+| **2** | UX / Ergonomie | 18 | 17 | 1 | 🟠 94% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
@@ -549,7 +550,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 
 **Features V3 :**
 - [x] **2.17** — Import QR d'événements — scan mobile + image desktop → AES-256 decrypt → merge SQLite (insert/update/skip) ✅ (déjà implémenté)
-- [ ] **2.18** — Logos SVG monAgenda (light, dark, splash) + flutter_svg
+- [x] **2.18** — Logos SVG monAgenda (light, dark, splash) + flutter_svg — potrace BW→SVG, 3 variantes (light=#000, dark=#FFF, splash=#D83535), `SvgPicture.asset` adaptatif thème ✅
 
 ### PHASE 3 — STOCKAGE SOUVERAIN (zéro fichier local permanent)
 

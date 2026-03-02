@@ -2,6 +2,7 @@ import '../../../app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:dio/dio.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:path/path.dart' show join;
@@ -1138,11 +1139,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: Image.asset(
-                'logo_pack/logo_color_128x128.png',
+              child: SvgPicture.asset(
+                isDark
+                    ? 'assets/logos/logo_dark.svg'
+                    : 'assets/logos/logo_light.svg',
                 width: 80,
                 height: 80,
-                filterQuality: FilterQuality.medium,
               ),
             ),
           ),
