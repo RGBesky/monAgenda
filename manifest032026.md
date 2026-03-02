@@ -286,7 +286,7 @@ lib/
 | Abonnements ICS externes | 🔁 | ✅ |
 | Bannière "X actions en attente" | 🔁 | ✅ |
 | FAB 3 états (vert/orange/rouge) | 🔁 | ✅ |
-| Conflits ETag (HTTP 412) — last-remote-wins | 🔁 | 🔴 |
+| Conflits ETag (HTTP 412) — last-remote-wins | 🔁 | ✅ |
 | Bannière serveur saturé (429/500/503) | 🔁 | ✅ |
 
 ### Sécurité
@@ -511,7 +511,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 | Phase | Description | Tâches | Fait | Reste | Statut |
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
-| **1** | Bugs bloquants & corrections | 18 | 16 | 2 | 🟠 89% |
+| **1** | Bugs bloquants & corrections | 18 | 17 | 1 | 🟠 94% |
 | **2** | UX / Ergonomie | 18 | 11 | 7 | 🟡 61% |
 | **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
@@ -525,7 +525,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 ### PHASE 1 — BUGS RESTANTS (3 tâches)
 
 - [x] **1.15** — Bannière serveur saturé : `serverSyncErrorProvider` + `_buildServerErrorBanner()` orange + bouton "Réessayer" + dismiss ✅ (déjà implémenté)
-- [ ] **1.16** — Conflits ETag (HTTP 412) : GET version serveur → override local (last-remote-wins) → SnackBar orange via `etagConflictProvider`
+- [x] **1.16** — Conflits ETag (HTTP 412) : GET version serveur → override local (last-remote-wins) + SnackBar "Conflit résolu" via `etagConflictProvider` ✅ (déjà implémenté)
 - [ ] **1.19** — ICS import sans déduplication (double import = doublons) — ajouter check UID
 
 ### PHASE 2 — UX / ERGONOMIE (7 tâches restantes)
