@@ -10,6 +10,7 @@ import '../../../core/utils/date_utils.dart';
 import '../../../providers/events_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/tags_provider.dart';
+import '../../../services/logger_service.dart';
 import '../../../app.dart';
 
 class EventFormScreen extends ConsumerStatefulWidget {
@@ -896,7 +897,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       } catch (e) {
         // Le push sera retenté via la sync_queue au prochain sync
         pushError = e.toString();
-        debugPrint('Push distant échoué (sera retenté) : $e');
+        AppLogger.instance.warning('EventForm', 'Push distant échoué (sera retenté) : $e');
       }
 
       if (mounted) {

@@ -15,6 +15,7 @@ import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../services/sync_engine.dart';
 import '../../../services/weather_service.dart';
+import '../../../services/logger_service.dart';
 import '../../events/screens/event_detail_screen.dart';
 import '../../events/screens/event_form_screen.dart';
 import '../widgets/weather_header.dart';
@@ -1742,7 +1743,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           .read(syncNotifierProvider.notifier)
           .pushEvent(updatedEvent)
           .catchError((e) {
-        debugPrint('Erreur sync drag&drop: $e');
+        AppLogger.instance.warning('CalendarScreen', 'Erreur sync drag&drop: $e');
       });
     } catch (e) {
       ref.read(eventsNotifierProvider.notifier).refresh();

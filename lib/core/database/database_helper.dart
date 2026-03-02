@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -10,6 +9,7 @@ import 'package:path/path.dart';
 import '../constants/app_constants.dart';
 import '../models/event_model.dart';
 import '../models/tag_model.dart';
+import '../../services/logger_service.dart';
 import '../models/notion_database_model.dart';
 import '../models/ics_subscription_model.dart';
 import '../models/sync_state_model.dart';
@@ -117,10 +117,10 @@ class DatabaseHelper {
       final bakFile = File(backupPath);
       if (bakFile.existsSync()) bakFile.deleteSync();
 
-      debugPrint('[DB] ✅ Migration SQLCipher desktop réussie');
+      AppLogger.instance.info('DatabaseHelper', 'Migration SQLCipher desktop réussie');
     } catch (_) {
       // La DB n'est pas lisible sans clé → déjà chiffrée, rien à faire
-      debugPrint('[DB] DB déjà chiffrée ou inaccessible, pas de migration');
+      AppLogger.instance.info('DatabaseHelper', 'DB déjà chiffrée ou inaccessible, pas de migration');
     }
   }
 

@@ -150,7 +150,7 @@ class MagicEntryNotifier extends AsyncNotifier<EventModel?> {
       return partial;
     } catch (e, stack) {
       stopwatch.stop();
-      debugPrint('[MagicEntry] CRASH: $e\n$stack');
+      AppLogger.instance.error('MagicEntry', 'CRASH: $e', e);
       AppLogger.instance.error('MagicEntry',
           'Parse failed in ${stopwatch.elapsedMilliseconds}ms', e);
       state = AsyncError(e, stack);
