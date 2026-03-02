@@ -4,7 +4,7 @@
 > **Auteur :** RGBesky  
 > **Dépôt :** https://github.com/RGBesky/monAgenda  
 > **Date :** 02/03/2026  
-> **HEAD :** `cc608d4` · 61 fichiers Dart · ~27 800 lignes  
+> **HEAD :** `b3bdba1` · 61 fichiers Dart · ~27 800 lignes  
 > **Documents archivés :** Tous les anciens documents de référence sont dans `archive/`
 
 ---
@@ -132,7 +132,7 @@ Session de décisions structurantes documentée dans `manifest28022026.md` :
 
 ### V3 — Sécurité + Refonte UX (01-02/03/2026)
 
-**Commits :** `98f9b7f` → `d1c488b` (HEAD actuel)
+**Commits :** `98f9b7f` → `b3bdba1` (HEAD actuel)
 
 Session de hardening sécurité puis refonte UX complète :
 
@@ -150,7 +150,7 @@ Session de hardening sécurité puis refonte UX complète :
 - `copyWith` NotionTaskModel : tous les champs (`c9ff093`)
 - `EventModel.props` Equatable : 27 champs (`c9ff093`)
 - Source magic entry dynamique, WidgetService post-CRUD, deleteEvent SQL direct
-- Versioning SQLite centralisé `kCurrentDbVersion=12` + `kMigrations`
+- Versioning SQLite centralisé `kCurrentDbVersion=14` + `kMigrations`
 - Timer leaks corrigés (dispose), N+1 queries → batch JOIN
 - FTS5 migration V8 + fallback LIKE
 - Déduplication `sync_queue` (DELETE UPDATE pending avant INSERT)
@@ -165,7 +165,7 @@ Session de hardening sécurité puis refonte UX complète :
 - TextFields harmonisés (filled, fond Notion, borderRadius 8)
 - Police Inter appliquée partout via Google Fonts
 
-**Meeting Note Notion + Smart Context PDF** déjà en place (desktop only).
+**Meeting Note Notion** déjà en place (desktop only). Smart Context PDF = non implémenté.
 
 **Session 02/03/2026 :**
 - EventDetailScreen Notion-like complet — fond blanc, table propriétés, badges source/status, participants (`93a5002`)
@@ -224,7 +224,10 @@ Flutter App (Android + Linux)
 ├── MagicEntryService     → Saisie Magique NLP (llama.cpp + Danube 3)
 ├── ModelDownloadService  → Téléchargement on-demand du .gguf
 ├── NotionMeetingService  → Création auto de Meeting Notes Notion
-└── LoggerService         → AppLogger → table system_logs
+├── LoggerService         → AppLogger → table system_logs
+├── BackgroundWorkerService → Sync périodique (workmanager / Timer)
+├── NotionSchemaValidator → Validation schéma Notion au démarrage
+└── LlamaService          → FFI llama.cpp, inférence Isolate
 ```
 
 ### Structure du code
@@ -240,7 +243,7 @@ lib/
 │   ├── security/                      # CryptoUtils, CertPinManager
 │   ├── utils/                         # DateUtils, PlatformUtils
 │   └── widgets/                       # Composants réutilisables
-├── services/                          # 14 services métier
+├── services/                          # 16 services métier
 ├── providers/                         # Riverpod providers (4 fichiers)
 │   ├── settings_provider.dart
 │   ├── events_provider.dart
@@ -269,7 +272,7 @@ lib/
 
 | Feature | Plateforme | Statut |
 |---|---|---|
-| Base SQLite chiffrée (SQLCipher, 8+ tables, dbVersion=12) | 🔁 | ✅ |
+| Base SQLite chiffrée (SQLCipher, 8+ tables, dbVersion=14) | 🔁 | ✅ |
 | EventModel complet (27 champs, etag, participants, smart_attachments) | 🔁 | ✅ |
 | State Management 100% Riverpod (AsyncNotifier, StreamProvider, FutureProvider.family) | 🔁 | ✅ |
 | Mode Offline forcé manuellement (forceOfflineProvider) | 🔁 | ✅ |
@@ -365,7 +368,7 @@ lib/
 | Feature | Plateforme | Statut |
 |---|---|---|
 | Meeting Note Notion (créer/ouvrir compte-rendu) | 💻 | ✅ |
-| Smart Context PDF (attachements fichiers) | 💻 | ✅ |
+| Smart Context PDF (attachements fichiers) | 💻 | 🔴 |
 | Vue Projet + Time Blocking Drag & Drop | 💻 | ✅ |
 | Raccourcis clavier (Ctrl+N/K/F/S/,, Échap) | 💻 | ✅ |
 | Export PPT via Python Process.run | 💻 | ✅ |
@@ -399,7 +402,7 @@ Remplace la dérivation faible `padRight(32, '0')` par PBKDF2-HMAC-SHA256 (100 0
 
 ## 6 — ÉTAT DU CODE DE RÉFÉRENCE
 
-### Tables SQLite (dbVersion=12)
+### Tables SQLite (dbVersion=14)
 
 ```
 events           : id, remote_id, source, type, title, start_date, end_date, is_all_day,
@@ -456,7 +459,7 @@ tagsProvider                  → AsyncNotifierProvider<TagsNotifier, List<TagMo
 syncNotifierProvider          → NotifierProvider<SyncNotifier, SyncState>
 connectivityStreamProvider    → StreamProvider<bool>
 isOfflineProvider             → Provider<bool> (combiné forceOffline + connectivity)
-forceOfflineProvider          → StateNotifierProvider<ForceOfflineNotifier, bool>
+forceOfflineProvider          → NotifierProvider<ForceOfflineNotifier, bool>
 autoSyncOnConnectivityProvider → Provider<void> (debounce 5s)
 periodicSyncRetryProvider     → Provider<void> (fallback Timer 60s Linux)
 pendingSyncCountProvider      → FutureProvider<int>
@@ -517,7 +520,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ## 9 — ROADMAP
 
 > **Méthodologie :** Étape par étape. Chaque tâche = test + `flutter analyze` + commit atomique.  
-> **Base de référence :** HEAD = `cc608d4`, 61 fichiers Dart, ~27 800 lignes.
+> **Base de référence :** HEAD = `b3bdba1`, 61 fichiers Dart, ~27 800 lignes.
 
 ### Récapitulatif de l'avancement
 
@@ -525,12 +528,12 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 |-------|-------------|--------|------|-------|--------|
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
-| **2** | UX / Ergonomie | 18 | 18 | 0 | ✅ Complète |
+| **2** | UX / Ergonomie | 13 | 13 | 0 | ✅ Complète |
 | **3** | Stockage souverain | 5 | 2 | 3 | 🟡 40% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
 | **6** | Refonte graphique — Audit UI | 12 | 2 | 10 | 🔴 17% |
-| **7** | Onboarding & finitions | 8 | 2 | 6 | 🟠 25% |
+| **7** | Onboarding & finitions | 8 | 4 | 4 | 🟡 50% |
 | **8** | Documentation & versioning | 4 | 0 | 4 | 🔴 0% |
 
 ---
@@ -539,7 +542,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 
 - [x] **1.15** — Bannière serveur saturé : `serverSyncErrorProvider` + `_buildServerErrorBanner()` orange + bouton "Réessayer" + dismiss ✅ (déjà implémenté)
 - [x] **1.16** — Conflits ETag (HTTP 412) : GET version serveur → override local (last-remote-wins) + SnackBar "Conflit résolu" via `etagConflictProvider` ✅ (déjà implémenté)
-- [x] **1.19** — ICS import déduplication par UID (remoteId + source) — doublons ignorés avec compteur ✅
+- [x] **1.19** — ICS import déduplication par UID (remoteId + source) — doublons écrasés silencieusement via `ConflictAlgorithm.replace` + contrainte `UNIQUE(remote_id, source)` ✅
 
 ### PHASE 2 — UX / ERGONOMIE (7 tâches restantes)
 
@@ -608,7 +611,7 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 ### PHASE 6 — REFONTE GRAPHIQUE — AUDIT UI (44 findings, 02/03/2026)
 
 **Déjà fait :**
-- [x] **6.6** — Micro-animations : SlideTransition fluide (320ms easeOut) sur tous les BottomSheets ✅ `ffff9bb`
+- [x] **6.6** — Micro-animations : `transitionAnimationController` 320ms sur `showModalBottomSheet` (courbe Flutter par défaut) ✅ `ffff9bb`
 - [x] **6.7** — disableAnimations global : BottomSheets + AnimatedSwitcher respectent WidgetsBinding.disableAnimations ✅ `fd3fe57`
 
 **6A — Unifier borderRadius Light/Dark dans app.dart** (Critique)
@@ -657,9 +660,9 @@ L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lanc
 
 - [x] **7.1** — SetupScreen onboarding 3 étapes ✅
 - [ ] **7.2** — Guard de routage : credentials vides → `/setup`
-- [ ] **7.3** — Migration ForceOfflineNotifier : StateNotifier → Notifier (Riverpod 3 ready)
+- [x] **7.3** — Migration ForceOfflineNotifier : StateNotifier → Notifier (Riverpod 3 ready) ✅ (déjà migré dans le code)
 - [ ] **7.4** — Mettre à jour `notionApiVersion` de `'2022-06-28'` vers version stable actuelle
-- [ ] **7.5** — Supprimer `flex_color_scheme` (dans pubspec mais jamais importé)
+- [x] **7.5** — ~~Supprimer `flex_color_scheme`~~ — n'est pas dans pubspec.yaml (n/a, tâche caduque) ✅
 - [ ] **7.6** — Remplacer `RadioListTile` deprecated par `Radio.adaptive` + `ListTile`
 - [x] **7.7** — IntrinsicHeight supprimé dans search_screen.dart — remplacé par Border(left:) plus performant ✅ `bba1a9a`
 - [ ] **7.8** — Optimisation APK : minifyEnabled, shrinkResources, --split-per-abi (cible <40 Mo)
@@ -710,4 +713,4 @@ Tous les anciens documents de référence ont été déplacés dans `archive/` :
 
 ---
 
-*Mis à jour le 02/03/2026. HEAD = `cc608d4`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*
+*Mis à jour le 02/03/2026. HEAD = `b3bdba1`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*
