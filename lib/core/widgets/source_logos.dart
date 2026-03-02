@@ -5,35 +5,62 @@ class SourceLogos {
   SourceLogos._();
 
   /// Choisit le bon asset PNG en fonction de la taille demandée.
+  /// Toujours prendre la résolution >= 2x la taille affichée pour la netteté HiDPI.
   static String _pickAsset(String prefix, double size) {
-    // Sélectionne la résolution la plus adaptée
-    if (size <= 16) return 'assets/logos/${prefix}_16x16.png';
-    if (size <= 32) return 'assets/logos/${prefix}_32x32.png';
-    if (size <= 48) return 'assets/logos/${prefix}_48x48.png';
-    if (size <= 64) return 'assets/logos/${prefix}_64x64.png';
+    // Sélectionne la résolution la plus adaptée (2x pour HiDPI)
+    final needed = size * 2;
+    if (needed <= 16) return 'assets/logos/${prefix}_16x16.png';
+    if (needed <= 32) return 'assets/logos/${prefix}_32x32.png';
+    if (needed <= 48) return 'assets/logos/${prefix}_48x48.png';
+    if (needed <= 64) return 'assets/logos/${prefix}_64x64.png';
+    if (needed <= 128) return 'assets/logos/${prefix}_128x128.png';
+    if (needed <= 256) return 'assets/logos/${prefix}_256x256.png';
+    return 'assets/logos/${prefix}_512x512.png';
+  }
+
+  /// Résolution adaptée pour les assets qui plafonnent à 128x128 (ex: Notion).
+  static String _pickAssetMax128(String prefix, double size) {
+    final needed = size * 2;
+    if (needed <= 16) return 'assets/logos/${prefix}_16x16.png';
+    if (needed <= 32) return 'assets/logos/${prefix}_32x32.png';
+    if (needed <= 48) return 'assets/logos/${prefix}_48x48.png';
+    if (needed <= 64) return 'assets/logos/${prefix}_64x64.png';
     return 'assets/logos/${prefix}_128x128.png';
   }
 
-  /// Logo officiel Infomaniak (asset PNG).
+  /// Logo monAgenda (PNG couleur, toujours clair).
+  /// Utilise les assets logo_packv3 copiés dans assets/logos/monagenda_*.
+  static Widget appLogo({double size = 64}) {
+    return Image.asset(
+      _pickAsset('monagenda', size),
+      width: size,
+      height: size,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, __, ___) => _appLogoFallback(size),
+    );
+  }
+
+  /// Logo officiel Infomaniak (asset PNG, haute qualité).
   static Widget infomaniak({double size = 16}) {
     return Image.asset(
       _pickAsset('infomaniak', size),
       width: size,
       height: size,
-      filterQuality: FilterQuality.medium,
+      filterQuality: FilterQuality.high,
       errorBuilder: (_, __, ___) => _infomaniakFallback(size),
     );
   }
 
-  /// Logo officiel Notion (asset PNG).
+  /// Logo officiel Notion (asset PNG, haute qualité).
+  /// Max asset disponible : 128x128.
   static Widget notion({double size = 16, bool isDark = false}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.18),
       child: Image.asset(
-        _pickAsset('notion', size),
+        _pickAssetMax128('notion', size),
         width: size,
         height: size,
-        filterQuality: FilterQuality.medium,
+        filterQuality: FilterQuality.high,
         errorBuilder: (_, __, ___) => _notionFallback(size, isDark),
       ),
     );
@@ -110,6 +137,28 @@ class SourceLogos {
   }
 
   // ── Fallbacks (au cas où les assets ne sont pas trouvés) ──
+
+  static Widget _appLogoFallback(double size) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8505B),
+        borderRadius: BorderRadius.circular(size * 0.2),
+      ),
+      child: Center(
+        child: Text(
+          'mA',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.38,
+            fontWeight: FontWeight.w900,
+            height: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
 
   static Widget _infomaniakFallback(double size) {
     return Container(

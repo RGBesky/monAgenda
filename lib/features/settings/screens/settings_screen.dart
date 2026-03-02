@@ -2,8 +2,8 @@ import '../../../app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:dio/dio.dart';
+import '../../../core/widgets/source_logos.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:path/path.dart' show join;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactory;
@@ -33,7 +33,6 @@ import 'appearance_settings_screen.dart';
 import 'backup_settings_screen.dart';
 import 'import_config_screen.dart';
 import 'system_logs_screen.dart';
-import '../../../core/widgets/source_logos.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -1139,13 +1138,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: SvgPicture.asset(
-                isDark
-                    ? 'assets/logos/logo_dark.svg'
-                    : 'assets/logos/logo_light.svg',
-                width: 80,
-                height: 80,
-              ),
+              child: SourceLogos.appLogo(size: 80),
             ),
           ),
           const SizedBox(height: 12),

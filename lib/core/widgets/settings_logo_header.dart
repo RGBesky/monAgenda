@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'source_logos.dart';
 
 /// Centered monAgenda logo header for settings pages.
 class SettingsLogoHeader extends StatelessWidget {
@@ -29,13 +29,7 @@ class SettingsLogoHeader extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: SvgPicture.asset(
-                  isDark
-                      ? 'assets/logos/logo_dark.svg'
-                      : 'assets/logos/logo_light.svg',
-                  width: 64,
-                  height: 64,
-                ),
+                child: SourceLogos.appLogo(size: 64),
               ),
             ),
             const SizedBox(height: 8),

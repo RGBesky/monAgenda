@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io' show Platform;
 import 'providers/settings_provider.dart';
 import 'providers/sync_provider.dart';
@@ -708,13 +707,10 @@ class _AppShellState extends ConsumerState<AppShell>
               padding: const EdgeInsets.only(bottom: 16),
               child: Opacity(
                 opacity: 0.7,
-                child: SvgPicture.asset(
-                  Theme.of(context).brightness == Brightness.dark
-                      ? 'assets/logos/logo_dark.svg'
-                      : 'assets/logos/logo_light.svg',
-                  width: 32,
-                  height: 32,
-                ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SourceLogos.appLogo(size: 32),
+              ),
               ),
             ),
           ],
