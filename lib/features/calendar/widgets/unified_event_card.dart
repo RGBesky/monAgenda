@@ -37,28 +37,10 @@ class UnifiedEventCard extends StatefulWidget {
   State<UnifiedEventCard> createState() => _UnifiedEventCardState();
 }
 
-class _UnifiedEventCardState extends State<UnifiedEventCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _fadeCtrl;
-  late final Animation<double> _fade;
-
+class _UnifiedEventCardState extends State<UnifiedEventCard> {
   @override
   void initState() {
     super.initState();
-    final disableAnimations = WidgetsBinding.instance.disableAnimations;
-    _fadeCtrl = AnimationController(
-      vsync: this,
-      duration:
-          disableAnimations ? Duration.zero : const Duration(milliseconds: 200),
-    );
-    _fade = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeIn);
-    _fadeCtrl.forward();
-  }
-
-  @override
-  void dispose() {
-    _fadeCtrl.dispose();
-    super.dispose();
   }
 
   EventModel get event => widget.event;
@@ -112,53 +94,52 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
     final subColor = _subColor(isDark);
     final borderColor = isDark ? AppColors.darkOutline : AppColors.lightOutline;
 
-    return FadeTransition(
-      opacity: _fade,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(3), // Radius Notion
-            child: Container(
-              decoration: BoxDecoration(
-                color: cardBg,
-                border: Border(
-                  left: BorderSide(
-                      color: priorityColor, width: 4), // Bordure gauche fine
-                  top: BorderSide(
-                      color: isDark ? borderColor : const Color(0xFFEBEBE9),
-                      width: 0.5),
-                  right: BorderSide(
-                      color: isDark ? borderColor : const Color(0xFFEBEBE9),
-                      width: 0.5),
-                  bottom: BorderSide(
-                      color: isDark ? borderColor : const Color(0xFFEBEBE9),
-                      width: 0.5),
-                ),
+    debugPrint(
+        'CARD_RENDER: ${event.title.substring(0, event.title.length > 30 ? 30 : event.title.length)}');
+    return GestureDetector(
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(3), // Radius Notion
+          child: Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              border: Border(
+                left: BorderSide(
+                    color: priorityColor, width: 4), // Bordure gauche fine
+                top: BorderSide(
+                    color: isDark ? borderColor : const Color(0xFFEBEBE9),
+                    width: 0.5),
+                right: BorderSide(
+                    color: isDark ? borderColor : const Color(0xFFEBEBE9),
+                    width: 0.5),
+                bottom: BorderSide(
+                    color: isDark ? borderColor : const Color(0xFFEBEBE9),
+                    width: 0.5),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // ── Ligne 1 : Titre + checkbox tâche + source ──
-                    _buildTitleRow(textColor, isDark),
-                    // ── Ligne 2 : Chips (catégorie + statut) ───────
-                    if (event.categoryTags.isNotEmpty || _hasStatus())
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: _buildChipsRow(isDark, subColor),
-                      ),
-                    // ── Ligne 3 : Heure ────────────────────────────
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ── Ligne 1 : Titre + checkbox tâche + source ──
+                  _buildTitleRow(textColor, isDark),
+                  // ── Ligne 2 : Chips (catégorie + statut) ───────
+                  if (event.categoryTags.isNotEmpty || _hasStatus())
                     Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: _buildTimeRow(subColor),
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _buildChipsRow(isDark, subColor),
                     ),
-                  ],
-                ),
+                  // ── Ligne 3 : Heure ────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5),
+                    child: _buildTimeRow(subColor),
+                  ),
+                ],
               ),
             ),
           ),

@@ -707,10 +707,10 @@ class _AppShellState extends ConsumerState<AppShell>
               padding: const EdgeInsets.only(bottom: 16),
               child: Opacity(
                 opacity: 0.7,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SourceLogos.appLogo(size: 32),
-              ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SourceLogos.appLogo(size: 32),
+                ),
               ),
             ),
           ],

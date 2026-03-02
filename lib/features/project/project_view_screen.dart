@@ -172,8 +172,7 @@ class NotionProjectTasksNotifier extends AsyncNotifier<List<NotionTaskModel>> {
       final dateProperty = db?.startDateProperty ?? 'Date';
 
       final notion = ref.read(notionServiceProvider);
-      await notion.updatePageDate(taskId, date,
-          dateProperty: dateProperty);
+      await notion.updatePageDate(taskId, date, dateProperty: dateProperty);
 
       // Invalider les événements pour rafraîchir le calendrier
       ref.invalidate(eventsInRangeProvider);

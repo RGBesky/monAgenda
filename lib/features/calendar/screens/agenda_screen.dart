@@ -326,8 +326,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen>
 
   Widget _buildAgendaList(
       BuildContext context, List<EventModel> events, SyncState syncState) {
+    debugPrint('AGENDA_DIAG: ${events.length} events from provider');
     // Grouper événements par jour et trier
     final grouped = _groupEventsByDay(events);
+    debugPrint(
+        'AGENDA_DIAG: ${grouped.length} days grouped, ${grouped.values.fold<int>(0, (s, l) => s + l.length)} events total');
     if (grouped.isEmpty) {
       return _buildEmptyState(context, syncState, events.length);
     }

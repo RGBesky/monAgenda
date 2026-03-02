@@ -1951,9 +1951,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         final renderObject = _calendarKey.currentContext?.findRenderObject();
         if (renderObject is RenderBox) {
           final localOffset = renderObject.globalToLocal(details.offset);
-          final calendarDetails = _calendarController
-              .getCalendarDetailsAtOffset
-              ?.call(localOffset);
+          final calendarDetails =
+              _calendarController.getCalendarDetailsAtOffset?.call(localOffset);
           resolvedDate = calendarDetails?.date;
         }
 
@@ -2012,8 +2011,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       await DatabaseHelper.instance.insertEvent(provisionalEvent);
       ref.read(eventsNotifierProvider.notifier).refresh();
     } catch (e) {
-      AppLogger.instance
-          .warning('CalendarScreen', 'Insert provisoire: $e');
+      AppLogger.instance.warning('CalendarScreen', 'Insert provisoire: $e');
     }
 
     // ── 2. Feedback immédiat ──
@@ -2032,16 +2030,18 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     }
 
     // ── 3. API Notion + sync en arrière-plan (non bloquant) ──
-    ref.read(notionProjectTasksProvider.notifier).assignDate(
-      task.id,
-      task.databaseId,
-      date,
-    ).then((_) {
+    ref
+        .read(notionProjectTasksProvider.notifier)
+        .assignDate(
+          task.id,
+          task.databaseId,
+          date,
+        )
+        .then((_) {
       // Sync complète pour enrichir l'event provisoire
       return ref.read(syncNotifierProvider.notifier).syncAll();
     }).catchError((e) {
-      AppLogger.instance
-          .warning('CalendarScreen', 'assignDate/sync: $e');
+      AppLogger.instance.warning('CalendarScreen', 'assignDate/sync: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2081,8 +2081,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     );
     if (time == null || !mounted) return;
 
-    final result = DateTime(
-        date.year, date.month, date.day, time.hour, time.minute);
+    final result =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
     _assignTaskDirect(task, result);
   }
 
@@ -2123,8 +2123,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     size: 18,
                   ),
-                  onPressed: () =>
-                      ref.invalidate(notionProjectTasksProvider),
+                  onPressed: () => ref.invalidate(notionProjectTasksProvider),
                   tooltip: 'Rafraîchir',
                   iconSize: 18,
                   constraints:
@@ -2137,8 +2136,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     size: 18,
                   ),
-                  onPressed: () =>
-                      setState(() => _showTodoPanel = false),
+                  onPressed: () => setState(() => _showTodoPanel = false),
                   tooltip: 'Fermer',
                   iconSize: 18,
                   constraints:
@@ -2169,8 +2167,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           // ── Liste des tâches ──
           Expanded(
             child: tasksAsync.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -2382,17 +2379,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     if (task.category != null)
                       _buildMiniChip(
                         task.category!,
-                        Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                         Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     if (task.priority != null)
                       _buildMiniChip(
                         task.priority!,
-                        Theme.of(context)
-                            .colorScheme
-                            .tertiaryContainer,
+                        Theme.of(context).colorScheme.tertiaryContainer,
                         Theme.of(context).colorScheme.onTertiaryContainer,
                       ),
                   ],
@@ -2476,8 +2469,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   label: db,
                   selected: _todoFilterDb == db,
                   onTap: () => setState(() {
-                    _todoFilterDb =
-                        _todoFilterDb == db ? null : db;
+                    _todoFilterDb = _todoFilterDb == db ? null : db;
                   }),
                 )),
           // Séparateur visuel
@@ -2500,8 +2492,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   selected: _todoFilterStatus == s,
                   color: _statusColor(s),
                   onTap: () => setState(() {
-                    _todoFilterStatus =
-                        _todoFilterStatus == s ? null : s;
+                    _todoFilterStatus = _todoFilterStatus == s ? null : s;
                   }),
                 )),
         ],
@@ -2530,8 +2521,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           borderRadius: BorderRadius.circular(12),
           border: selected
               ? Border.all(
-                  color:
-                      (color ?? theme.colorScheme.primary).withValues(alpha: 0.5),
+                  color: (color ?? theme.colorScheme.primary)
+                      .withValues(alpha: 0.5),
                   width: 1,
                 )
               : null,
