@@ -250,7 +250,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               ? null
               : () async {
                   await ref.read(syncNotifierProvider.notifier).syncAll();
-                  if (!mounted) return;
+                  if (!context.mounted) return;
                   final state = ref.read(syncNotifierProvider);
                   if (state.sourceErrors.isNotEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
