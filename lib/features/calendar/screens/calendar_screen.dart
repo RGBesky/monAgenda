@@ -35,6 +35,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   List<WeatherModel> _forecasts = [];
   bool _loadingWeather = false;
   bool _showTodoPanel = false;
+  String? _todoFilterDb; // null = toutes les BDD
+  String? _todoFilterStatus; // null = tous les statuts
 
   @override
   void initState() {
@@ -2119,9 +2121,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             ),
           ),
           const Divider(height: 1),
+          // ── Filtres ──
+          _buildTodoFilters(context, tasksAsync.valueOrNull ?? []),
+          const Divider(height: 1),
           // ── Info drag & drop ──
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Text(
               'Glissez une tâche vers le calendrier',
               style: TextStyle(
@@ -2160,7 +2165,19 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 ),
               ),
               data: (tasks) {
-                if (tasks.isEmpty) {
+                // Appliquer les filtres
+                var filtered = tasks;
+                if (_todoFilterDb != null) {
+                  filtered = filtered
+                      .where((t) => t.databaseName == _todoFilterDb)
+                      .toList();
+                }
+                if (_todoFilterStatus != null) {
+                  filtered = filtered
+                      .where((t) => t.status == _todoFilterStatus)
+                      .toList();
+                }
+                if (filtered.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -2189,7 +2206,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Aucune tâche Notion sans date.',
+                            (_todoFilterDb != null || _todoFilterStatus != null)
+                                ? 'Aucune tâche pour ce filtre.'
+                                : 'Aucune tâche Notion sans date.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 12,
@@ -2207,9 +2226,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 return ListView.builder(
                   padding:
                       const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                  itemCount: tasks.length,
+                  itemCount: filtered.length,
                   itemBuilder: (context, index) =>
-                      _buildDraggableTask(tasks[index], isDark),
+                      _buildDraggableTask(filtered[index], isDark),
                 );
               },
             ),
@@ -2292,7 +2311,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           // Barre latérale colorée Notion
           Container(
             width: 3,
-            height: 28,
+            height: 40,
             decoration: BoxDecoration(
               color: task.color,
               borderRadius: BorderRadius.circular(1.5),
@@ -2313,17 +2332,42 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
-                if (task.category != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      task.category!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(height: 3),
+                // Badges : BDD + status + priority
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    if (task.databaseName.isNotEmpty)
+                      _buildMiniChip(
+                        task.databaseName,
+                        Theme.of(context).colorScheme.primaryContainer,
+                        Theme.of(context).colorScheme.onPrimaryContainer,
                       ),
-                    ),
-                  ),
+                    if (task.status != null)
+                      _buildMiniChip(
+                        task.status!,
+                        _statusColor(task.status!).withValues(alpha: 0.15),
+                        _statusColor(task.status!),
+                      ),
+                    if (task.category != null)
+                      _buildMiniChip(
+                        task.category!,
+                        Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    if (task.priority != null)
+                      _buildMiniChip(
+                        task.priority!,
+                        Theme.of(context)
+                            .colorScheme
+                            .tertiaryContainer,
+                        Theme.of(context).colorScheme.onTertiaryContainer,
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -2337,6 +2381,142 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
             size: 16,
           ),
         ],
+      ),
+    );
+  }
+
+  /// Mini chip pour afficher une info sur la carte tâche.
+  Widget _buildMiniChip(String label, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, color: fg, fontWeight: FontWeight.w500),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  /// Couleur selon le statut Notion.
+  Color _statusColor(String status) {
+    final s = status.toLowerCase();
+    if (s.contains('done') || s.contains('terminé') || s.contains('fait')) {
+      return const Color(0xFF34C759);
+    }
+    if (s.contains('progress') || s.contains('cours') || s.contains('doing')) {
+      return const Color(0xFFFF9500);
+    }
+    if (s.contains('blocked') || s.contains('bloqué')) {
+      return const Color(0xFFFF3B30);
+    }
+    return const Color(0xFF8E8E93); // gris par défaut
+  }
+
+  /// Construit les chips de filtre (BDD + statut).
+  Widget _buildTodoFilters(
+      BuildContext context, List<NotionTaskModel> allTasks) {
+    // Extraire les valeurs uniques
+    final dbNames = allTasks
+        .map((t) => t.databaseName)
+        .where((n) => n.isNotEmpty)
+        .toSet()
+        .toList();
+    final statuses = allTasks
+        .map((t) => t.status)
+        .where((s) => s != null)
+        .cast<String>()
+        .toSet()
+        .toList();
+
+    if (dbNames.isEmpty && statuses.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          // Filtre par BDD
+          if (dbNames.length > 1)
+            ...dbNames.map((db) => _buildFilterChip(
+                  label: db,
+                  selected: _todoFilterDb == db,
+                  onTap: () => setState(() {
+                    _todoFilterDb =
+                        _todoFilterDb == db ? null : db;
+                  }),
+                )),
+          // Séparateur visuel
+          if (dbNames.length > 1 && statuses.isNotEmpty)
+            SizedBox(
+              height: 24,
+              child: VerticalDivider(
+                width: 8,
+                thickness: 1,
+                color: Theme.of(context)
+                    .colorScheme
+                    .outlineVariant
+                    .withValues(alpha: 0.5),
+              ),
+            ),
+          // Filtre par statut
+          if (statuses.isNotEmpty)
+            ...statuses.map((s) => _buildFilterChip(
+                  label: s,
+                  selected: _todoFilterStatus == s,
+                  color: _statusColor(s),
+                  onTap: () => setState(() {
+                    _todoFilterStatus =
+                        _todoFilterStatus == s ? null : s;
+                  }),
+                )),
+        ],
+      ),
+    );
+  }
+
+  /// Chip de filtre cliquable.
+  Widget _buildFilterChip({
+    required String label,
+    required bool selected,
+    Color? color,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? (color ?? theme.colorScheme.primary).withValues(alpha: 0.15)
+              : theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: selected
+              ? Border.all(
+                  color:
+                      (color ?? theme.colorScheme.primary).withValues(alpha: 0.5),
+                  width: 1,
+                )
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected
+                ? (color ?? theme.colorScheme.primary)
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }

@@ -17,6 +17,9 @@ class NotionTaskModel {
   final String id; // Notion page ID
   final String title;
   final String? category;
+  final String? status;
+  final String? priority;
+  final String databaseName;
   final Color color;
   final String databaseId;
 
@@ -24,6 +27,9 @@ class NotionTaskModel {
     required this.id,
     required this.title,
     this.category,
+    this.status,
+    this.priority,
+    this.databaseName = '',
     this.color = const Color(0xFF5856D6),
     required this.databaseId,
   });
@@ -32,6 +38,9 @@ class NotionTaskModel {
     String? id,
     String? title,
     String? category,
+    String? status,
+    String? priority,
+    String? databaseName,
     Color? color,
     String? databaseId,
   }) {
@@ -39,6 +48,9 @@ class NotionTaskModel {
       id: id ?? this.id,
       title: title ?? this.title,
       category: category ?? this.category,
+      status: status ?? this.status,
+      priority: priority ?? this.priority,
+      databaseName: databaseName ?? this.databaseName,
       color: color ?? this.color,
       databaseId: databaseId ?? this.databaseId,
     );
@@ -73,9 +85,14 @@ class NotionProjectTasksNotifier extends AsyncNotifier<List<NotionTaskModel>> {
         for (final page in results) {
           final title = _extractPageTitle(page);
           if (title.isEmpty) continue;
+          final props = page['properties'] as Map<String, dynamic>? ?? {};
           tasks.add(NotionTaskModel(
             id: page['id'] as String,
             title: title,
+            category: _extractSelectValue(props, db.categoryProperty),
+            status: _extractStatusValue(props, db.statusProperty),
+            priority: _extractSelectValue(props, db.priorityProperty),
+            databaseName: db.name,
             databaseId: db.effectiveSourceId,
             color: AppColors.sourceNotion,
           ));
@@ -100,6 +117,40 @@ class NotionProjectTasksNotifier extends AsyncNotifier<List<NotionTaskModel>> {
       }
     }
     return '';
+  }
+
+  /// Extrait la valeur d'une propriété select/multi_select Notion.
+  String? _extractSelectValue(
+      Map<String, dynamic> props, String? propertyName) {
+    if (propertyName == null) return null;
+    final prop = props[propertyName] as Map<String, dynamic>?;
+    if (prop == null) return null;
+    final type = prop['type'] as String?;
+    if (type == 'select') {
+      final select = prop['select'] as Map<String, dynamic>?;
+      return select?['name'] as String?;
+    } else if (type == 'multi_select') {
+      final list = prop['multi_select'] as List?;
+      if (list != null && list.isNotEmpty) {
+        return (list.first as Map<String, dynamic>)['name'] as String?;
+      }
+    }
+    return null;
+  }
+
+  /// Extrait la valeur d'une propriété status Notion.
+  String? _extractStatusValue(
+      Map<String, dynamic> props, String? propertyName) {
+    if (propertyName == null) return null;
+    final prop = props[propertyName] as Map<String, dynamic>?;
+    if (prop == null) return null;
+    final type = prop['type'] as String?;
+    if (type == 'status') {
+      final status = prop['status'] as Map<String, dynamic>?;
+      return status?['name'] as String?;
+    }
+    // Fallback : certaines BDD utilisent un select pour le statut
+    return _extractSelectValue(props, propertyName);
   }
 
   /// Assigne une date à une tâche (Optimistic UI).
