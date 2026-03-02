@@ -335,85 +335,73 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => openEventDetail(context, event),
-        child: IntrinsicHeight(
-          child: Row(
-            children: [
-              // Accent bar
-              Container(
-                width: 4,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    bottomLeft: Radius.circular(8),
-                  ),
-                ),
-              ),
-              // Content
-              Expanded(
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title + source
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              event.title,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                color: textColor,
-                                letterSpacing: -0.1,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          _buildSourceIcon(event, isDark),
-                        ],
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: accent, width: 4),
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title + source
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        event.title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: textColor,
+                          letterSpacing: -0.1,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 5),
-                      // Date + tag + status
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          // Date
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.access_time_rounded,
-                                  size: 12, color: subColor),
-                              const SizedBox(width: 3),
-                              Text(
-                                event.isAllDay
-                                    ? CalendarDateUtils.formatDisplayDate(
-                                        event.startDate)
-                                    : CalendarDateUtils.formatDisplayDateTime(
-                                        event.startDate),
-                                style: TextStyle(fontSize: 12, color: subColor),
-                              ),
-                            ],
-                          ),
-                          // Category tag
-                          if (firstCategory != null)
-                            _buildTagChip(firstCategory),
-                          // Status
-                          if (event.statusTag != null)
-                            _buildStatusChip(event, isDark),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildSourceIcon(event, isDark),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 5),
+                // Date + tag + status
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Date
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.access_time_rounded,
+                            size: 12, color: subColor),
+                        const SizedBox(width: 3),
+                        Text(
+                          event.isAllDay
+                              ? CalendarDateUtils.formatDisplayDate(
+                                  event.startDate)
+                              : CalendarDateUtils.formatDisplayDateTime(
+                                  event.startDate),
+                          style: TextStyle(fontSize: 12, color: subColor),
+                        ),
+                      ],
+                    ),
+                    // Category tag
+                    if (firstCategory != null)
+                      _buildTagChip(firstCategory),
+                    // Status
+                    if (event.statusTag != null)
+                      _buildStatusChip(event, isDark),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
