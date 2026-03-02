@@ -1196,18 +1196,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     return 'J$dayNum/$days';
   }
 
-  /// Couleur du liseré priorité (côté droit). null si pas de priorité notable.
-  // Gardé pour compatibilité mais non utilisé — priorité gérée par _getPriorityColorForBorder
-
-  // ── Icône de catégorie HugeIcons ─────────────────────────────────
-  List<List<dynamic>> _categoryIcon(EventModel event) {
-    final cat = event.categoryTags.firstOrNull;
-    if (cat != null) return _tagNameToIcon(cat.name);
-    if (event.isFromNotion) return HugeIcons.strokeRoundedListView;
-    if (event.isFromInfomaniak) return HugeIcons.strokeRoundedCalendar01;
-    return HugeIcons.strokeRoundedCalendarCheckIn01;
-  }
-
   /// Mappe un nom de catégorie à une icône HugeIcons stylée.
   static List<List<dynamic>> _tagNameToIcon(String name) {
     final n = name.toLowerCase();

@@ -295,18 +295,23 @@ class _MagicEntryScreenState extends ConsumerState<MagicEntryScreen> {
               Text('Choisissez votre modèle :',
                   style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
-              ...MagicModelChoice.values
-                  .map((m) => RadioListTile<MagicModelChoice>(
-                        title: Text(m.label),
-                        subtitle: Text('${m.subtitle} · ~${m.approxSizeMb} Mo'),
-                        value: m,
-                        groupValue: chosen,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (v) {
-                          if (v != null) setDialogState(() => chosen = v);
-                        },
-                      )),
+              RadioGroup<MagicModelChoice>(
+                groupValue: chosen,
+                onChanged: (v) {
+                  if (v != null) setDialogState(() => chosen = v);
+                },
+                child: Column(
+                  children: MagicModelChoice.values
+                      .map((m) => RadioListTile<MagicModelChoice>(
+                            title: Text(m.label),
+                            subtitle: Text('${m.subtitle} · ~${m.approxSizeMb} Mo'),
+                            value: m,
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ))
+                      .toList(),
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 'Téléchargement depuis HuggingFace.\n'

@@ -217,8 +217,8 @@ class TagsSettingsScreen extends ConsumerWidget {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     // Labels nuances
-                                    Row(
-                                      children: const [
+                                    const Row(
+                                      children: [
                                         _ColorFamilyLabel('Néon'),
                                         Spacer(),
                                         _ColorFamilyLabel('Glacé'),

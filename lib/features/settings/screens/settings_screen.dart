@@ -378,31 +378,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Consumer(
             builder: (context, ref, _) {
               final selected = ModelDownloadService.instance.selectedModel;
-              return Column(
-                children: MagicModelChoice.values.map((choice) {
-                  final isSelected = choice == selected;
-                  return RadioListTile<MagicModelChoice>(
-                    value: choice,
-                    groupValue: selected,
-                    title: Text(choice.label),
-                    subtitle: Text(choice.subtitle),
-                    secondary: isSelected
-                        ? const HugeIcon(
-                            icon: HugeIcons.strokeRoundedCheckmarkCircle01,
-                            color: Colors.green,
-                            size: 22)
-                        : null,
-                    onChanged: (val) async {
-                      if (val == null) return;
-                      ModelDownloadService.instance.selectedModel = val;
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setString('magic_model_choice', val.name);
-                      // Force le rechargement du modèle au prochain usage
-                      await LlamaService.instance.dispose();
-                      ref.invalidate(modelDownloadStatusProvider);
-                    },
-                  );
-                }).toList(),
+              return RadioGroup<MagicModelChoice>(
+                groupValue: selected,
+                onChanged: (val) async {
+                  if (val == null) return;
+                  ModelDownloadService.instance.selectedModel = val;
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('magic_model_choice', val.name);
+                  // Force le rechargement du modèle au prochain usage
+                  await LlamaService.instance.dispose();
+                  ref.invalidate(modelDownloadStatusProvider);
+                },
+                child: Column(
+                  children: MagicModelChoice.values.map((choice) {
+                    final isSelected = choice == selected;
+                    return RadioListTile<MagicModelChoice>(
+                      value: choice,
+                      title: Text(choice.label),
+                      subtitle: Text(choice.subtitle),
+                      secondary: isSelected
+                          ? const HugeIcon(
+                              icon: HugeIcons.strokeRoundedCheckmarkCircle01,
+                              color: Colors.green,
+                              size: 22)
+                          : null,
+                    );
+                  }).toList(),
+                ),
               );
             },
           ),

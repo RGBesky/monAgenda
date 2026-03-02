@@ -252,9 +252,12 @@ class AppColors {
     final name = tagName.toLowerCase();
     if (name.contains('travail') ||
         name.contains('work') ||
-        name.contains('pro')) return blueMedium;
-    if (name.contains('famille') || name.contains('family'))
+        name.contains('pro')) {
+      return blueMedium;
+    }
+    if (name.contains('famille') || name.contains('family')) {
       return violetPastel;
+    }
     if (name.contains('sport')) return cyanMedium;
     if (name.contains('santé') || name.contains('health')) return greenMedium;
     if (name.contains('loisir') || name.contains('perso')) return greenPastel;

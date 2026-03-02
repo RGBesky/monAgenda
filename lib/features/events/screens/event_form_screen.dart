@@ -401,16 +401,20 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
                         ),
                   ),
                   const SizedBox(height: 8),
-                  ...enabledDbs.map((db) => RadioListTile<String>(
-                        title: Text(db.name),
-                        subtitle: Text(db.effectiveSourceId.substring(0, 8)),
-                        value: db.effectiveSourceId,
-                        groupValue: _selectedNotionDbId,
-                        onChanged: (v) =>
-                            setState(() => _selectedNotionDbId = v),
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                      )),
+                  RadioGroup<String>(
+                    groupValue: _selectedNotionDbId ?? '',
+                    onChanged: (v) =>
+                        setState(() => _selectedNotionDbId = v),
+                    child: Column(
+                      children: enabledDbs.map((db) => RadioListTile<String>(
+                            title: Text(db.name),
+                            subtitle: Text(db.effectiveSourceId.substring(0, 8)),
+                            value: db.effectiveSourceId,
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                          )).toList(),
+                    ),
+                  ),
                 ],
               ),
             ),
