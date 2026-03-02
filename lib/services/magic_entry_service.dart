@@ -333,6 +333,34 @@ class MagicEntryService {
     r'\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b',
   );
 
+  /// Dates textuelles : "15 mars", "3 avril 2025", "1er janvier"
+  static final _dateTextualPattern = RegExp(
+    r'\b(\d{1,2})(?:\s*er)?\s+'
+    r'(janvier|février|fevrier|mars|avril|mai|juin|juillet|'
+    r'août|aout|septembre|octobre|novembre|décembre|decembre)'
+    r'(?:\s+(\d{2,4}))?\b',
+    caseSensitive: false,
+  );
+
+  /// Map mois textuels → numéro.
+  static const _monthNames = <String, int>{
+    'janvier': 1,
+    'février': 2,
+    'fevrier': 2,
+    'mars': 3,
+    'avril': 4,
+    'mai': 5,
+    'juin': 6,
+    'juillet': 7,
+    'août': 8,
+    'aout': 8,
+    'septembre': 9,
+    'octobre': 10,
+    'novembre': 11,
+    'décembre': 12,
+    'decembre': 12,
+  };
+
   /// Lieu : "à Paris", "au cinéma", "chez maman", "à la Valentine"
   /// Limite la capture à 1-4 mots maximum (noms de lieux).
   /// Chaque mot capturé ne doit PAS être un verbe courant ou mot temporel.
@@ -555,6 +583,23 @@ class MagicEntryService {
           startHour = 22;
           startMinute = 0;
         }
+      }
+    }
+
+    // ── Date textuelle (15 mars, 3 avril 2025, 1er janvier) ──
+    if (startDate == null) {
+      final dateTextMatch = _dateTextualPattern.firstMatch(remaining);
+      if (dateTextMatch != null) {
+        final day = int.parse(dateTextMatch.group(1)!);
+        final monthName = dateTextMatch.group(2)!.toLowerCase();
+        final month = _monthNames[monthName] ?? 1;
+        final yearStr = dateTextMatch.group(3);
+        final year = yearStr != null
+            ? (yearStr.length == 2
+                ? 2000 + int.parse(yearStr)
+                : int.parse(yearStr))
+            : DateTime.now().year;
+        startDate = DateTime(year, month, day);
       }
     }
 
@@ -787,6 +832,24 @@ class MagicEntryService {
       }
 
       remaining = remaining.replaceFirst(momentMatch.group(0)!, '').trim();
+    }
+
+    // ── 8b. Date textuelle (15 mars, 3 avril 2025, 1er janvier) ──
+    if (startDate == null) {
+      final dateTextMatch = _dateTextualPattern.firstMatch(remaining);
+      if (dateTextMatch != null) {
+        final day = int.parse(dateTextMatch.group(1)!);
+        final monthName = dateTextMatch.group(2)!.toLowerCase();
+        final month = _monthNames[monthName] ?? 1;
+        final yearStr = dateTextMatch.group(3);
+        final year = yearStr != null
+            ? (yearStr.length == 2
+                ? 2000 + int.parse(yearStr)
+                : int.parse(yearStr))
+            : DateTime.now().year;
+        startDate = DateTime(year, month, day);
+        remaining = remaining.replaceFirst(dateTextMatch.group(0)!, '').trim();
+      }
     }
 
     // ── 9. Date absolue (15/03, 15-03-2025) ──
