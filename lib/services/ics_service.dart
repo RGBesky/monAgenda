@@ -117,6 +117,16 @@ class IcsService {
             isAllDay ? startDate : startDate.add(const Duration(hours: 1));
       }
 
+      // Parse ATTACH properties (liens kDrive, URLs)
+      final attachRegex = RegExp(r'ATTACH[^:]*:(.+)', caseSensitive: false);
+      final attachments = <String>[];
+      for (final match in attachRegex.allMatches(vevent)) {
+        final value = match.group(1)?.trim() ?? '';
+        if (value.startsWith('http://') || value.startsWith('https://')) {
+          attachments.add(value);
+        }
+      }
+
       EventType type = EventType.appointment;
       if (isAllDay) type = EventType.allDay;
       if (rrule != null && rrule.isNotEmpty) type = EventType.recurring;
@@ -133,6 +143,7 @@ class IcsService {
         description: description != null ? _unescapeIcs(description) : null,
         rrule: rrule,
         icsSubscriptionId: subscriptionId,
+        smartAttachments: attachments,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
@@ -195,6 +206,13 @@ class IcsService {
           event.tags.where((t) => t.isCategory).map((t) => t.name).join(',');
       if (categories.isNotEmpty) {
         sb.writeln('CATEGORIES:$categories');
+      }
+
+      // Smart Attachments → ATTACH (URLs uniquement)
+      for (final attachment in event.smartAttachments) {
+        if (attachment.startsWith('http://') || attachment.startsWith('https://')) {
+          sb.writeln('ATTACH:$attachment');
+        }
       }
 
       sb.writeln('END:VEVENT');

@@ -647,6 +647,14 @@ class EventDetailScreen extends ConsumerWidget {
 
     if (!hasAttachments && !isDesktop) return const SizedBox.shrink();
 
+    // Séparer liens (URLs) et fichiers locaux
+    final urls = event.smartAttachments
+        .where((a) => a.startsWith('http://') || a.startsWith('https://'))
+        .toList();
+    final localFiles = event.smartAttachments
+        .where((a) => !a.startsWith('http://') && !a.startsWith('https://'))
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -676,8 +684,57 @@ class EventDetailScreen extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 8),
-        // Existing attachments list
-        ...event.smartAttachments.map((path) {
+        // Liens kDrive / URLs
+        ...urls.map((url) {
+          final displayName = _extractUrlDisplayName(url);
+          final isKDrive = url.contains('kdrive') || url.contains('infomaniak');
+          return Padding(
+            padding: const EdgeInsets.only(left: 28, bottom: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () async {
+                final uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Row(
+                children: [
+                  Icon(
+                    isKDrive ? Icons.cloud_outlined : Icons.link,
+                    size: 20,
+                    color: const Color(0xFF0098FF),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF0098FF),
+                        decoration: TextDecoration.underline,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(Icons.open_in_new, size: 14, color: subColor),
+                  if (isDesktop && !event.isFromIcs) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => _removeAttachment(ref, url),
+                      tooltip: 'Retirer',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }),
+        // Fichiers locaux
+        ...localFiles.map((path) {
           final fileName = path.split('/').last;
           return Padding(
             padding: const EdgeInsets.only(left: 28, bottom: 6),
@@ -726,20 +783,36 @@ class EventDetailScreen extends ConsumerWidget {
             ),
           );
         }),
-        // Desktop: "+ Attacher un fichier" button
+        // Desktop: boutons d'action
         if (isDesktop && !event.isFromIcs) ...[
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.only(left: 28),
-            child: OutlinedButton.icon(
-              onPressed: () => _pickAndAttachFile(context, ref),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Attacher un fichier'),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                textStyle: const TextStyle(fontSize: 13),
-              ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _pickAndAttachFile(context, ref),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Attacher un fichier'),
+                  style: OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    textStyle: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _addLinkAttachment(context, ref),
+                  icon: const Icon(Icons.link, size: 16),
+                  label: const Text('Ajouter un lien'),
+                  style: OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    textStyle: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -756,6 +829,83 @@ class EventDetailScreen extends ConsumerWidget {
       smartAttachments: [...event.smartAttachments, filePath],
     );
     await ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
+  }
+
+  Future<void> _addLinkAttachment(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ajouter un lien'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'https://kdrive.infomaniak.com/...',
+            labelText: 'URL du lien',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.link),
+          ),
+          keyboardType: TextInputType.url,
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (url == null || url.trim().isEmpty) return;
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Le lien doit commencer par http:// ou https://'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    final updated = event.copyWith(
+      smartAttachments: [...event.smartAttachments, trimmed],
+    );
+    await ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
+  }
+
+  /// Extrait un nom d'affichage lisible depuis une URL.
+  static String _extractUrlDisplayName(String url) {
+    try {
+      final uri = Uri.parse(url);
+      // kDrive share links: afficher "kDrive: {uuid court}"
+      if (uri.host.contains('kdrive') || uri.host.contains('infomaniak')) {
+        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+        // Format https://kdrive.infomaniak.com/app/share/{uuid}/files/{fileId}
+        final shareIdx = segments.indexOf('share');
+        if (shareIdx >= 0 && shareIdx + 1 < segments.length) {
+          final uuid = segments[shareIdx + 1];
+          final short = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
+          return 'kDrive: $short…';
+        }
+        return 'Lien kDrive';
+      }
+      // Autres URLs : afficher le nom du dernier segment ou le host
+      if (uri.pathSegments.isNotEmpty) {
+        final last = uri.pathSegments.last;
+        if (last.isNotEmpty && last.contains('.')) return last;
+      }
+      return uri.host;
+    } catch (_) {
+      return url.length > 40 ? '${url.substring(0, 40)}…' : url;
+    }
   }
 
   void _removeAttachment(WidgetRef ref, String path) {

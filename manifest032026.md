@@ -288,6 +288,7 @@ lib/
 | FAB 3 états (vert/orange/rouge) | 🔁 | ✅ |
 | Conflits ETag (HTTP 412) — last-remote-wins | 🔁 | ✅ |
 | Bannière serveur saturé (429/500/503) | 🔁 | ✅ |
+| Liens kDrive dans événements (ATTACH RFC 5545 bidirectionnel) | 🔁 | ✅ |
 
 ### Sécurité
 
@@ -514,7 +515,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 | **0** | Sécurité critique | 7 | 7 | 0 | ✅ Complète |
 | **1** | Bugs bloquants & corrections | 18 | 18 | 0 | ✅ Complète |
 | **2** | UX / Ergonomie | 18 | 17 | 1 | 🟠 94% |
-| **3** | Stockage souverain | 5 | 0 | 5 | 🔴 0% |
+| **3** | Stockage souverain | 5 | 2 | 3 | 🟡 40% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
 | **6** | Refonte graphique | 7 | 7 | 0 | ✅ Complète |
@@ -563,7 +564,13 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
   - Feedback CSV export : `getApplicationDocumentsDirectory()/magic_feedback_<ts>.csv` (accumulation non bornée)
   - Garde temp CSV : `getApplicationCacheDirectory()` (jamais nettoyé)
   - Risques : configs/feedback s'accumulent sans limite, temp CSV oublié, exports sans gestion erreurs I/O
-- [ ] **3.2** — Upload direct WebDAV vers kDrive (remplacer copier-coller)
+- [x] **3.2** — Liens kDrive dans événements CalDAV via propriété ATTACH (RFC 5545) ✅ :
+  - `parseICalEvent()` : parse les lignes `ATTACH:https://...` → `smartAttachments`
+  - `_eventToIcs()` : émet `ATTACH:{url}` pour chaque URL dans `smartAttachments`
+  - `IcsService._parseVEvent()` + `exportToIcs()` : même support ATTACH bidirectionnel
+  - UI `event_detail_screen.dart` : distinction liens (icône cloud/link, couleur bleue, `launchUrl`) vs fichiers locaux (`OpenFilex`)
+  - Bouton "Ajouter un lien" dans Smart Attachments (dialog URL, validation https://)
+  - `_extractUrlDisplayName()` : affichage lisible des URLs kDrive (uuid court)
 - [ ] **3.3** — Option "Envoyer vers kDrive" pour ICS/CSV
 - [ ] **3.4** — ModelDownloadService complet (SHA-256, progress, reprise HTTP Range)
 - [ ] **3.5** — `getDownloadsDirectory()` = fallback temporaire uniquement

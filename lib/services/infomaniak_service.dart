@@ -389,6 +389,13 @@ class InfomaniakService {
       );
     }
 
+    // Smart Attachments → ATTACH (URLs uniquement, pas les chemins locaux)
+    for (final attachment in event.smartAttachments) {
+      if (attachment.startsWith('http://') || attachment.startsWith('https://')) {
+        sb.writeln('ATTACH:$attachment');
+      }
+    }
+
     // Rappel
     if (event.reminderMinutes != null) {
       sb.writeln('BEGIN:VALARM');
@@ -713,6 +720,19 @@ class InfomaniakService {
         }
       }
 
+      // Parse ATTACH properties (liens kDrive, URLs)
+      final attachRegex = RegExp(
+        r'^ATTACH[^:]*:(.+)$',
+        multiLine: true,
+      );
+      final attachments = <String>[];
+      for (final match in attachRegex.allMatches(unfolded)) {
+        final value = match.group(1)?.trim() ?? '';
+        if (value.startsWith('http://') || value.startsWith('https://')) {
+          attachments.add(value);
+        }
+      }
+
       EventType type = EventType.appointment;
       if (isAllDay) type = EventType.allDay;
       if (rrule.isNotEmpty) type = EventType.recurring;
@@ -735,6 +755,7 @@ class InfomaniakService {
         etag: etag,
         tagIds: tagIds,
         tags: matchedTags,
+        smartAttachments: attachments,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
