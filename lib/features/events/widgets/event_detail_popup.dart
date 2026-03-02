@@ -59,7 +59,8 @@ class _EventDetailPopupState extends ConsumerState<EventDetailPopup> {
   Widget build(BuildContext context) {
     // ── Écouter les changements du provider pour rafraîchir _currentEvent ──
     // (attachments, liens kDrive, suppressions…)
-    ref.listen<AsyncValue<List<EventModel>>>(eventsNotifierProvider, (prev, next) {
+    ref.listen<AsyncValue<List<EventModel>>>(eventsNotifierProvider,
+        (prev, next) {
       next.whenData((events) {
         final updated = events
             .cast<EventModel?>()

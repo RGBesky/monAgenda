@@ -4,7 +4,7 @@
 > **Auteur :** RGBesky  
 > **Dépôt :** https://github.com/RGBesky/monAgenda  
 > **Date :** 02/03/2026  
-> **HEAD :** `2488295` · 62 fichiers Dart · ~26 500 lignes  
+> **HEAD :** `d1c488b` · 61 fichiers Dart · ~27 300 lignes  
 > **Documents archivés :** Tous les anciens documents de référence sont dans `archive/`
 
 ---
@@ -132,7 +132,7 @@ Session de décisions structurantes documentée dans `manifest28022026.md` :
 
 ### V3 — Sécurité + Refonte UX (01-02/03/2026)
 
-**Commits :** `98f9b7f` → `d300ca8` (HEAD actuel)
+**Commits :** `98f9b7f` → `d1c488b` (HEAD actuel)
 
 Session de hardening sécurité puis refonte UX complète :
 
@@ -166,6 +166,13 @@ Session de hardening sécurité puis refonte UX complète :
 - Police Inter appliquée partout via Google Fonts
 
 **Meeting Note Notion + Smart Context PDF** déjà en place (desktop only).
+
+**Session 02/03/2026 :**
+- EventDetailScreen Notion-like complet — fond blanc, table propriétés, badges source/status, participants (`93a5002`)
+- Harmonisation `openEventDetail()` — calendrier utilise la même popup que l'agenda (`93a5002`)
+- Effet surlignage Stabilo sur cartes calendrier — `Border.all(highlighterColor, 2.5px)`, fond blanc (`b567051`)
+- Fix boucle infinie rebuild calendrier — guard égalité `displayedDateRangeProvider` (`d1c488b`)
+- **Audit UI complet** — 44 findings identifiés (14 critiques, 18 moyens, 12 mineurs)
 
 ---
 
@@ -501,12 +508,15 @@ Toujours vérifier : WAL mode ? busy_timeout ? Nombre de connexions simultanées
 ### 8.7 — Gestion des processus
 Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux | grep`). Plusieurs instances = locks DB, corruption d'état, faux diagnostics. `flutter clean` peut détruire la DB locale : TOUJOURS backup avant.
 
+### 8.8 — Validation runtime = responsabilité de Robert
+L'IA (Isabelle) implémente + `flutter analyze` + commit atomique. **Robert lance l'app, teste en runtime et valide.** L'IA ne déclare JAMAIS un fix "vérifié" — elle dit "commité, à toi de tester". Passage à la tâche/phase suivante uniquement après GO explicite de Robert.
+
 ---
 
 ## 9 — ROADMAP
 
 > **Méthodologie :** Étape par étape. Chaque tâche = test + `flutter analyze` + commit atomique.  
-> **Base de référence :** HEAD = `d300ca8`, 62 fichiers Dart, ~26 000 lignes.
+> **Base de référence :** HEAD = `d1c488b`, 61 fichiers Dart, ~27 300 lignes.
 
 ### Récapitulatif de l'avancement
 
@@ -518,7 +528,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 | **3** | Stockage souverain | 5 | 2 | 3 | 🟡 40% |
 | **4** | Widget Android natif | 5 | 1 | 4 | 🔴 20% |
 | **5** | Intelligence Artificielle | 9 | 4 | 5 | 🟡 44% |
-| **6** | Refonte graphique | 7 | 7 | 0 | ✅ Complète |
+| **6** | Refonte graphique — Audit UI | 12 | 2 | 10 | 🔴 17% |
 | **7** | Onboarding & finitions | 8 | 2 | 6 | 🟠 25% |
 | **8** | Documentation & versioning | 4 | 0 | 4 | 🔴 0% |
 
@@ -538,7 +548,7 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 
 **Fonctionnalités demandées :**
 - [x] **2.5** — Import ICS direct depuis file picker + parsing + insertion en base ✅ `fa5d06a`
-- [ ] **2.6** — Barre latérale Todo (tâches sans date) + glisser-déposer vers calendrier
+- [ ] **2.6** — 💻 **Desktop only** — Panneau latéral Todo intégré à `calendar_screen` — liste les événements sans date (`start_date IS NULL` ou `type = 'task'` sans date) — drag & drop depuis ce panneau vers SfCalendar pour assigner date/heure — update `EventModel` + sync queue
 - [x] **2.7** — Redimensionnement d'événement par poignée (SfCalendar `allowAppointmentResize: true` + `onAppointmentResizeEnd`) ✅ (déjà implémenté)
 - [x] **2.8** — Logo dans le dock Ubuntu — fr.monagenda.app.desktop + icônes monagenda.png hicolor (16→512px) ✅ (déjà implémenté)
 
@@ -594,10 +604,53 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 - [ ] **5.6** — Mode conversation libre (parser questions → intentions → query SQLite)
 - [ ] **5.7** — Déchargement mémoire : cycle load → infer → unload (libérer ~1.2 Go RAM)
 
-### PHASE 6 — REFONTE GRAPHIQUE ✅ (complète)
+### PHASE 6 — REFONTE GRAPHIQUE — AUDIT UI (44 findings, 02/03/2026)
 
+**Déjà fait :**
 - [x] **6.6** — Micro-animations : SlideTransition fluide (320ms easeOut) sur tous les BottomSheets ✅ `ffff9bb`
 - [x] **6.7** — disableAnimations global : BottomSheets + AnimatedSwitcher respectent WidgetsBinding.disableAnimations ✅ `fd3fe57`
+
+**6A — Unifier borderRadius Light/Dark dans app.dart** (Critique)
+- [ ] **6A.1** — `cardTheme` borderRadius : 3px (light) vs 12px (dark) → unifier 6px
+- [ ] **6A.2** — `ElevatedButton/OutlinedButton/FilledButton` borderRadius : 4px (light) vs 10px (dark) → unifier 6px
+- [ ] **6A.3** — `InputDecoration` borderRadius : 4px (light) vs 10px (dark) → unifier 6px
+- [ ] **6A.4** — `FloatingActionButton` elevation 0→2, borderRadius 8→12 → unifier elevation 0, borderRadius 8px
+- [ ] **6A.5** — `dialogTheme` absent en dark, borderRadius 4px light → unifier 6px les deux
+- [ ] **6A.6** — `scrolledUnderElevation` 0 (light) vs 0.5 (dark) → unifier 0
+- [ ] **6A.7** — `bodyLarge` fontSize 16px (light) vs 15px (dark), `bodySmall` 12px vs 11px → unifier
+
+**6B — Purge Icons.xxx → HugeIcons** (Critique · ~80 occurrences · 10 fichiers)
+- [ ] **6B.1** — `search_screen.dart` : 17 `Icons.xxx` → `HugeIcons.strokeRounded*`
+- [ ] **6B.2** — `setup_screen.dart` : 13 `Icons.xxx` → HugeIcons
+- [ ] **6B.3** — `magic_entry_screen.dart` : 8 `Icons.xxx` → HugeIcons
+- [ ] **6B.4** — `system_logs_screen.dart` : 14 `Icons.xxx` → HugeIcons
+- [ ] **6B.5** — `import_qr_screen.dart` : 5 `Icons.xxx` + ajouter import hugeicons
+- [ ] **6B.6** — `import_config_screen.dart` : 8 `Icons.xxx` → HugeIcons
+- [ ] **6B.7** — `settings_screen.dart` : 5 `Icons.xxx` icônes sections → HugeIcons
+- [ ] **6B.8** — `connections_settings_screen.dart` : 6 `Icons.xxx` champs formulaire → HugeIcons
+- [ ] **6B.9** — `backup_settings_screen.dart` : 6 `Icons.xxx` → HugeIcons
+- [ ] **6B.10** — `project_view_screen.dart` : 2 `Icons.xxx` → HugeIcons
+- [ ] **6B.11** — `event_detail_screen.dart` : ~10 `Icons.xxx` (delete, edit, cloud, link, file, note) → HugeIcons
+- [ ] **6B.12** — `tags_settings_screen.dart` + `notifications_settings_screen.dart` : 5 `Icons.xxx` → HugeIcons
+- [ ] **6B.13** — `source_logos.dart` : `Icons.calendar_today` fallback → `HugeIcons.strokeRoundedCalendar01`
+
+**6C — Cards recherche Notion-like** (Critique)
+- [ ] **6C.1** — `search_screen.dart` : fond coloré `pastelBg()` → blanc + `Border.all` Stabilo
+
+**6D — Couleurs hardcodées → Theme/AppColors** (Moyen · ~25 occurrences)
+- [ ] **6D.1** — `event_detail_popup.dart` + `event_form_screen.dart` : `Color(0xFF1C1C1E)` / `Color(0xFFF5F5F7)` header → `Theme.of(context).colorScheme.*`
+- [ ] **6D.2** — `event_form_screen.dart` : `Color(0xFF007AFF)` iOS bleu → `colorScheme.primary`
+- [ ] **6D.3** — `calendar_screen.dart` : `Colors.orange` / `Colors.green` SnackBar sync → AppColors
+- [ ] **6D.4** — `agenda_screen.dart` : `Color(0xFFFF9500)` / `Color(0xFFFF3B30)` / `Color(0xFF34C759)` → AppColors
+- [ ] **6D.5** — `event_detail_screen.dart` : `Colors.green/red/orange` status participants → AppColors
+- [ ] **6D.6** — `search_screen.dart` : `Colors.grey` empty states → `colorScheme.onSurfaceVariant`
+- [ ] **6D.7** — `settings_logo_header.dart` : `Colors.black87` + `boxShadow blurRadius:10` → `colorScheme.onSurface` + supprimer shadow
+
+**6E — Nettoyage mineurs** (Mineur)
+- [ ] **6E.1** — Supprimer `splashRadius: 18` deprecated (event_detail_popup, event_form_screen)
+- [ ] **6E.2** — Dialog `borderRadius: 16px` custom → supprimer ou unifier 6-8px (event_detail_popup, agenda_screen, calendar_screen)
+- [ ] **6E.3** — `BottomSheet borderRadius: 20px` (quickAdd) → unifier 16px partout
+- [ ] **6E.4** — `event_detail_screen.dart` : 4 `static const _notion*` → tokens `colorScheme`
 
 ### PHASE 7 — ONBOARDING & FINITIONS
 
@@ -622,13 +675,14 @@ Avant chaque test, vérifier qu'aucune instance précédente ne tourne (`ps aux 
 ### ORDRE D'EXÉCUTION
 
 ```
-Phase 1 (bugs restants) → Phase 2 (UX + raccourcis) → Phase 5 (IA: GBNF + validateur)
-→ Phase 4 (widget Android) → Phase 3 (stockage souverain)
-→ Phase 6 (animations) → Phase 7 (finitions + optim APK)
+Phase 2 (finir 2.6 Todo) → Phase 6 (audit UI: 6A borderRadius → 6B icons → 6C cards → 6D couleurs → 6E mineurs)
+→ Phase 5 (IA: GBNF + validateur) → Phase 4 (widget Android)
+→ Phase 3 (stockage souverain) → Phase 7 (finitions + optim APK)
 → Phase 8 (docs + tag v3.0.0)
 ```
 
-Chaque tâche cochée = testée + `flutter analyze` clean + commit Git atomique.
+Chaque tâche cochée = `flutter analyze` clean + commit Git atomique.
+**Test runtime + validation = Robert.** L'IA attend le GO de Robert avant de passer à la tâche/phase suivante.
 
 ---
 
@@ -655,4 +709,4 @@ Tous les anciens documents de référence ont été déplacés dans `archive/` :
 
 ---
 
-*Rédigé le 02/03/2026. HEAD = `d300ca8`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*
+*Mis à jour le 02/03/2026. HEAD = `d1c488b`. Ce document est le référentiel unique du projet — les documents archivés servent de trace historique.*

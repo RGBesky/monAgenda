@@ -18,6 +18,7 @@ import '../../../services/weather_service.dart';
 import '../../../services/logger_service.dart';
 import '../../events/screens/event_form_screen.dart';
 import '../../events/widgets/event_detail_popup.dart';
+import '../../project/project_view_screen.dart';
 import '../widgets/weather_header.dart';
 import '../../../core/widgets/source_logos.dart';
 
@@ -32,6 +33,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   late CalendarController _calendarController;
   List<WeatherModel> _forecasts = [];
   bool _loadingWeather = false;
+  bool _showTodoPanel = false;
 
   @override
   void initState() {
@@ -82,36 +84,58 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     final eventsAsync = ref.watch(eventsInRangeProvider);
     final syncState = ref.watch(syncNotifierProvider);
     final currentView = settings?.defaultView ?? AppConstants.viewWeek;
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
+
+    Widget calendarBody = Column(
+      children: [
+        if (_forecasts.isNotEmpty)
+          WeatherHeader(
+            forecasts: _forecasts,
+            displayedDate: DateTime.now(),
+            cityName: settings?.weatherCity ?? 'Genève',
+          ),
+        Expanded(
+          child: eventsAsync.when(
+            loading: () => _buildCalendarWithEvents(
+              context,
+              [],
+              currentView,
+              settings,
+            ),
+            error: (e, _) => Center(child: Text('Erreur : $e')),
+            data: (events) => _buildCalendarWithEvents(
+              context,
+              events,
+              currentView,
+              settings,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    // Desktop : panneau latéral tâches non planifiées + DragTarget
+    if (isDesktop && _showTodoPanel) {
+      calendarBody = Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: _wrapWithDragTarget(calendarBody),
+          ),
+          const VerticalDivider(width: 1),
+          SizedBox(
+            width: 280,
+            child: _buildTodoPanel(context),
+          ),
+        ],
+      );
+    } else if (isDesktop) {
+      calendarBody = _wrapWithDragTarget(calendarBody);
+    }
 
     return Scaffold(
       appBar: _buildAppBar(context, syncState),
-      body: Column(
-        children: [
-          if (_forecasts.isNotEmpty)
-            WeatherHeader(
-              forecasts: _forecasts,
-              displayedDate: DateTime.now(),
-              cityName: settings?.weatherCity ?? 'Genève',
-            ),
-          Expanded(
-            child: eventsAsync.when(
-              loading: () => _buildCalendarWithEvents(
-                context,
-                [],
-                currentView,
-                settings,
-              ),
-              error: (e, _) => Center(child: Text('Erreur : $e')),
-              data: (events) => _buildCalendarWithEvents(
-                context,
-                events,
-                currentView,
-                settings,
-              ),
-            ),
-          ),
-        ],
-      ),
+      body: calendarBody,
       floatingActionButton: _buildFab(context),
     );
   }
@@ -153,6 +177,21 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           ),
           tooltip: "Aujourd'hui",
         ),
+        // Panneau tâches non planifiées (desktop only)
+        if (MediaQuery.of(context).size.width >= 800)
+          IconButton(
+            onPressed: () => setState(() => _showTodoPanel = !_showTodoPanel),
+            icon: HugeIcon(
+              icon: _showTodoPanel
+                  ? HugeIcons.strokeRoundedRightToLeftListBullet
+                  : HugeIcons.strokeRoundedTaskDaily02,
+              color: _showTodoPanel
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurface,
+              size: 22,
+            ),
+            tooltip: 'Tâches à planifier',
+          ),
         // Filtre des bases Notion
         _buildFilterButton(context),
         // Sélecteur de vue
@@ -1890,6 +1929,398 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  // ================================================================
+  // Panneau latéral : Tâches Notion non planifiées + drag & drop
+  // ================================================================
+
+  /// Enveloppe le calendrier dans un DragTarget pour recevoir des tâches.
+  Widget _wrapWithDragTarget(Widget calendar) {
+    return DragTarget<NotionTaskModel>(
+      onAcceptWithDetails: (details) => _onTaskDropped(details.data),
+      builder: (context, candidateData, rejectedData) {
+        final isDragging = candidateData.isNotEmpty;
+        if (isDragging) {
+          return Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.3),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: calendar,
+          );
+        }
+        return calendar;
+      },
+    );
+  }
+
+  /// Appelé quand une tâche est déposée sur le calendrier.
+  void _onTaskDropped(NotionTaskModel task) async {
+    final displayDate = _calendarController.displayDate ?? DateTime.now();
+    final selectedDate = ref.read(selectedDateProvider);
+    // Utiliser la date sélectionnée si elle est récente, sinon displayDate
+    final initialDate = selectedDate.difference(DateTime.now()).inDays.abs() < 60
+        ? selectedDate
+        : displayDate;
+
+    final result = await _showScheduleTaskDialog(task, initialDate);
+    if (result == null) return;
+
+    try {
+      await ref.read(notionProjectTasksProvider.notifier).assignDate(
+            task.id,
+            task.databaseId,
+            result,
+          );
+
+      // Déclencher une sync pour récupérer la tâche comme événement
+      ref.read(syncNotifierProvider.notifier).syncAll().catchError((e) {
+        AppLogger.instance
+            .warning('CalendarScreen', 'Sync post-assignDate: $e');
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                '«${task.title}» planifié le ${DateFormat('EEEE d MMMM à HH:mm', 'fr_FR').format(result)}',
+              ),
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur : $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Dialog pour choisir date et heure avant de planifier la tâche.
+  Future<DateTime?> _showScheduleTaskDialog(
+    NotionTaskModel task,
+    DateTime initialDate,
+  ) async {
+    // Étape 1 : choisir la date
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+      helpText: 'Planifier «${task.title}»',
+      locale: const Locale('fr', 'FR'),
+    );
+    if (date == null || !mounted) return null;
+
+    // Étape 2 : choisir l'heure
+    final time = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 9, minute: 0),
+      helpText: 'Heure de début',
+    );
+    if (time == null) return null;
+
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  /// Panneau latéral affichant les tâches Notion sans date.
+  Widget _buildTodoPanel(BuildContext context) {
+    final tasksAsync = ref.watch(notionProjectTasksProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            child: Row(
+              children: [
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedTaskDaily02,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'À planifier',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedRefresh,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 18,
+                  ),
+                  onPressed: () =>
+                      ref.invalidate(notionProjectTasksProvider),
+                  tooltip: 'Rafraîchir',
+                  iconSize: 18,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                ),
+                IconButton(
+                  icon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedCancel01,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 18,
+                  ),
+                  onPressed: () =>
+                      setState(() => _showTodoPanel = false),
+                  tooltip: 'Fermer',
+                  iconSize: 18,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // ── Info drag & drop ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'Glissez une tâche vers le calendrier',
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          // ── Liste des tâches ──
+          Expanded(
+            child: tasksAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedAlert02,
+                      color: Theme.of(context).colorScheme.error,
+                      size: 28,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Erreur chargement Notion',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              data: (tasks) {
+                if (tasks.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          HugeIcon(
+                            icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant
+                                .withValues(alpha: 0.3),
+                            size: 40,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Tout est planifié !',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Aucune tâche Notion sans date.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  itemCount: tasks.length,
+                  itemBuilder: (context, index) =>
+                      _buildDraggableTask(tasks[index], isDark),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Carte tâche draggable pour le panneau latéral.
+  Widget _buildDraggableTask(NotionTaskModel task, bool isDark) {
+    return Draggable<NotionTaskModel>(
+      data: task,
+      feedback: Material(
+        elevation: 4,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              HugeIcon(
+                icon: HugeIcons.strokeRoundedTaskDaily02,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  task.title,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: _buildTaskCard(task, isDark),
+      ),
+      child: GestureDetector(
+        onTap: () => _onTaskDropped(task),
+        child: _buildTaskCard(task, isDark),
+      ),
+    );
+  }
+
+  /// Carte Notion-like pour une tâche non planifiée.
+  Widget _buildTaskCard(NotionTaskModel task, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Theme.of(context).colorScheme.surfaceContainerHigh
+            : Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant
+              .withValues(alpha: 0.5),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Barre latérale colorée Notion
+          Container(
+            width: 3,
+            height: 28,
+            decoration: BoxDecoration(
+              color: task.color,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                if (task.category != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      task.category!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Icône grip pour indiquer le drag
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedDragDropVertical,
+            color: Theme.of(context)
+                .colorScheme
+                .onSurfaceVariant
+                .withValues(alpha: 0.3),
+            size: 16,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ============================================================

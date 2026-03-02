@@ -131,8 +131,7 @@ class EventDetailScreen extends ConsumerWidget {
               _buildSourceBadge(context, isDark, ref),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
-                child:
-                    Container(width: 1, height: 14, color: borderColor),
+                child: Container(width: 1, height: 14, color: borderColor),
               ),
               Expanded(child: _buildDateChip(subColor)),
             ],
@@ -156,8 +155,7 @@ class EventDetailScreen extends ConsumerWidget {
             const SizedBox(height: 10),
             SelectableText(
               parsed.cleanText,
-              style:
-                  TextStyle(fontSize: 14, color: textColor, height: 1.65),
+              style: TextStyle(fontSize: 14, color: textColor, height: 1.65),
             ),
           ],
 
@@ -243,11 +241,10 @@ class EventDetailScreen extends ConsumerWidget {
                   icon: const Icon(Icons.delete_outline,
                       size: 16, color: Color(0xFFEB5757)),
                   label: const Text('Supprimer',
-                      style:
-                          TextStyle(color: Color(0xFFEB5757), fontSize: 13)),
+                      style: TextStyle(color: Color(0xFFEB5757), fontSize: 13)),
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -266,11 +263,10 @@ class EventDetailScreen extends ConsumerWidget {
                     }
                   },
                   icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('Modifier',
-                      style: TextStyle(fontSize: 13)),
+                  label: const Text('Modifier', style: TextStyle(fontSize: 13)),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -408,8 +404,7 @@ class EventDetailScreen extends ConsumerWidget {
     }
 
     for (final p in descProps) {
-      rows.add(
-          _PropertyRow(emoji: p.emoji, label: p.label, value: p.value));
+      rows.add(_PropertyRow(emoji: p.emoji, label: p.label, value: p.value));
     }
 
     if (rows.isEmpty) return const SizedBox.shrink();
@@ -427,14 +422,12 @@ class EventDetailScreen extends ConsumerWidget {
           final isLast = idx == rows.length - 1;
 
           return Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: isLast
                 ? null
                 : BoxDecoration(
                     border: Border(
-                      bottom:
-                          BorderSide(color: borderColor, width: 0.5),
+                      bottom: BorderSide(color: borderColor, width: 0.5),
                     ),
                   ),
             child: Row(
@@ -443,8 +436,8 @@ class EventDetailScreen extends ConsumerWidget {
                 if (row.icon != null)
                   Padding(
                     padding: const EdgeInsets.only(right: 8, top: 1),
-                    child: HugeIcon(
-                        icon: row.icon, size: 14, color: labelColor),
+                    child:
+                        HugeIcon(icon: row.icon, size: 14, color: labelColor),
                   )
                 else
                   Padding(
@@ -466,8 +459,8 @@ class EventDetailScreen extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     row.value,
-                    style: TextStyle(
-                        fontSize: 13, color: valueColor, height: 1.4),
+                    style:
+                        TextStyle(fontSize: 13, color: valueColor, height: 1.4),
                   ),
                 ),
               ],
@@ -482,8 +475,7 @@ class EventDetailScreen extends ConsumerWidget {
   // SECTION LABEL
   // =========================================================================
 
-  Widget _buildSectionLabel(
-      String label, Color subColor, Color borderColor) {
+  Widget _buildSectionLabel(String label, Color subColor, Color borderColor) {
     return Row(
       children: [
         Text(
@@ -511,16 +503,14 @@ class EventDetailScreen extends ConsumerWidget {
 
     if (event.isAllDay) {
       icon = HugeIcons.strokeRoundedCalendar01;
-      final same =
-          CalendarDateUtils.isSameDay(event.startDate, event.endDate);
+      final same = CalendarDateUtils.isSameDay(event.startDate, event.endDate);
       text = same
           ? CalendarDateUtils.formatDisplayDate(event.startDate)
           : '${CalendarDateUtils.formatDisplayDate(event.startDate)} → '
               '${CalendarDateUtils.formatDisplayDate(event.endDate)}';
     } else {
       icon = HugeIcons.strokeRoundedTime01;
-      text =
-          '${CalendarDateUtils.formatDisplayDate(event.startDate)}  ·  '
+      text = '${CalendarDateUtils.formatDisplayDate(event.startDate)}  ·  '
           '${CalendarDateUtils.formatDisplayTime(event.startDate)} – '
           '${CalendarDateUtils.formatDisplayTime(event.endDate)} '
           '(${CalendarDateUtils.formatDuration(event.startDate, event.endDate)})';
@@ -550,12 +540,10 @@ class EventDetailScreen extends ConsumerWidget {
   // SOURCE BADGE
   // =========================================================================
 
-  Widget _buildSourceBadge(
-      BuildContext context, bool isDark, WidgetRef ref) {
+  Widget _buildSourceBadge(BuildContext context, bool isDark, WidgetRef ref) {
     String? dbName = notionDbName;
     if (dbName == null && event.isFromNotion) {
-      final dbNames =
-          ref.watch(notionDbNamesMapProvider).value ?? {};
+      final dbNames = ref.watch(notionDbNamesMapProvider).value ?? {};
       dbName = dbNames[event.calendarId];
     }
     return SourceLogos.badge(
@@ -575,8 +563,7 @@ class EventDetailScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color:
-            statusColor.withValues(alpha: isDark ? 0.15 : 0.08),
+        color: statusColor.withValues(alpha: isDark ? 0.15 : 0.08),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -585,8 +572,8 @@ class EventDetailScreen extends ConsumerWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-                color: statusColor, shape: BoxShape.circle),
+            decoration:
+                BoxDecoration(color: statusColor, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
@@ -618,11 +605,9 @@ class EventDetailScreen extends ConsumerWidget {
         return ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 200),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: color
-                  .withValues(alpha: isDark ? 0.12 : 0.08),
+              color: color.withValues(alpha: isDark ? 0.12 : 0.08),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
@@ -631,8 +616,8 @@ class EventDetailScreen extends ConsumerWidget {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: BoxDecoration(
-                      color: color, shape: BoxShape.circle),
+                  decoration:
+                      BoxDecoration(color: color, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
                 Flexible(
@@ -677,21 +662,16 @@ class EventDetailScreen extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     radius: 13,
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primaryContainer,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
                     child: Text(
-                      (p.name?.isNotEmpty == true
-                              ? p.name!
-                              : p.email)
+                      (p.name?.isNotEmpty == true ? p.name! : p.email)
                           .substring(0, 1)
                           .toUpperCase(),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
                       ),
                     ),
                   ),
@@ -707,8 +687,7 @@ class EventDetailScreen extends ConsumerWidget {
                                   fontWeight: FontWeight.w500,
                                   color: textColor)),
                         Text(p.email,
-                            style: TextStyle(
-                                fontSize: 12, color: subColor)),
+                            style: TextStyle(fontSize: 12, color: subColor)),
                       ],
                     ),
                   ),
@@ -748,20 +727,17 @@ class EventDetailScreen extends ConsumerWidget {
   Widget _buildAttachmentsList(
       BuildContext context, Color subColor, Color textColor) {
     final urls = event.smartAttachments
-        .where(
-            (a) => a.startsWith('http://') || a.startsWith('https://'))
+        .where((a) => a.startsWith('http://') || a.startsWith('https://'))
         .toList();
     final localFiles = event.smartAttachments
-        .where((a) =>
-            !a.startsWith('http://') && !a.startsWith('https://'))
+        .where((a) => !a.startsWith('http://') && !a.startsWith('https://'))
         .toList();
 
     return Column(
       children: [
         ...urls.map((url) {
           final displayName = _extractUrlDisplayName(url);
-          final isKDrive =
-              url.contains('kdrive') || url.contains('infomaniak');
+          final isKDrive = url.contains('kdrive') || url.contains('infomaniak');
           return Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: InkWell(
@@ -769,19 +745,15 @@ class EventDetailScreen extends ConsumerWidget {
               onTap: () async {
                 final uri = Uri.parse(url);
                 if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri,
-                      mode: LaunchMode.externalApplication);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
                 }
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 4, horizontal: 4),
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                 child: Row(
                   children: [
                     Icon(
-                      isKDrive
-                          ? Icons.cloud_outlined
-                          : Icons.link,
+                      isKDrive ? Icons.cloud_outlined : Icons.link,
                       size: 18,
                       color: const Color(0xFF0098FF),
                     ),
@@ -798,8 +770,7 @@ class EventDetailScreen extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Icon(Icons.open_in_new,
-                        size: 12, color: subColor),
+                    Icon(Icons.open_in_new, size: 12, color: subColor),
                   ],
                 ),
               ),
@@ -818,16 +789,14 @@ class EventDetailScreen extends ConsumerWidget {
                 } else if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(
-                          'Fichier introuvable : $fileName'),
+                      content: Text('Fichier introuvable : $fileName'),
                       backgroundColor: Colors.orange,
                     ),
                   );
                 }
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 4, horizontal: 4),
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                 child: Row(
                   children: [
                     Icon(Icons.insert_drive_file_outlined,
@@ -836,8 +805,7 @@ class EventDetailScreen extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         fileName,
-                        style: TextStyle(
-                            fontSize: 13, color: textColor),
+                        style: TextStyle(fontSize: 13, color: textColor),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -890,17 +858,14 @@ class EventDetailScreen extends ConsumerWidget {
       onPressed: () async {
         final uri = Uri.parse(url);
         if (await canLaunchUrl(uri)) {
-          await launchUrl(uri,
-              mode: LaunchMode.externalApplication);
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       },
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(double.infinity, 40),
         side: BorderSide(color: borderColor),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6)),
-        padding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -918,9 +883,7 @@ class EventDetailScreen extends ConsumerWidget {
           const SizedBox(width: 4),
           Icon(Icons.open_in_new,
               size: 12,
-              color: isDark
-                  ? Colors.white38
-                  : const Color(0xFF999999)),
+              color: isDark ? Colors.white38 : const Color(0xFF999999)),
         ],
       ),
     );
@@ -933,8 +896,7 @@ class EventDetailScreen extends ConsumerWidget {
     Color borderColor,
     Color textColor,
   ) {
-    final meetingService =
-        ref.watch(notionMeetingServiceProvider);
+    final meetingService = ref.watch(notionMeetingServiceProvider);
     if (meetingService == null) return const SizedBox.shrink();
 
     return Padding(
@@ -974,11 +936,8 @@ class EventDetailScreen extends ConsumerWidget {
   static String _extractUrlDisplayName(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.host.contains('kdrive') ||
-          uri.host.contains('infomaniak')) {
-        final segments = uri.pathSegments
-            .where((s) => s.isNotEmpty)
-            .toList();
+      if (uri.host.contains('kdrive') || uri.host.contains('infomaniak')) {
+        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
         final shareIdx = segments.indexOf('share');
         if (shareIdx >= 0 && shareIdx + 1 < segments.length) {
           final uuid = segments[shareIdx + 1];
@@ -992,14 +951,11 @@ class EventDetailScreen extends ConsumerWidget {
       }
       return uri.host;
     } catch (_) {
-      return url.length > 40
-          ? '${url.substring(0, 40)}…'
-          : url;
+      return url.length > 40 ? '${url.substring(0, 40)}…' : url;
     }
   }
 
-  Future<void> _confirmDelete(
-      BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1015,8 +971,7 @@ class EventDetailScreen extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(
-              foregroundColor:
-                  Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.error,
             ),
             child: const Text('Supprimer'),
           ),
@@ -1025,9 +980,7 @@ class EventDetailScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref
-          .read(syncNotifierProvider.notifier)
-          .deleteEvent(event);
+      await ref.read(syncNotifierProvider.notifier).deleteEvent(event);
       if (context.mounted) Navigator.pop(context);
     }
   }
@@ -1069,8 +1022,7 @@ class _MeetingNoteButtonState extends State<_MeetingNoteButton> {
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(Icons.note_alt_outlined,
-              size: 16, color: widget.textColor),
+          : Icon(Icons.note_alt_outlined, size: 16, color: widget.textColor),
       label: Text(
         _loading ? 'Création...' : 'Compte-rendu de réunion',
         style: TextStyle(
@@ -1082,8 +1034,7 @@ class _MeetingNoteButtonState extends State<_MeetingNoteButton> {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(double.infinity, 40),
         side: BorderSide(color: widget.borderColor),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
   }
@@ -1091,11 +1042,9 @@ class _MeetingNoteButtonState extends State<_MeetingNoteButton> {
   Future<void> _openOrCreate() async {
     setState(() => _loading = true);
     try {
-      final url =
-          await widget.service.createOrOpen(widget.event);
+      final url = await widget.service.createOrOpen(widget.event);
       if (mounted) {
-        await launchUrl(Uri.parse(url),
-            mode: LaunchMode.externalApplication);
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (mounted) {

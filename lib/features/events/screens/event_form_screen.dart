@@ -883,8 +883,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
             if (_attachments.isNotEmpty) ...[
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: Theme.of(context)
                       .colorScheme
@@ -987,8 +986,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
                       style: TextStyle(
                         fontSize: 13,
                         color: isUrl ? const Color(0xFF0098FF) : null,
-                        decoration:
-                            isUrl ? TextDecoration.underline : null,
+                        decoration: isUrl ? TextDecoration.underline : null,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
