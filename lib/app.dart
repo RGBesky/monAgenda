@@ -28,6 +28,8 @@ class AppShellShortcuts {
     ('Ctrl + N', 'Nouvel événement'),
     ('Ctrl + K', 'Saisie Magique (Spotlight)'),
     ('Ctrl + F', 'Rechercher'),
+    ('Ctrl + S', 'Synchroniser maintenant'),
+    ('Ctrl + ,', 'Paramètres'),
     ('Échap', 'Fermer / Retour'),
   ];
 }
@@ -954,7 +956,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         FloatingActionButton(
           heroTag: 'main_fab',
           onPressed: () => _showQuickAddSheet(context, isDark),
-          tooltip: 'Créer',
+          tooltip: 'Créer (Ctrl+N / Ctrl+K)',
           child: const HugeIcon(
             icon: HugeIcons.strokeRoundedAdd01,
             color: Colors.white,
@@ -1031,6 +1033,20 @@ class _AppShellState extends ConsumerState<AppShell> {
           context,
           MaterialPageRoute(builder: (_) => const SearchScreen()),
         );
+      },
+      // Ctrl+S → Synchroniser maintenant
+      const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+        ref.read(syncNotifierProvider.notifier).syncAll();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Synchronisation lancée…'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      },
+      // Ctrl+, → Ouvrir les paramètres
+      const SingleActivator(LogicalKeyboardKey.comma, control: true): () {
+        setState(() => _selectedIndex = 2); // 2 = onglet Paramètres
       },
       // Escape → Fermer modal/BottomSheet
       const SingleActivator(LogicalKeyboardKey.escape): () {
