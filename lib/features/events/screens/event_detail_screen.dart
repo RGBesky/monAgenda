@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
@@ -15,20 +14,49 @@ import '../../../providers/events_provider.dart';
 import '../../../services/notion_meeting_service.dart';
 import 'event_form_screen.dart';
 
+// ---------------------------------------------------------------------------
+// Description parser — sépare texte libre des propriétés enrichies
+// ---------------------------------------------------------------------------
+
+class _DescriptionProperty {
+  final String emoji;
+  final String label;
+  final String value;
+  const _DescriptionProperty({
+    required this.emoji,
+    required this.label,
+    required this.value,
+  });
+}
+
+class _ParsedDescription {
+  final String cleanText;
+  final List<_DescriptionProperty> properties;
+  const _ParsedDescription({required this.cleanText, required this.properties});
+}
+
+class _PropertyRow {
+  final dynamic icon;
+  final String? emoji;
+  final String label;
+  final String value;
+  const _PropertyRow({
+    this.icon,
+    this.emoji,
+    required this.label,
+    required this.value,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// EventDetailScreen — Notion-like read-only event detail
+// ---------------------------------------------------------------------------
+
 class EventDetailScreen extends ConsumerWidget {
   final EventModel event;
-
-  /// Si true, n'affiche pas le Scaffold/AppBar (pour usage dans un Dialog).
   final bool asDialogBody;
-
-  /// Callback appelé quand l'utilisateur navigue vers l'éditeur.
   final VoidCallback? onNavigatedToEdit;
-
-  /// Callback pour éditer l'événement en place (dans la popup), au lieu de
-  /// naviguer vers un plein écran.
   final VoidCallback? onEditInPlace;
-
-  /// Nom de la base Notion (affiché dans le badge source).
   final String? notionDbName;
 
   const EventDetailScreen({
@@ -40,160 +68,189 @@ class EventDetailScreen extends ConsumerWidget {
     this.notionDbName,
   });
 
+  // -- Notion design tokens -------------------------------------------------
+
+  static const _notionSecondary = Color(0xFF787774);
+  static const _notionSecondaryDark = Color(0xFF7F7F7F);
+  static const _notionBorder = Color(0xFFE9E9E7);
+  static const _notionBorderDark = Color(0xFF2F2F2F);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accent = _getCategoryColor();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = AppColors.pastelBg(accent, isDark: isDark);
-    final textColor = AppColors.textOnPastel(accent, isDark: isDark);
-    final subColor = textColor.withValues(alpha: 0.7);
+    final accent = _getCategoryColor();
+    final titleColor = isDark ? Colors.white : const Color(0xFF191919);
+    final textColor =
+        isDark ? const Color(0xFFCFCFCF) : const Color(0xFF37352F);
+    final subColor = isDark ? _notionSecondaryDark : _notionSecondary;
+    final borderColor = isDark ? _notionBorderDark : _notionBorder;
+
+    final parsed = _parseDescription(event.description);
 
     final body = SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.symmetric(
+        horizontal: asDialogBody ? 28 : 20,
+        vertical: asDialogBody ? 24 : 16,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header card ─────────────────────────────────
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border(
-                left: BorderSide(color: accent, width: 6),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        event.title,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                          letterSpacing: -0.3,
-                          height: 1.25,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    _buildSourceBadge(context, isDark, ref),
-                  ],
+          // -- Title --------------------------------------------------------
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 4,
+                height: 28,
+                margin: const EdgeInsets.only(top: 4, right: 14),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(height: 10),
-                _buildDateRow(context, subColor),
-                if (event.statusTag != null) ...[
-                  const SizedBox(height: 10),
-                  _buildStatusBadge(context, isDark),
-                ],
-              ],
-            ),
+              ),
+              Expanded(
+                child: Text(
+                  event.title,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: titleColor,
+                    letterSpacing: -0.3,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
 
-          if (event.tags.isNotEmpty) ...[
-            _buildTagsSection(context),
+          // -- Source + Date -------------------------------------------------
+          Row(
+            children: [
+              _buildSourceBadge(context, isDark, ref),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child:
+                    Container(width: 1, height: 14, color: borderColor),
+              ),
+              Expanded(child: _buildDateChip(subColor)),
+            ],
+          ),
+
+          if (event.statusTag != null) ...[
+            const SizedBox(height: 10),
+            _buildStatusBadge(isDark),
+          ],
+
+          const SizedBox(height: 24),
+
+          // -- Property table -----------------------------------------------
+          _buildPropertyTable(
+              parsed.properties, subColor, textColor, borderColor),
+
+          // -- Description libre --------------------------------------------
+          if (parsed.cleanText.isNotEmpty) ...[
             const SizedBox(height: 20),
+            _buildSectionLabel('Description', subColor, borderColor),
+            const SizedBox(height: 10),
+            SelectableText(
+              parsed.cleanText,
+              style:
+                  TextStyle(fontSize: 14, color: textColor, height: 1.65),
+            ),
           ],
 
-          if (event.location != null) ...[
-            _buildInfoRow(context,
-                hugeIcon: HugeIcons.strokeRoundedLocation01,
-                label: 'Lieu',
-                text: event.location!,
-                subColor: subColor,
-                textColor: textColor),
-            const SizedBox(height: 14),
+          // -- Tags ---------------------------------------------------------
+          if (event.tags.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _buildSectionLabel('Tags', subColor, borderColor),
+            const SizedBox(height: 10),
+            _buildTagsSection(context, isDark),
           ],
 
-          if (event.description != null) ...[
-            _buildInfoRow(context,
-                hugeIcon: HugeIcons.strokeRoundedNote01,
-                label: 'Description',
-                text: event.description!,
-                subColor: subColor,
-                textColor: textColor,
-                isMultiline: true),
-            const SizedBox(height: 14),
-          ],
-
+          // -- Participants -------------------------------------------------
           if (event.participants.isNotEmpty) ...[
-            _buildParticipantsSection(context, subColor, textColor),
-            const SizedBox(height: 14),
+            const SizedBox(height: 20),
+            _buildSectionLabel(
+              'Participants (${event.participants.length})',
+              subColor,
+              borderColor,
+            ),
+            const SizedBox(height: 10),
+            _buildParticipantsList(context, subColor, textColor),
           ],
 
-          if (event.reminderMinutes != null) ...[
-            _buildInfoRow(context,
-                hugeIcon: HugeIcons.strokeRoundedNotification01,
-                label: 'Rappel',
-                text:
-                    '${event.reminderMinutes} minute${event.reminderMinutes! > 1 ? 's' : ''} avant',
-                subColor: subColor,
-                textColor: textColor),
-            const SizedBox(height: 14),
+          // -- Pièces jointes -----------------------------------------------
+          if (event.smartAttachments.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _buildSectionLabel(
+              'Pièces jointes (${event.smartAttachments.length})',
+              subColor,
+              borderColor,
+            ),
+            const SizedBox(height: 10),
+            _buildAttachmentsList(context, subColor, textColor),
           ],
 
-          if (event.rrule != null) ...[
-            _buildInfoRow(context,
-                hugeIcon: HugeIcons.strokeRoundedRepeat,
-                label: 'Récurrence',
-                text: _formatRRule(event.rrule!),
-                subColor: subColor,
-                textColor: textColor),
-            const SizedBox(height: 14),
-          ],
+          const SizedBox(height: 24),
 
-          // ── Smart Attachments ───────────────────────────
-          _buildAttachmentsSection(context, ref, subColor, textColor),
-
-          // ── Meeting Note Notion (Desktop only) ──────────
+          // -- Actions ------------------------------------------------------
           if (Platform.isLinux || Platform.isMacOS || Platform.isWindows)
-            _buildMeetingNoteButton(context, ref),
+            _buildMeetingNoteButton(
+                context, ref, isDark, borderColor, textColor),
 
-          // ── Bouton "Ouvrir dans la source" ──────────────
           if (event.isFromNotion && event.notionPageId != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _buildOpenInSourceButton(
               context,
-              logo: SourceLogos.notion(size: 20, isDark: isDark),
+              logo: SourceLogos.notion(size: 18, isDark: isDark),
               label: 'Ouvrir dans Notion',
               url:
                   'https://www.notion.so/${event.notionPageId!.replaceAll('-', '')}',
+              isDark: isDark,
+              borderColor: borderColor,
+              textColor: textColor,
             ),
           ],
+
           if (event.isFromInfomaniak) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _buildOpenInSourceButton(
               context,
-              logo: SourceLogos.infomaniak(size: 20),
+              logo: SourceLogos.infomaniak(size: 18),
               label: 'Ouvrir dans Infomaniak',
               url: 'https://mail.infomaniak.com/',
+              isDark: isDark,
+              borderColor: borderColor,
+              textColor: textColor,
             ),
           ],
 
-          Divider(color: Theme.of(context).colorScheme.outline, height: 32),
-          _buildMetadata(context, subColor),
+          const SizedBox(height: 16),
+          Divider(color: borderColor, height: 1),
+          const SizedBox(height: 10),
+          _buildMetadata(subColor),
 
-          // En mode dialog : boutons d'action en bas
+          // -- Dialog action buttons ----------------------------------------
           if (asDialogBody && !event.isFromIcs) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                OutlinedButton.icon(
+                TextButton.icon(
                   onPressed: () => _confirmDelete(context, ref),
                   icon: const Icon(Icons.delete_outline,
-                      size: 18, color: Color(0xFFFF3B30)),
+                      size: 16, color: Color(0xFFEB5757)),
                   label: const Text('Supprimer',
-                      style: TextStyle(color: Color(0xFFFF3B30))),
+                      style:
+                          TextStyle(color: Color(0xFFEB5757), fontSize: 13)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: () {
                     if (onEditInPlace != null) {
@@ -208,8 +265,16 @@ class EventDetailScreen extends ConsumerWidget {
                       );
                     }
                   },
-                  icon: const Icon(Icons.edit, size: 18),
-                  label: const Text('Modifier'),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Modifier',
+                      style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -244,7 +309,7 @@ class EventDetailScreen extends ConsumerWidget {
             IconButton(
               icon: const HugeIcon(
                 icon: HugeIcons.strokeRoundedDelete01,
-                color: Color(0xFFFF3B30),
+                color: Color(0xFFEB5757),
                 size: 22,
               ),
               onPressed: () => _confirmDelete(context, ref),
@@ -257,55 +322,240 @@ class EventDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDateRow(BuildContext context, Color subColor) {
-    if (event.isAllDay) {
-      final same = CalendarDateUtils.isSameDay(event.startDate, event.endDate);
-      return Row(
-        children: [
-          HugeIcon(
-              icon: HugeIcons.strokeRoundedCalendar01,
-              size: 14,
-              color: subColor),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              same
-                  ? CalendarDateUtils.formatDisplayDate(event.startDate)
-                  : '${CalendarDateUtils.formatDisplayDate(event.startDate)} → '
-                      '${CalendarDateUtils.formatDisplayDate(event.endDate)}',
-              style: TextStyle(
-                  fontSize: 13, color: subColor, fontWeight: FontWeight.w500),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+  // =========================================================================
+  // DESCRIPTION PARSER
+  // =========================================================================
+
+  static _ParsedDescription _parseDescription(String? description) {
+    if (description == null || description.trim().isEmpty) {
+      return const _ParsedDescription(cleanText: '', properties: []);
+    }
+
+    final lines = description.split('\n');
+    final freeLines = <String>[];
+    final props = <_DescriptionProperty>[];
+    final propRegex = RegExp(r'^(📎|📍|🎯|🧰)\s+(.+?)\s*:\s+(.+)$');
+    bool hitSeparator = false;
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed == '---') {
+        hitSeparator = true;
+        continue;
+      }
+      if (hitSeparator) continue;
+
+      if (trimmed.isEmpty) {
+        freeLines.add('');
+        continue;
+      }
+
+      final match = propRegex.firstMatch(trimmed);
+      if (match != null) {
+        props.add(_DescriptionProperty(
+          emoji: match.group(1)!,
+          label: match.group(2)!,
+          value: match.group(3)!,
+        ));
+      } else {
+        freeLines.add(line);
+      }
+    }
+
+    return _ParsedDescription(
+      cleanText: freeLines.join('\n').trim(),
+      properties: props,
+    );
+  }
+
+  // =========================================================================
+  // PROPERTY TABLE (Notion-like key/value rows)
+  // =========================================================================
+
+  Widget _buildPropertyTable(
+    List<_DescriptionProperty> descProps,
+    Color labelColor,
+    Color valueColor,
+    Color borderColor,
+  ) {
+    final rows = <_PropertyRow>[];
+
+    if (event.location != null && event.location!.isNotEmpty) {
+      rows.add(_PropertyRow(
+        icon: HugeIcons.strokeRoundedLocation01,
+        label: 'Lieu',
+        value: event.location!,
+      ));
+    }
+
+    if (event.reminderMinutes != null) {
+      final min = event.reminderMinutes!;
+      rows.add(_PropertyRow(
+        icon: HugeIcons.strokeRoundedNotification01,
+        label: 'Rappel',
+        value: min >= 60
+            ? '${min ~/ 60}h${min % 60 > 0 ? ' ${min % 60}min' : ''} avant'
+            : '$min min avant',
+      ));
+    }
+
+    if (event.rrule != null) {
+      rows.add(_PropertyRow(
+        icon: HugeIcons.strokeRoundedRepeat,
+        label: 'Récurrence',
+        value: _formatRRule(event.rrule!),
+      ));
+    }
+
+    for (final p in descProps) {
+      rows.add(
+          _PropertyRow(emoji: p.emoji, label: p.label, value: p.value));
+    }
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor, width: 0.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: rows.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final row = entry.value;
+          final isLast = idx == rows.length - 1;
+
+          return Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: isLast
+                ? null
+                : BoxDecoration(
+                    border: Border(
+                      bottom:
+                          BorderSide(color: borderColor, width: 0.5),
+                    ),
+                  ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (row.icon != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8, top: 1),
+                    child: HugeIcon(
+                        icon: row.icon, size: 14, color: labelColor),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(row.emoji ?? '📎',
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                SizedBox(
+                  width: 100,
+                  child: Text(
+                    row.label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: labelColor,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    row.value,
+                    style: TextStyle(
+                        fontSize: 13, color: valueColor, height: 1.4),
+                  ),
+                ),
+              ],
             ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // SECTION LABEL
+  // =========================================================================
+
+  Widget _buildSectionLabel(
+      String label, Color subColor, Color borderColor) {
+    return Row(
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: subColor,
+            letterSpacing: 1.0,
           ),
-        ],
-      );
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Divider(color: borderColor, height: 1)),
+      ],
+    );
+  }
+
+  // =========================================================================
+  // DATE CHIP
+  // =========================================================================
+
+  Widget _buildDateChip(Color subColor) {
+    String text;
+    dynamic icon;
+
+    if (event.isAllDay) {
+      icon = HugeIcons.strokeRoundedCalendar01;
+      final same =
+          CalendarDateUtils.isSameDay(event.startDate, event.endDate);
+      text = same
+          ? CalendarDateUtils.formatDisplayDate(event.startDate)
+          : '${CalendarDateUtils.formatDisplayDate(event.startDate)} → '
+              '${CalendarDateUtils.formatDisplayDate(event.endDate)}';
+    } else {
+      icon = HugeIcons.strokeRoundedTime01;
+      text =
+          '${CalendarDateUtils.formatDisplayDate(event.startDate)}  ·  '
+          '${CalendarDateUtils.formatDisplayTime(event.startDate)} – '
+          '${CalendarDateUtils.formatDisplayTime(event.endDate)} '
+          '(${CalendarDateUtils.formatDuration(event.startDate, event.endDate)})';
     }
 
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        HugeIcon(
-            icon: HugeIcons.strokeRoundedTime01, size: 14, color: subColor),
-        const SizedBox(width: 6),
-        Expanded(
+        HugeIcon(icon: icon, size: 13, color: subColor),
+        const SizedBox(width: 5),
+        Flexible(
           child: Text(
-            '${CalendarDateUtils.formatDisplayDate(event.startDate)}  ·  '
-            '${CalendarDateUtils.formatDisplayTime(event.startDate)} – '
-            '${CalendarDateUtils.formatDisplayTime(event.endDate)} '
-            '(${CalendarDateUtils.formatDuration(event.startDate, event.endDate)})',
+            text,
             style: TextStyle(
-                fontSize: 13, color: subColor, fontWeight: FontWeight.w500),
+              fontSize: 12,
+              color: subColor,
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSourceBadge(BuildContext context, bool isDark, WidgetRef ref) {
+  // =========================================================================
+  // SOURCE BADGE
+  // =========================================================================
+
+  Widget _buildSourceBadge(
+      BuildContext context, bool isDark, WidgetRef ref) {
     String? dbName = notionDbName;
     if (dbName == null && event.isFromNotion) {
-      final dbNames = ref.watch(notionDbNamesMapProvider).value ?? {};
+      final dbNames =
+          ref.watch(notionDbNamesMapProvider).value ?? {};
       dbName = dbNames[event.calendarId];
     }
     return SourceLogos.badge(
@@ -315,37 +565,36 @@ class EventDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatusBadge(BuildContext context, bool isDark) {
+  // =========================================================================
+  // STATUS BADGE
+  // =========================================================================
+
+  Widget _buildStatusBadge(bool isDark) {
     final stTag = event.statusTag!;
     final statusColor = AppColors.fromHex(stTag.colorHex);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: isDark ? 0.18 : 0.1),
-        borderRadius: BorderRadius.circular(6),
+        color:
+            statusColor.withValues(alpha: isDark ? 0.15 : 0.08),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 7,
-            height: 7,
+            width: 6,
+            height: 6,
             decoration: BoxDecoration(
-              color: statusColor,
-              shape: BoxShape.circle,
-            ),
+                color: statusColor, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              stTag.name,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          Text(
+            stTag.name,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: statusColor,
             ),
           ),
         ],
@@ -353,35 +602,37 @@ class EventDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTagsSection(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  // =========================================================================
+  // TAGS SECTION
+  // =========================================================================
+
+  Widget _buildTagsSection(BuildContext context, bool isDark) {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: event.tags.map((tag) {
         final rawColor = AppColors.fromHex(tag.colorHex);
-        // En dark mode, assurer un contraste minimal pour les couleurs sombres
         final color = isDark && rawColor.computeLuminance() < 0.3
             ? Color.lerp(rawColor, Colors.white, 0.4)!
             : rawColor;
         return ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 220),
+          constraints: const BoxConstraints(maxWidth: 200),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-              border:
-                  Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+              color: color
+                  .withValues(alpha: isDark ? 0.12 : 0.08),
+              borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 7,
-                  height: 7,
-                  decoration:
-                      BoxDecoration(color: color, shape: BoxShape.circle),
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                      color: color, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
                 Flexible(
@@ -390,7 +641,7 @@ class EventDetailScreen extends ConsumerWidget {
                     style: TextStyle(
                       color: color,
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -399,9 +650,8 @@ class EventDetailScreen extends ConsumerWidget {
                 Text(
                   '  ${tag.isPriority ? 'Priorité' : 'Catégorie'}',
                   style: TextStyle(
-                    color: color.withValues(alpha: 0.6),
+                    color: color.withValues(alpha: 0.5),
                     fontSize: 10,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -412,117 +662,62 @@ class EventDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildInfoRow(
-    BuildContext context, {
-    required dynamic hugeIcon,
-    required String label,
-    required String text,
-    required Color subColor,
-    required Color textColor,
-    bool isMultiline = false,
-  }) {
-    return Row(
-      crossAxisAlignment:
-          isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-      children: [
-        HugeIcon(icon: hugeIcon, size: 18, color: subColor),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: subColor,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                text,
-                style: TextStyle(fontSize: 14, color: textColor, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  // =========================================================================
+  // PARTICIPANTS LIST
+  // =========================================================================
 
-  Widget _buildParticipantsSection(
+  Widget _buildParticipantsList(
       BuildContext context, Color subColor, Color textColor) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            HugeIcon(
-                icon: HugeIcons.strokeRoundedUserGroup,
-                size: 18,
-                color: subColor),
-            const SizedBox(width: 10),
-            Text(
-              'Participants',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: subColor,
-                letterSpacing: 0.3,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '(${event.participants.length})',
-              style: TextStyle(fontSize: 11, color: subColor),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ...event.participants.map(
-          (p) => Padding(
-            padding: const EdgeInsets.only(left: 28, bottom: 6),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 13,
-                  backgroundColor:
-                      Theme.of(context).colorScheme.primaryContainer,
-                  child: Text(
-                    (p.name?.isNotEmpty == true ? p.name! : p.email)
-                        .substring(0, 1)
-                        .toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+      children: event.participants
+          .map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 13,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer,
+                    child: Text(
+                      (p.name?.isNotEmpty == true
+                              ? p.name!
+                              : p.email)
+                          .substring(0, 1)
+                          .toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onPrimaryContainer,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (p.name?.isNotEmpty == true)
-                        Text(p.name!,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (p.name?.isNotEmpty == true)
+                          Text(p.name!,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: textColor)),
+                        Text(p.email,
                             style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: textColor)),
-                      Text(p.email,
-                          style: TextStyle(fontSize: 12, color: subColor)),
-                    ],
+                                fontSize: 12, color: subColor)),
+                      ],
+                    ),
                   ),
-                ),
-                _buildParticipantStatusIcon(p.status),
-              ],
+                  _buildParticipantStatusIcon(p.status),
+                ],
+              ),
             ),
-          ),
-        ),
-      ],
+          )
+          .toList(),
     );
   }
 
@@ -546,7 +741,121 @@ class EventDetailScreen extends ConsumerWidget {
     }
   }
 
-  Widget _buildMetadata(BuildContext context, Color subColor) {
+  // =========================================================================
+  // ATTACHMENTS LIST
+  // =========================================================================
+
+  Widget _buildAttachmentsList(
+      BuildContext context, Color subColor, Color textColor) {
+    final urls = event.smartAttachments
+        .where(
+            (a) => a.startsWith('http://') || a.startsWith('https://'))
+        .toList();
+    final localFiles = event.smartAttachments
+        .where((a) =>
+            !a.startsWith('http://') && !a.startsWith('https://'))
+        .toList();
+
+    return Column(
+      children: [
+        ...urls.map((url) {
+          final displayName = _extractUrlDisplayName(url);
+          final isKDrive =
+              url.contains('kdrive') || url.contains('infomaniak');
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () async {
+                final uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri,
+                      mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 4, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      isKDrive
+                          ? Icons.cloud_outlined
+                          : Icons.link,
+                      size: 18,
+                      color: const Color(0xFF0098FF),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        displayName,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF0098FF),
+                          decoration: TextDecoration.underline,
+                          decorationColor: Color(0xFF0098FF),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(Icons.open_in_new,
+                        size: 12, color: subColor),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+        ...localFiles.map((path) {
+          final fileName = path.split('/').last;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () async {
+                if (await File(path).exists()) {
+                  await OpenFilex.open(path);
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Fichier introuvable : $fileName'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 4, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.insert_drive_file_outlined,
+                        size: 18, color: subColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        fileName,
+                        style: TextStyle(
+                            fontSize: 13, color: textColor),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  // =========================================================================
+  // METADATA FOOTER
+  // =========================================================================
+
+  Widget _buildMetadata(Color subColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -564,9 +873,91 @@ class EventDetailScreen extends ConsumerWidget {
     );
   }
 
+  // =========================================================================
+  // ACTION BUTTONS
+  // =========================================================================
+
+  Widget _buildOpenInSourceButton(
+    BuildContext context, {
+    required Widget logo,
+    required String label,
+    required String url,
+    required bool isDark,
+    required Color borderColor,
+    required Color textColor,
+  }) {
+    return OutlinedButton(
+      onPressed: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri,
+              mode: LaunchMode.externalApplication);
+        }
+      },
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 40),
+        side: BorderSide(color: borderColor),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6)),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 14, vertical: 8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          logo,
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.open_in_new,
+              size: 12,
+              color: isDark
+                  ? Colors.white38
+                  : const Color(0xFF999999)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingNoteButton(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDark,
+    Color borderColor,
+    Color textColor,
+  ) {
+    final meetingService =
+        ref.watch(notionMeetingServiceProvider);
+    if (meetingService == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _MeetingNoteButton(
+        event: event,
+        service: meetingService,
+        isDark: isDark,
+        borderColor: borderColor,
+        textColor: textColor,
+      ),
+    );
+  }
+
+  // =========================================================================
+  // HELPERS
+  // =========================================================================
+
   Color _getCategoryColor() {
     final firstCategory = event.categoryTags.firstOrNull;
-    if (firstCategory != null) return AppColors.fromHex(firstCategory.colorHex);
+    if (firstCategory != null) {
+      return AppColors.fromHex(firstCategory.colorHex);
+    }
     if (event.isFromNotion) return const Color(0xFF5856D6);
     if (event.isFromInfomaniak) return const Color(0xFF0098FF);
     return const Color(0xFF007AFF);
@@ -580,342 +971,35 @@ class EventDetailScreen extends ConsumerWidget {
     return 'Récurrent';
   }
 
-  // ── Bouton "Ouvrir dans la source" ────────────────────────────
-  Widget _buildOpenInSourceButton(
-    BuildContext context, {
-    required Widget logo,
-    required String label,
-    required String url,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return OutlinedButton(
-      onPressed: () async {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      },
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 44),
-        side: BorderSide(
-          color: isDark ? Colors.white24 : const Color(0xFFDDDDDD),
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          logo,
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : const Color(0xFF191919),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Icon(
-            Icons.open_in_new,
-            size: 14,
-            color: isDark ? Colors.white54 : const Color(0xFF999999),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Meeting Note Notion (Desktop) ─────────────────────────────
-  Widget _buildMeetingNoteButton(BuildContext context, WidgetRef ref) {
-    final meetingService = ref.watch(notionMeetingServiceProvider);
-    if (meetingService == null) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: _MeetingNoteButton(event: event, service: meetingService),
-    );
-  }
-
-  // ── Smart Attachments Section ─────────────────────────────────
-  Widget _buildAttachmentsSection(
-      BuildContext context, WidgetRef ref, Color subColor, Color textColor) {
-    final isDesktop =
-        Platform.isLinux || Platform.isMacOS || Platform.isWindows;
-    final hasAttachments = event.smartAttachments.isNotEmpty;
-
-    if (!hasAttachments && !isDesktop) return const SizedBox.shrink();
-
-    // Séparer liens (URLs) et fichiers locaux
-    final urls = event.smartAttachments
-        .where((a) => a.startsWith('http://') || a.startsWith('https://'))
-        .toList();
-    final localFiles = event.smartAttachments
-        .where((a) => !a.startsWith('http://') && !a.startsWith('https://'))
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            HugeIcon(
-                icon: HugeIcons.strokeRoundedAttachment01,
-                size: 18,
-                color: subColor),
-            const SizedBox(width: 10),
-            Text(
-              'Fichiers attachés',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: subColor,
-                letterSpacing: 0.3,
-              ),
-            ),
-            if (hasAttachments) ...[
-              const SizedBox(width: 6),
-              Text(
-                '(${event.smartAttachments.length})',
-                style: TextStyle(fontSize: 11, color: subColor),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 8),
-        // Liens kDrive / URLs
-        ...urls.map((url) {
-          final displayName = _extractUrlDisplayName(url);
-          final isKDrive = url.contains('kdrive') || url.contains('infomaniak');
-          return Padding(
-            padding: const EdgeInsets.only(left: 28, bottom: 6),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: () async {
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              },
-              child: Row(
-                children: [
-                  Icon(
-                    isKDrive ? Icons.cloud_outlined : Icons.link,
-                    size: 20,
-                    color: const Color(0xFF0098FF),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      displayName,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF0098FF),
-                        decoration: TextDecoration.underline,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Icon(Icons.open_in_new, size: 14, color: subColor),
-                  if (isDesktop && !event.isFromIcs) ...[
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => _removeAttachment(ref, url),
-                      tooltip: 'Retirer',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        }),
-        // Fichiers locaux
-        ...localFiles.map((path) {
-          final fileName = path.split('/').last;
-          return Padding(
-            padding: const EdgeInsets.only(left: 28, bottom: 6),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: () async {
-                if (await File(path).exists()) {
-                  await OpenFilex.open(path);
-                } else {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Fichier introuvable : $fileName'),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: Row(
-                children: [
-                  Icon(Icons.insert_drive_file_outlined,
-                      size: 20, color: subColor),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      fileName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: textColor,
-                        decoration: TextDecoration.underline,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (isDesktop)
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: () => _removeAttachment(ref, path),
-                      tooltip: 'Retirer',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                ],
-              ),
-            ),
-          );
-        }),
-        // Desktop: boutons d'action
-        if (isDesktop && !event.isFromIcs) ...[
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.only(left: 28),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => _pickAndAttachFile(context, ref),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Attacher un fichier'),
-                  style: OutlinedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    textStyle: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _addLinkAttachment(context, ref),
-                  icon: const Icon(Icons.link, size: 16),
-                  label: const Text('Ajouter un lien'),
-                  style: OutlinedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    textStyle: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: 14),
-      ],
-    );
-  }
-
-  Future<void> _pickAndAttachFile(BuildContext context, WidgetRef ref) async {
-    final result = await FilePicker.platform.pickFiles();
-    if (result == null || result.files.single.path == null) return;
-    final filePath = result.files.single.path!;
-    final updated = event.copyWith(
-      smartAttachments: [...event.smartAttachments, filePath],
-    );
-    await ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
-  }
-
-  Future<void> _addLinkAttachment(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final url = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ajouter un lien'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'https://kdrive.infomaniak.com/...',
-            labelText: 'URL du lien',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.link),
-          ),
-          keyboardType: TextInputType.url,
-          onSubmitted: (v) => Navigator.pop(ctx, v),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Ajouter'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (url == null || url.trim().isEmpty) return;
-    final trimmed = url.trim();
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Le lien doit commencer par http:// ou https://'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-    final updated = event.copyWith(
-      smartAttachments: [...event.smartAttachments, trimmed],
-    );
-    await ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
-  }
-
-  /// Extrait un nom d'affichage lisible depuis une URL.
   static String _extractUrlDisplayName(String url) {
     try {
       final uri = Uri.parse(url);
-      // kDrive share links: afficher "kDrive: {uuid court}"
-      if (uri.host.contains('kdrive') || uri.host.contains('infomaniak')) {
-        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-        // Format https://kdrive.infomaniak.com/app/share/{uuid}/files/{fileId}
+      if (uri.host.contains('kdrive') ||
+          uri.host.contains('infomaniak')) {
+        final segments = uri.pathSegments
+            .where((s) => s.isNotEmpty)
+            .toList();
         final shareIdx = segments.indexOf('share');
         if (shareIdx >= 0 && shareIdx + 1 < segments.length) {
           final uuid = segments[shareIdx + 1];
-          final short = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
-          return 'kDrive: $short…';
+          return 'kDrive: ${uuid.length > 8 ? uuid.substring(0, 8) : uuid}…';
         }
         return 'Lien kDrive';
       }
-      // Autres URLs : afficher le nom du dernier segment ou le host
       if (uri.pathSegments.isNotEmpty) {
         final last = uri.pathSegments.last;
         if (last.isNotEmpty && last.contains('.')) return last;
       }
       return uri.host;
     } catch (_) {
-      return url.length > 40 ? '${url.substring(0, 40)}…' : url;
+      return url.length > 40
+          ? '${url.substring(0, 40)}…'
+          : url;
     }
   }
 
-  void _removeAttachment(WidgetRef ref, String path) {
-    final updated = event.copyWith(
-      smartAttachments: event.smartAttachments.where((p) => p != path).toList(),
-    );
-    ref.read(eventsNotifierProvider.notifier).updateEvent(updated);
-  }
-
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmDelete(
+      BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -931,7 +1015,8 @@ class EventDetailScreen extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor:
+                  Theme.of(context).colorScheme.error,
             ),
             child: const Text('Supprimer'),
           ),
@@ -940,18 +1025,32 @@ class EventDetailScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref.read(syncNotifierProvider.notifier).deleteEvent(event);
+      await ref
+          .read(syncNotifierProvider.notifier)
+          .deleteEvent(event);
       if (context.mounted) Navigator.pop(context);
     }
   }
 }
 
-/// Bouton stateful pour créer/ouvrir une note de réunion Notion.
+// ---------------------------------------------------------------------------
+// Meeting Note Button (stateful)
+// ---------------------------------------------------------------------------
+
 class _MeetingNoteButton extends StatefulWidget {
   final EventModel event;
   final NotionMeetingService service;
+  final bool isDark;
+  final Color borderColor;
+  final Color textColor;
 
-  const _MeetingNoteButton({required this.event, required this.service});
+  const _MeetingNoteButton({
+    required this.event,
+    required this.service,
+    required this.isDark,
+    required this.borderColor,
+    required this.textColor,
+  });
 
   @override
   State<_MeetingNoteButton> createState() => _MeetingNoteButtonState();
@@ -962,17 +1061,29 @@ class _MeetingNoteButtonState extends State<_MeetingNoteButton> {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton.icon(
+    return OutlinedButton.icon(
       onPressed: _loading ? null : _openOrCreate,
       icon: _loading
           ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2))
-          : const Icon(Icons.note_alt_outlined, size: 18),
-      label: Text(_loading ? 'Création...' : 'Ouvrir / Créer le compte-rendu'),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(double.infinity, 44),
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(Icons.note_alt_outlined,
+              size: 16, color: widget.textColor),
+      label: Text(
+        _loading ? 'Création...' : 'Compte-rendu de réunion',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: widget.textColor,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 40),
+        side: BorderSide(color: widget.borderColor),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6)),
       ),
     );
   }
@@ -980,9 +1091,11 @@ class _MeetingNoteButtonState extends State<_MeetingNoteButton> {
   Future<void> _openOrCreate() async {
     setState(() => _loading = true);
     try {
-      final url = await widget.service.createOrOpen(widget.event);
+      final url =
+          await widget.service.createOrOpen(widget.event);
       if (mounted) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        await launchUrl(Uri.parse(url),
+            mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (mounted) {

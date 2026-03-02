@@ -57,6 +57,19 @@ class _EventDetailPopupState extends ConsumerState<EventDetailPopup> {
 
   @override
   Widget build(BuildContext context) {
+    // ── Écouter les changements du provider pour rafraîchir _currentEvent ──
+    // (attachments, liens kDrive, suppressions…)
+    ref.listen<AsyncValue<List<EventModel>>>(eventsNotifierProvider, (prev, next) {
+      next.whenData((events) {
+        final updated = events
+            .cast<EventModel?>()
+            .firstWhere((e) => e!.id == _currentEvent.id, orElse: () => null);
+        if (updated != null && updated != _currentEvent) {
+          setState(() => _currentEvent = updated);
+        }
+      });
+    });
+
     final screenSize = MediaQuery.of(context).size;
     final dialogWidth = (screenSize.width * 0.55).clamp(480.0, 720.0);
     final dialogHeight = (screenSize.height * 0.80).clamp(400.0, 800.0);

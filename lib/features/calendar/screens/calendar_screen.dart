@@ -16,8 +16,8 @@ import '../../../providers/sync_provider.dart';
 import '../../../services/sync_engine.dart';
 import '../../../services/weather_service.dart';
 import '../../../services/logger_service.dart';
-import '../../events/screens/event_detail_screen.dart';
 import '../../events/screens/event_form_screen.dart';
+import '../../events/widgets/event_detail_popup.dart';
 import '../widgets/weather_header.dart';
 import '../../../core/widgets/source_logos.dart';
 
@@ -1848,12 +1848,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       final apt = details.appointments?.first;
       final event = apt is EventModel ? apt : null;
       if (event != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EventDetailScreen(event: event),
-          ),
-        );
+        openEventDetail(context, event);
       }
     } else if (details.targetElement == CalendarElement.calendarCell &&
         details.date != null) {

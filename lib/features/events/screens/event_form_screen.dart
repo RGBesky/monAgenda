@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/event_model.dart';
@@ -57,6 +60,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
   String? _rrule;
   bool _isLoading = false;
   String? _selectedNotionDbId; // effectiveSourceId de la BDD Notion cible
+  List<String> _attachments = [];
 
   @override
   void initState() {
@@ -77,6 +81,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
       _reminderMinutes = event.reminderMinutes;
       _rrule = event.rrule;
       _selectedNotionDbId = event.calendarId;
+      _attachments = List.from(event.smartAttachments);
     } else {
       _startDate = DateTime(now.year, now.month, now.day, now.hour + 1);
       _endDate = _startDate.add(const Duration(hours: 1));
@@ -199,6 +204,12 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
           // Récurrence (Infomaniak uniquement)
           if (_source == AppConstants.sourceInfomaniak) ...[
             _buildRecurrenceSection(),
+            const SizedBox(height: 16),
+          ],
+
+          // Pièces jointes (Desktop uniquement)
+          if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) ...[
+            _buildAttachmentsSection(),
             const SizedBox(height: 16),
           ],
         ],
@@ -845,6 +856,287 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
     }
   }
 
+  // ── Section Pièces jointes ──────────────────────────────────
+  Widget _buildAttachmentsSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final secondaryColor =
+        isDark ? const Color(0xFF9B9A97) : const Color(0xFF787774);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedAttachment01,
+              size: 18,
+              color: secondaryColor,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Pièces jointes',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: secondaryColor,
+              ),
+            ),
+            if (_attachments.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_attachments.length}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+            const Spacer(),
+            // Menu unifié "+"
+            PopupMenuButton<String>(
+              icon: Icon(Icons.add_circle_outline,
+                  color: Theme.of(context).colorScheme.primary, size: 22),
+              tooltip: 'Ajouter une pièce jointe',
+              onSelected: (value) {
+                switch (value) {
+                  case 'file':
+                    _pickFile();
+                  case 'link':
+                    _addLink();
+                }
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'file',
+                  child: Row(
+                    children: [
+                      Icon(Icons.insert_drive_file_outlined, size: 20),
+                      SizedBox(width: 10),
+                      Text('Fichier local'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'link',
+                  child: Row(
+                    children: [
+                      Icon(Icons.link, size: 20),
+                      SizedBox(width: 10),
+                      Text('Lien URL / kDrive'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        // Liste des pièces jointes
+        ..._attachments.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final isUrl =
+              item.startsWith('http://') || item.startsWith('https://');
+          final isKDrive =
+              item.contains('kdrive') || item.contains('infomaniak');
+
+          String displayName;
+          IconData icon;
+          Color iconColor;
+
+          if (isUrl) {
+            displayName = _extractUrlDisplayName(item);
+            icon = isKDrive ? Icons.cloud_outlined : Icons.link;
+            iconColor = const Color(0xFF0098FF);
+          } else {
+            displayName = item.split('/').last;
+            icon = Icons.insert_drive_file_outlined;
+            iconColor = secondaryColor;
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, size: 18, color: iconColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      displayName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isUrl ? const Color(0xFF0098FF) : null,
+                        decoration:
+                            isUrl ? TextDecoration.underline : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Ouvrir (URLs seulement)
+                  if (isUrl)
+                    IconButton(
+                      icon: Icon(Icons.open_in_new,
+                          size: 16, color: secondaryColor),
+                      onPressed: () async {
+                        final uri = Uri.parse(item);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      tooltip: 'Ouvrir',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      splashRadius: 16,
+                    ),
+                  const SizedBox(width: 4),
+                  // Supprimer
+                  IconButton(
+                    icon: Icon(Icons.close, size: 16, color: secondaryColor),
+                    onPressed: () => setState(() {
+                      _attachments.removeAt(idx);
+                    }),
+                    tooltip: 'Retirer',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    splashRadius: 16,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        if (_attachments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Aucune pièce jointe',
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: secondaryColor.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null || result.files.single.path == null) return;
+    final path = result.files.single.path!;
+    setState(() => _attachments.add(path));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Fichier ajouté : ${path.split('/').last}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _addLink() async {
+    final controller = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ajouter un lien'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'https://kdrive.infomaniak.com/...',
+            labelText: 'URL du lien',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.link),
+          ),
+          keyboardType: TextInputType.url,
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (url == null || url.trim().isEmpty) return;
+    final trimmed = url.trim();
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Le lien doit commencer par http:// ou https://'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    setState(() => _attachments.add(trimmed));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lien ajouté : ${_extractUrlDisplayName(trimmed)}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Extrait un nom d'affichage lisible depuis une URL.
+  static String _extractUrlDisplayName(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.contains('kdrive') || uri.host.contains('infomaniak')) {
+        final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+        final shareIdx = segments.indexOf('share');
+        if (shareIdx >= 0 && shareIdx + 1 < segments.length) {
+          final uuid = segments[shareIdx + 1];
+          final short = uuid.length > 8 ? uuid.substring(0, 8) : uuid;
+          return 'kDrive: $short…';
+        }
+        return 'Lien kDrive';
+      }
+      if (uri.pathSegments.isNotEmpty) {
+        final last = uri.pathSegments.last;
+        if (last.isNotEmpty && last.contains('.')) return last;
+      }
+      return uri.host;
+    } catch (_) {
+      return url.length > 40 ? '${url.substring(0, 40)}…' : url;
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -895,6 +1187,7 @@ class _EventFormScreenState extends ConsumerState<EventFormScreen> {
         createdAt: widget.event?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
         etag: widget.event?.etag,
+        smartAttachments: _attachments,
       );
 
       final notifier = ref.read(eventsNotifierProvider.notifier);
