@@ -184,10 +184,10 @@ class _UnifiedEventCardState extends State<UnifiedEventCard>
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: isCompleted
-                    ? AppColors.cyanPastel
-                    : (isDark
-                        ? AppColors.darkTextSecondary
-                        : AppColors.lightTextSecondary),
+                      ? AppColors.cyanPastel
+                      : (isDark
+                          ? AppColors.darkTextSecondary
+                          : AppColors.lightTextSecondary),
                   width: 1.5,
                 ),
                 color: isCompleted

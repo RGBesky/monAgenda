@@ -230,18 +230,24 @@ class TagsSettingsScreen extends ConsumerWidget {
                                     // Chaque colonne = 1 nuance (néon→glacé)
                                     ...List.generate(10, (family) {
                                       return Padding(
-                                        padding: const EdgeInsets.only(bottom: 4),
+                                        padding:
+                                            const EdgeInsets.only(bottom: 4),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: List.generate(10, (shade) {
-                                            final c = _paletteColors[shade * 10 + family];
-                                            final isSelected = c.toARGB32() == tempColor.toARGB32();
+                                            final c = _paletteColors[
+                                                shade * 10 + family];
+                                            final isSelected = c.toARGB32() ==
+                                                tempColor.toARGB32();
                                             return GestureDetector(
                                               onTap: () {
-                                                setPickerState(() => tempColor = c);
+                                                setPickerState(
+                                                    () => tempColor = c);
                                               },
                                               child: AnimatedContainer(
-                                                duration: const Duration(milliseconds: 150),
+                                                duration: const Duration(
+                                                    milliseconds: 150),
                                                 width: 30,
                                                 height: 30,
                                                 decoration: BoxDecoration(
@@ -249,21 +255,31 @@ class TagsSettingsScreen extends ConsumerWidget {
                                                   shape: BoxShape.circle,
                                                   border: isSelected
                                                       ? Border.all(
-                                                          color: c.computeLuminance() > 0.5
-                                                              ? Colors.black54
-                                                              : Colors.white,
+                                                          color:
+                                                              c.computeLuminance() >
+                                                                      0.5
+                                                                  ? Colors
+                                                                      .black54
+                                                                  : Colors
+                                                                      .white,
                                                           width: 3,
                                                         )
                                                       : Border.all(
-                                                          color: c.computeLuminance() > 0.85
-                                                              ? Colors.grey.withValues(alpha: 0.3)
-                                                              : Colors.transparent,
+                                                          color: c.computeLuminance() >
+                                                                  0.85
+                                                              ? Colors.grey
+                                                                  .withValues(
+                                                                      alpha:
+                                                                          0.3)
+                                                              : Colors
+                                                                  .transparent,
                                                           width: 1,
                                                         ),
                                                   boxShadow: isSelected
                                                       ? [
                                                           BoxShadow(
-                                                            color: c.withValues(alpha: 0.5),
+                                                            color: c.withValues(
+                                                                alpha: 0.5),
                                                             blurRadius: 8,
                                                             spreadRadius: 1,
                                                           ),
@@ -273,9 +289,11 @@ class TagsSettingsScreen extends ConsumerWidget {
                                                 child: isSelected
                                                     ? Icon(
                                                         Icons.check_rounded,
-                                                        color: c.computeLuminance() > 0.5
-                                                            ? Colors.black87
-                                                            : Colors.white,
+                                                        color:
+                                                            c.computeLuminance() >
+                                                                    0.5
+                                                                ? Colors.black87
+                                                                : Colors.white,
                                                         size: 14,
                                                       )
                                                     : null,

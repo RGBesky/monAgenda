@@ -74,20 +74,20 @@ final Map<int, List<String>> kMigrations = {
   // --- V14 : Migration couleurs iOS → Stabilo Boss × Paper Mate Flair ---
   14: [
     // Catégories : iOS → Stabilo/PaperMate medium/pastel
-    "UPDATE tags SET color_hex = '#42A5F5' WHERE color_hex = '#007AFF' AND type = 'category'",   // Travail
-    "UPDATE tags SET color_hex = '#9CD8A8' WHERE color_hex = '#34C759' AND type = 'category'",   // Perso
-    "UPDATE tags SET color_hex = '#66BB6A' WHERE color_hex = '#FF3B30' AND type = 'category'",   // Santé (was red)
-    "UPDATE tags SET color_hex = '#CCA0DC' WHERE color_hex = '#FF9500' AND type = 'category'",   // Famille (was orange)
-    "UPDATE tags SET color_hex = '#26C6DA' WHERE color_hex = '#30B0C7' AND type = 'category'",   // Sport
-    "UPDATE tags SET color_hex = '#F06292' WHERE color_hex = '#AF52DE' AND type = 'category'",   // Social (was purple)
-    "UPDATE tags SET color_hex = '#FFEE58' WHERE color_hex = '#FFCC00' AND type = 'category'",   // Formation
-    "UPDATE tags SET color_hex = '#E6D2A8' WHERE color_hex = '#8E8E93' AND type = 'category'",   // Admin (was gray)
+    "UPDATE tags SET color_hex = '#42A5F5' WHERE color_hex = '#007AFF' AND type = 'category'", // Travail
+    "UPDATE tags SET color_hex = '#9CD8A8' WHERE color_hex = '#34C759' AND type = 'category'", // Perso
+    "UPDATE tags SET color_hex = '#66BB6A' WHERE color_hex = '#FF3B30' AND type = 'category'", // Santé (was red)
+    "UPDATE tags SET color_hex = '#CCA0DC' WHERE color_hex = '#FF9500' AND type = 'category'", // Famille (was orange)
+    "UPDATE tags SET color_hex = '#26C6DA' WHERE color_hex = '#30B0C7' AND type = 'category'", // Sport
+    "UPDATE tags SET color_hex = '#F06292' WHERE color_hex = '#AF52DE' AND type = 'category'", // Social (was purple)
+    "UPDATE tags SET color_hex = '#FFEE58' WHERE color_hex = '#FFCC00' AND type = 'category'", // Formation
+    "UPDATE tags SET color_hex = '#E6D2A8' WHERE color_hex = '#8E8E93' AND type = 'category'", // Admin (was gray)
     // Priorités : iOS → Stabilo vif
-    "UPDATE tags SET color_hex = '#E53935' WHERE color_hex = '#FF3B30' AND type = 'priority'",   // Urgent
-    "UPDATE tags SET color_hex = '#FB8C00' WHERE color_hex = '#FF9500' AND type = 'priority'",   // Haute
-    "UPDATE tags SET color_hex = '#1E88E5' WHERE color_hex = '#34C759' AND type = 'priority'",   // Normale (was green)
-    "UPDATE tags SET color_hex = '#82D2CC' WHERE color_hex = '#8E8E93' AND type = 'priority'",   // Basse (was gray)
+    "UPDATE tags SET color_hex = '#E53935' WHERE color_hex = '#FF3B30' AND type = 'priority'", // Urgent
+    "UPDATE tags SET color_hex = '#FB8C00' WHERE color_hex = '#FF9500' AND type = 'priority'", // Haute
+    "UPDATE tags SET color_hex = '#1E88E5' WHERE color_hex = '#34C759' AND type = 'priority'", // Normale (was green)
+    "UPDATE tags SET color_hex = '#82D2CC' WHERE color_hex = '#8E8E93' AND type = 'priority'", // Basse (was gray)
     // Statuts : rafraîchir les médium
-    "UPDATE tags SET color_hex = '#FFEE58' WHERE color_hex = '#EAE08C' AND type = 'status'",    // En cours → yellowMedium
+    "UPDATE tags SET color_hex = '#FFEE58' WHERE color_hex = '#EAE08C' AND type = 'status'", // En cours → yellowMedium
   ],
 };
