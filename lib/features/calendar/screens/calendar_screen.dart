@@ -1988,67 +1988,69 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
   /// Assigne directement une tâche à la date résolue par le drop.
   void _assignTaskDirect(NotionTaskModel task, DateTime date) async {
+    // ── 1. Insertion locale IMMÉDIATE (Optimistic UI) ──
+    // L'utilisateur voit l'événement dans le calendrier instantanément.
+    // Le syncAll() en arrière-plan écrasera avec les données enrichies.
+    final isAllDay = date.hour == 0 && date.minute == 0;
+    final endDate = isAllDay ? date : date.add(const Duration(hours: 1));
+    final provisionalEvent = EventModel(
+      remoteId: task.id,
+      source: AppConstants.sourceNotion,
+      calendarId: task.databaseId,
+      type: EventType.task,
+      title: task.title,
+      startDate: date,
+      endDate: endDate,
+      isAllDay: isAllDay,
+      notionPageId: task.id,
+      status: task.status,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
     try {
-      await ref.read(notionProjectTasksProvider.notifier).assignDate(
-            task.id,
-            task.databaseId,
-            date,
-          );
-
-      // ── Insertion locale provisoire pour affichage immédiat ──
-      // Le prochain syncAll() écrasera avec les données complètes
-      // (ConflictAlgorithm.replace sur UNIQUE(remote_id, source)).
-      final isAllDay = date.hour == 0 && date.minute == 0;
-      final endDate = isAllDay ? date : date.add(const Duration(hours: 1));
-      final provisionalEvent = EventModel(
-        remoteId: task.id,
-        source: AppConstants.sourceNotion,
-        calendarId: task.databaseId,
-        type: EventType.task,
-        title: task.title,
-        startDate: date,
-        endDate: endDate,
-        isAllDay: isAllDay,
-        notionPageId: task.id,
-        status: task.status,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
       await DatabaseHelper.instance.insertEvent(provisionalEvent);
-
-      // Rafraîchir le calendrier immédiatement (lecture DB locale)
       ref.read(eventsNotifierProvider.notifier).refresh();
-
-      // Sync complète en arrière-plan (écrasera l'event provisoire
-      // avec les données enrichies : description, tags, etc.)
-      ref.read(syncNotifierProvider.notifier).syncAll().catchError((e) {
-        AppLogger.instance
-            .warning('CalendarScreen', 'Sync post-assignDate: $e');
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                '«${task.title}» planifié le ${DateFormat('EEEE d MMMM à HH:mm', 'fr_FR').format(date)}',
-              ),
-              duration: const Duration(seconds: 4),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-      }
     } catch (e) {
+      AppLogger.instance
+          .warning('CalendarScreen', 'Insert provisoire: $e');
+    }
+
+    // ── 2. Feedback immédiat ──
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '«${task.title}» planifié le ${DateFormat('EEEE d MMMM à HH:mm', 'fr_FR').format(date)}',
+            ),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
+
+    // ── 3. API Notion + sync en arrière-plan (non bloquant) ──
+    ref.read(notionProjectTasksProvider.notifier).assignDate(
+      task.id,
+      task.databaseId,
+      date,
+    ).then((_) {
+      // Sync complète pour enrichir l'event provisoire
+      return ref.read(syncNotifierProvider.notifier).syncAll();
+    }).catchError((e) {
+      AppLogger.instance
+          .warning('CalendarScreen', 'assignDate/sync: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur : $e'),
+            content: Text('Erreur sync Notion : $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
-    }
+    });
   }
 
   /// Tap sur une tâche (sans drag) — dialog date/heure en fallback.
