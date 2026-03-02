@@ -36,7 +36,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   List<WeatherModel> _forecasts = [];
   bool _loadingWeather = false;
   bool _showTodoPanel = false;
-  Offset? _lastPointerPosition;
   String? _todoFilterDb; // null = toutes les BDD
   String? _todoFilterStatus; // null = tous les statuts
 
@@ -1943,38 +1942,25 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   /// Enveloppe le calendrier dans un DragTarget pour recevoir des tâches.
   /// Résout la date directement depuis la position de drop sur le calendrier.
   Widget _wrapWithDragTarget(Widget calendar) {
-    // Listener capture la position réelle du curseur (pointeur).
-    // details.offset dans DragTarget = coin supérieur gauche du feedback widget,
-    // PAS la position du curseur → décalage de ~110px = mauvais jour.
-    return Listener(
-      onPointerMove: (event) => _lastPointerPosition = event.position,
-      onPointerDown: (event) => _lastPointerPosition = event.position,
-      child: DragTarget<NotionTaskModel>(
+    // pointerDragAnchorStrategy sur le Draggable fait que details.offset
+    // = position exacte du curseur (pas le coin du feedback widget).
+    return DragTarget<NotionTaskModel>(
       onAcceptWithDetails: (details) {
-        // Résoudre la date depuis la position RÉELLE du curseur
+        // details.offset = position curseur grâce à pointerDragAnchorStrategy
         DateTime? resolvedDate;
         final renderObject = _calendarKey.currentContext?.findRenderObject();
         if (renderObject is RenderBox) {
-          // Utiliser la position du pointeur, pas du feedback widget
-          final pointerPos = _lastPointerPosition ?? details.offset;
-          final localOffset = renderObject.globalToLocal(pointerPos);
+          final localOffset = renderObject.globalToLocal(details.offset);
           final calendarDetails = _calendarController
               .getCalendarDetailsAtOffset
               ?.call(localOffset);
           resolvedDate = calendarDetails?.date;
-          AppLogger.instance.info(
-            'D&D',
-            'Pointer: $pointerPos → local: $localOffset → '
-                'resolvedDate: $resolvedDate',
-          );
         }
 
         if (resolvedDate != null) {
-          // Drop direct — date résolue depuis la position
           _assignTaskDirect(details.data, resolvedDate);
         } else {
-          // Fallback dialog si la position ne peut pas être résolue
-          // (ex: zone header, hors grille)
+          // Fallback dialog si hors grille (zone header, etc.)
           _onTaskTapped(details.data);
         }
       },
@@ -1997,7 +1983,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         }
         return calendar;
       },
-    ),
     );
   }
 
@@ -2283,6 +2268,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   Widget _buildDraggableTask(NotionTaskModel task, bool isDark) {
     return Draggable<NotionTaskModel>(
       data: task,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Material(
         elevation: 4,
         borderRadius: BorderRadius.circular(6),
