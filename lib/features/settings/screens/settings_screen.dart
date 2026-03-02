@@ -399,7 +399,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       // Force le rechargement du modèle au prochain usage
                       await LlamaService.instance.dispose();
                       ref.invalidate(modelDownloadStatusProvider);
-                      (context as Element).markNeedsBuild();
                     },
                   );
                 }).toList(),
