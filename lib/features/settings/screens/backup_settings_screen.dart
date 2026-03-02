@@ -18,6 +18,7 @@ class BackupSettingsScreen extends ConsumerStatefulWidget {
 
 class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
   bool _isLoading = false;
+  bool _isTesting = false;
   String? _statusMessage;
   bool _statusIsError = false;
   DateTime? _lastBackupDate;
@@ -159,6 +160,26 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
           ),
           const SizedBox(height: 20),
 
+          // ─── Bouton Tester la connexion kDrive ───
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isLoading ||
+                      _depositLinkController.text.trim().isEmpty
+                  ? null
+                  : _testKDriveConnection,
+              icon: _isTesting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wifi_find),
+              label: const Text('Tester la connexion'),
+            ),
+          ),
+          const SizedBox(height: 8),
+
           // ─── Bouton Sauvegarder (kDrive + local) ───
           SizedBox(
             width: double.infinity,
@@ -292,6 +313,31 @@ class _BackupSettingsScreenState extends ConsumerState<BackupSettingsScreen> {
       return false;
     }
     return true;
+  }
+
+  /// Teste la connexion au lien de dépôt kDrive sans envoyer de fichier.
+  Future<void> _testKDriveConnection() async {
+    final link = _depositLinkController.text.trim();
+    if (link.isEmpty) return;
+
+    setState(() => _isTesting = true);
+    _setStatus('Test de la connexion en cours…');
+
+    try {
+      final result = await BackupService.testKDriveConnection(link);
+      if (result.success) {
+        _setStatus('Connexion réussie (HTTP ${result.statusCode})');
+      } else {
+        _setStatus(
+          'Échec de la connexion : ${result.error}',
+          isError: true,
+        );
+      }
+    } catch (e) {
+      _setStatus('Erreur inattendue : $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isTesting = false);
+    }
   }
 
   Future<void> _performBackupKDrive() async {
