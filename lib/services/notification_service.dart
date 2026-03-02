@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../core/models/event_model.dart';
 import '../core/utils/date_utils.dart';
+import 'logger_service.dart';
 
 /// Service de notifications locales (sans backend requis).
 /// Sur Linux, utilise des Timers + show() car zonedSchedule n'est pas supporté.
@@ -111,7 +112,9 @@ class NotificationService {
     _linuxTimers.remove(eventId);
     try {
       await _plugin.cancel(eventId);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('Notification', 'cancel($eventId) failed: $e');
+    }
   }
 
   /// Programme le résumé matinal quotidien.
@@ -123,7 +126,9 @@ class NotificationService {
 
     try {
       await _plugin.cancel(id);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('Notification', 'cancel daily summary failed: $e');
+    }
 
     if (Platform.isLinux) {
       // Linux : Timer récurrent via _scheduleLinuxDailySummary
@@ -192,7 +197,9 @@ class NotificationService {
     _linuxTimers.clear();
     try {
       await _plugin.cancelAll();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('Notification', 'cancelAll failed: $e');
+    }
   }
 
   /// Affiche une notification via le plugin (fonctionne sur toutes les plateformes).
@@ -229,7 +236,9 @@ class NotificationService {
           title,
           body,
         ]);
-      } catch (_) {}
+      } catch (e) {
+        AppLogger.instance.warning('Notification', 'notify-send fallback failed: $e');
+      }
     }
   }
 

@@ -13,6 +13,7 @@ import '../../../providers/events_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../providers/sync_provider.dart';
 import '../../../providers/tags_provider.dart';
+import '../../../services/logger_service.dart';
 import '../../../services/weather_service.dart';
 import '../../events/widgets/event_detail_popup.dart';
 import '../../events/screens/event_form_screen.dart';
@@ -72,7 +73,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       weatherService.setLocation(latitude: lat, longitude: lon);
       final forecasts = await weatherService.fetchWeekForecast();
       if (mounted) setState(() => _forecasts = forecasts);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('AgendaScreen', 'Weather fetch failed: $e');
+    }
     _loadingWeather = false;
   }
 

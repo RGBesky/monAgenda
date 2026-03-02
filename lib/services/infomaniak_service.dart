@@ -281,7 +281,9 @@ class InfomaniakService {
         options: Options(method: 'HEAD'),
       );
       freshEtag = headResp.headers.value('ETag');
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('Infomaniak', 'HEAD ETag fetch failed: $e');
+    }
 
     try {
       await _calDavDio.delete(

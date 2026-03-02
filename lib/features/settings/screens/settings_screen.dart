@@ -17,6 +17,7 @@ import '../../../core/database/magic_feedback_repository.dart';
 import '../../../services/model_download_service.dart';
 import '../../../services/magic_entry_service.dart';
 import '../../../services/llama_service.dart';
+import '../../../services/logger_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1881,7 +1882,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           city = (addr?['city'] ?? addr?['town'] ?? addr?['village'] ?? city)
               as String;
         }
-      } catch (_) {} // Garder le nom IP si Nominatim échoue
+      } catch (e) {
+        AppLogger.instance.warning('Settings', 'Nominatim reverse-geocoding failed: $e');
+      } // Garder le nom IP si Nominatim échoue
 
       ref.read(settingsProvider.notifier).updateWeatherLocation(
             city: city,

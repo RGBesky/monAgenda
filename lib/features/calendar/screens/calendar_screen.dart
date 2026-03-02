@@ -57,7 +57,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
       weatherService.setLocation(latitude: lat, longitude: lon);
       final forecasts = await weatherService.fetchWeekForecast();
       if (mounted) setState(() => _forecasts = forecasts);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('CalendarScreen', 'Weather fetch failed: $e');
+    }
     _loadingWeather = false;
   }
 

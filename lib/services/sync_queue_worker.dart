@@ -155,7 +155,9 @@ class SyncQueueWorker {
         Map<String, dynamic>? schema;
         try {
           schema = await _notion.getDatabaseSchema(db.effectiveSourceId);
-        } catch (_) {}
+        } catch (e) {
+          _log.warning('SyncQueue', 'getDatabaseSchema failed (create): $e');
+        }
 
         _log.info('SyncQueue',
             'CREATE Notion: "${event.title}" vers BDD "${db.name}"');
@@ -193,7 +195,9 @@ class SyncQueueWorker {
         Map<String, dynamic>? schema;
         try {
           schema = await _notion.getDatabaseSchema(db.effectiveSourceId);
-        } catch (_) {}
+        } catch (e) {
+          _log.warning('SyncQueue', 'getDatabaseSchema failed (update): $e');
+        }
 
         _log.info('SyncQueue',
             'UPDATE Notion: "${event.title}" (pageId=${event.notionPageId})');

@@ -242,18 +242,24 @@ class SyncEngine {
     // Reprogrammer les notifications (non supporté sur desktop)
     try {
       await _rescheduleNotifications();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('SyncEngine', 'Reschedule notifications failed: $e');
+    }
 
     // Mettre à jour le widget Android
     try {
       await _updateWidget();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('SyncEngine', 'Update widget failed: $e');
+    }
   }
 
   Future<void> _updateWidget() async {
     try {
       await WidgetService.updateWidget();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('SyncEngine', 'WidgetService.updateWidget failed: $e');
+    }
   }
 
   Future<void> _syncNotion(DateTime start, DateTime end,
@@ -501,7 +507,9 @@ class SyncEngine {
     Map<String, dynamic>? schema;
     try {
       schema = await _notion.getDatabaseSchema(db.effectiveSourceId);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.instance.warning('SyncEngine', 'getDatabaseSchema failed: $e');
+    }
 
     if (event.notionPageId != null) {
       await _notion.updatePage(
