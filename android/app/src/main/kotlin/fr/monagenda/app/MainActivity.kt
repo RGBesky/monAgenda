@@ -1,4 +1,4 @@
-package com.example.unified_calendar
+package fr.monagenda.app
 
 import io.flutter.embedding.android.FlutterActivity
 

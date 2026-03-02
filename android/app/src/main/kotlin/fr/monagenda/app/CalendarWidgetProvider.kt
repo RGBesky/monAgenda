@@ -1,4 +1,4 @@
-package com.example.unified_calendar
+package fr.monagenda.app
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.unified_calendar">
+    package="fr.monagenda.app">
 
     <!-- Permissions réseau -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -74,7 +74,7 @@
 
         <!-- Provider pour le widget Android -->
         <receiver
-            android:name="com.example.unified_calendar.CalendarWidgetProvider"
+            android:name="fr.monagenda.app.CalendarWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
