@@ -36,6 +36,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   List<WeatherModel> _forecasts = [];
   bool _loadingWeather = false;
   bool _showTodoPanel = false;
+  Offset? _lastPointerPosition;
   String? _todoFilterDb; // null = toutes les BDD
   String? _todoFilterStatus; // null = tous les statuts
 
@@ -1942,17 +1943,30 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   /// Enveloppe le calendrier dans un DragTarget pour recevoir des tâches.
   /// Résout la date directement depuis la position de drop sur le calendrier.
   Widget _wrapWithDragTarget(Widget calendar) {
-    return DragTarget<NotionTaskModel>(
+    // Listener capture la position réelle du curseur (pointeur).
+    // details.offset dans DragTarget = coin supérieur gauche du feedback widget,
+    // PAS la position du curseur → décalage de ~110px = mauvais jour.
+    return Listener(
+      onPointerMove: (event) => _lastPointerPosition = event.position,
+      onPointerDown: (event) => _lastPointerPosition = event.position,
+      child: DragTarget<NotionTaskModel>(
       onAcceptWithDetails: (details) {
-        // Résoudre la date depuis la position de drop via le SfCalendar
+        // Résoudre la date depuis la position RÉELLE du curseur
         DateTime? resolvedDate;
         final renderObject = _calendarKey.currentContext?.findRenderObject();
         if (renderObject is RenderBox) {
-          final localOffset = renderObject.globalToLocal(details.offset);
+          // Utiliser la position du pointeur, pas du feedback widget
+          final pointerPos = _lastPointerPosition ?? details.offset;
+          final localOffset = renderObject.globalToLocal(pointerPos);
           final calendarDetails = _calendarController
               .getCalendarDetailsAtOffset
               ?.call(localOffset);
           resolvedDate = calendarDetails?.date;
+          AppLogger.instance.info(
+            'D&D',
+            'Pointer: $pointerPos → local: $localOffset → '
+                'resolvedDate: $resolvedDate',
+          );
         }
 
         if (resolvedDate != null) {
@@ -1983,6 +1997,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         }
         return calendar;
       },
+    ),
     );
   }
 
